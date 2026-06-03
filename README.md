@@ -18,8 +18,6 @@ NexusWpp affiche un cockpit matériel dynamique directement dans le bureau Windo
 - `run.bat` : menu local pour démarrer, compiler, déployer ou arrêter l'app.
 - `scripts/benchmark_nexuswpp.ps1` : benchmark multi-run CPU/RAM/startup.
 - `scripts/benchmark_fullscreen_suspend.ps1` : mesure actif vs suspension plein écran.
-- `scripts/run_hdr_dxgi_probe.ps1` : vérifie le color space HDR DXGI réel de l'écran.
-- `scripts/benchmark_hdr_native_swapchain.ps1` : mesure le prototype swapchain HDR natif.
 
 ## Démarrage Rapide
 
@@ -44,10 +42,11 @@ L'application contient un verrou single-instance, donc les deux lanceurs ne cré
 
 ## Portabilité
 
-- Le matériel est détecté automatiquement via WMI, Win32, DXGI, interfaces réseau Windows et NVML quand disponible.
+- Le matériel est détecté automatiquement via WMI, Win32, interfaces réseau Windows et NVML quand disponible.
 - Le dossier de production reste `C:\nexuswpp` pour accélérer le démarrage et éviter OneDrive.
 - Le raccourci de démarrage utilise le dossier Startup de l'utilisateur courant, pas un chemin utilisateur codé en dur.
 - Le fond d'écran fonctionne sans serveur Node et sans dépendance npm.
+- Le sélecteur d'alimentation confirme le GUID actif Windows et ignore les clics quand une autre application recouvre le panneau.
 
 ## Pourquoi C'est Plus Rapide Qu'Avant
 
@@ -58,7 +57,6 @@ L'ancienne version attendait de trouver `WorkerW` avant d'initialiser WebView2. 
 - `server.js`, `get-stats.ps1`, `get-startup.ps1` et le flux SSE ne font plus partie de cette architecture.
 - Le mode navigateur simple affiche l'interface, mais sans télémétrie ni changement de profil.
 - Le chemin de production est `C:\nexuswpp\nexuswpp.exe`.
-- Le renderer WebView2 actuel reste SDR. Le vrai renderer HDR natif est décrit dans `HDR_NATIVE_RENDERER_PLAN.md`.
 - Le rond réseau est calibré sur la vitesse réelle du lien Windows, par exemple `2.5 Gb/s` pour l'Intel I226-V.
 
 ## Mesures utiles
@@ -67,8 +65,6 @@ L'ancienne version attendait de trouver `WorkerW` avant d'initialiser WebView2. 
 .\scripts\benchmark_nexuswpp.ps1 -DurationSeconds 18 -Runs 3 -Label current -OutputPath .\scripts\last-benchmark.json
 .\scripts\compare_benchmark_result.ps1 -BeforePath .\scripts\last-benchmark-before.json -AfterPath .\scripts\last-benchmark-after.json
 .\scripts\benchmark_fullscreen_suspend.ps1 -ActiveSeconds 10 -FullscreenSeconds 10 -OutputPath .\scripts\last-benchmark-fullscreen.json
-.\scripts\run_hdr_dxgi_probe.ps1
-.\scripts\benchmark_hdr_native_swapchain.ps1 -Seconds 8
 ```
 
 ## Garde-fou benchmark

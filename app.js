@@ -95,6 +95,8 @@ let eventSource = null;
 let currentPowerPlan = "";
 let systemIsOverloaded = false;
 let isPowerPlanSwitching = false;
+let pendingPowerPlanGuid = "";
+let powerPlanSwitchTimer = 0;
 let vramActivity = 0; // Sync wave animation speed to iGPU usage
 let lastRemoteBoundsMsg = "";
 let loadingSnapshotDismissed = false;
@@ -1153,7 +1155,18 @@ function updateDOM(stats) {
     }
 
     // 9. Update Remote controllers buttons dynamically based on actual Windows power plans
-    if (stats.powerPlans && powerPlansContainer && !isPowerPlanSwitching) {
+    if (stats.powerPlans && powerPlansContainer) {
+        if (pendingPowerPlanGuid) {
+            const pendingPlan = stats.powerPlans.find(p => p.guid === pendingPowerPlanGuid);
+            if (pendingPlan && pendingPlan.active) {
+                clearPowerPlanPending();
+            }
+        }
+
+        if (isPowerPlanSwitching) {
+            return;
+        }
+
         const currentGuids = Array.from(powerPlansContainer.children).map(btn => btn.dataset.guid).join(',');
         const newGuids = stats.powerPlans.map(p => p.guid).join(',');
         if (currentGuids !== newGuids) {
@@ -1313,13 +1326,19 @@ function hideLoadingSnapshot() {
 }
 
 function setPowerPlan(guid) {
-    if (!guid || guid === currentPowerPlan) return;
+    if (!guid || guid === currentPowerPlan || guid === pendingPowerPlanGuid) return;
 
-    // Lock telemetry updates to prevent race conditions during Windows power plan transitions
+    currentPowerPlan = guid;
+    pendingPowerPlanGuid = guid;
     isPowerPlanSwitching = true;
-    setTimeout(() => {
+    if (powerPlanSwitchTimer) {
+        clearTimeout(powerPlanSwitchTimer);
+    }
+    powerPlanSwitchTimer = setTimeout(() => {
+        pendingPowerPlanGuid = "";
         isPowerPlanSwitching = false;
-    }, 2500);
+        powerPlanSwitchTimer = 0;
+    }, 6000);
 
     // Optimistic UI update: instantly toggle active classes in DOM for instantaneous feedback
     if (powerPlansContainer) {
@@ -1350,6 +1369,15 @@ function setPowerPlan(guid) {
     }
 }
 
+function clearPowerPlanPending() {
+    pendingPowerPlanGuid = "";
+    isPowerPlanSwitching = false;
+    if (powerPlanSwitchTimer) {
+        clearTimeout(powerPlanSwitchTimer);
+        powerPlanSwitchTimer = 0;
+    }
+}
+
 // Direct DOM update instead of requestAnimationFrame loop to save CPU and iGPU cycles
 function animateTextValue(element, targetValue, suffix = "") {
     const currentText = element.textContent || "";
@@ -1372,7 +1400,16 @@ function connectStream() {
             try {
                 const stats = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
                 if (stats && stats.control) {
-                    setRuntimeSuspended(stats.control === "SUSPEND");
+                    if (stats.control === "SUSPEND" || stats.control === "RESUME") {
+                        setRuntimeSuspended(stats.control === "SUSPEND");
+                    } else if (stats.control === "POWER_RESULT") {
+                        if (stats.success || !pendingPowerPlanGuid || stats.requestedGuid === pendingPowerPlanGuid) {
+                            clearPowerPlanPending();
+                            if (stats.activeGuid) {
+                                currentPowerPlan = stats.activeGuid;
+                            }
+                        }
+                    }
                     return;
                 }
                 updateDOM(stats);

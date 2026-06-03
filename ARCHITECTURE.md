@@ -8,7 +8,6 @@ graph TD
     EXE --> DESK[WorkerW / Progman desktop parent]
     EXE --> HOOK[WH_MOUSE_LL selective click hook]
     EXE --> TEL[Native telemetry collector]
-    EXE --> HDR[Windows Advanced Color / DXGI HDR detection]
     TEL --> WMI[WMI / Win32 APIs]
     TEL --> NVML[NVML when available]
     TEL --> POWER[powercfg / PowerGetActiveScheme]
@@ -38,8 +37,7 @@ Telemetry is collected inside `DesktopHtmlHost.cs`.
 - Network: `NetworkInterface` byte counters plus async ping to `1.1.1.1`
 - GPU/iGPU: DirectX LUID registry mapping plus GPU performance counters
 - NVIDIA details: NVML when available
-- Power plans: `powercfg /list`, `PowerGetActiveScheme`, and `powercfg /setactive`
-- Display/HDR state: Windows Advanced Color plus DXGI probes. This reports OS/display HDR state only; the current WebView2 renderer is still SDR.
+- Power plans: `powercfg /list`, `PowerGetActiveScheme`, and `PowerSetActiveScheme`
 
 The frontend receives telemetry only through WebView2 messages. There is no HTTP server in the current native architecture.
 
@@ -54,9 +52,3 @@ The injected WebView2 window lives below desktop icons, so normal mouse delivery
 - Top-process WMI collection is throttled and protected against overlapping calls.
 - GPU routing preferences are written in `HKCU\Software\Microsoft\DirectX\UserGpuPreferences`.
 - Fullscreen app detection suspends telemetry and Canvas work, then resumes immediately when fullscreen clears.
-
-## HDR Status
-
-The current renderer is WebView2 SDR. The app now detects real Windows HDR state and shows it as `OS HDR ON/OFF`, but it does not claim that the HTML renderer itself outputs HDR.
-
-The DXGI probe in `scripts/hdr_dxgi_probe.cs` verifies whether the active output is in `DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020`. A true HDR wallpaper requires a native Direct3D/DXGI swap chain and is tracked in `HDR_NATIVE_RENDERER_PLAN.md`.

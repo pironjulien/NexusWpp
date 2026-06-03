@@ -26,10 +26,23 @@ function Stop-NexusWebView2 {
 function Get-NexusSnapshot {
     param([datetime]$Since)
 
-    $items = Get-Process -Name nexuswpp,msedgewebview2 -ErrorAction SilentlyContinue |
+    $nexusItems = @(Get-Process -Name nexuswpp -ErrorAction SilentlyContinue |
+        Where-Object { try { $_.StartTime -ge $Since } catch { $true } })
+
+    $webViewProcessIds = @(Get-CimInstance Win32_Process -Filter "Name = 'msedgewebview2.exe'" -ErrorAction SilentlyContinue |
         Where-Object {
-            try { $_.StartTime -ge $Since } catch { $true }
-        }
+            $_.CommandLine -like "*\AppData\Local\nexuswpp\EBWebView*" -or
+            $_.CommandLine -like "*--webview-exe-name=nexuswpp.exe*"
+        } |
+        ForEach-Object { [int]$_.ProcessId })
+
+    $webViewItems = @(Get-Process -Name msedgewebview2 -ErrorAction SilentlyContinue |
+        Where-Object {
+            $webViewProcessIds -contains $_.Id -and
+            $(try { $_.StartTime -ge $Since } catch { $true })
+        })
+
+    $items = @($nexusItems + $webViewItems)
 
     $cpu = 0.0
     $mem = 0L
