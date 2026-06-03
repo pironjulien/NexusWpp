@@ -18,6 +18,7 @@ NexusWpp affiche un cockpit matériel dynamique directement dans le bureau Windo
 - `run.bat` : menu local pour démarrer, compiler, déployer ou arrêter l'app.
 - `scripts/benchmark_nexuswpp.ps1` : benchmark multi-run CPU/RAM/startup.
 - `scripts/benchmark_fullscreen_suspend.ps1` : mesure actif vs suspension plein écran.
+- `scripts/generate_loading_snapshot.ps1` : régénère l'image de chargement 2560x1440 à zéro.
 
 ## Démarrage Rapide
 
@@ -47,6 +48,7 @@ L'application contient un verrou single-instance, donc les deux lanceurs ne cré
 - Le raccourci de démarrage utilise le dossier Startup de l'utilisateur courant, pas un chemin utilisateur codé en dur.
 - Le fond d'écran fonctionne sans serveur Node et sans dépendance npm.
 - Le sélecteur d'alimentation confirme le GUID actif Windows et ignore les clics quand une autre application recouvre le panneau.
+- `loading-zero-1440p.png` est affiché immédiatement au lancement pour masquer le court temps de chargement WebView2.
 
 ## Pourquoi C'est Plus Rapide Qu'Avant
 
