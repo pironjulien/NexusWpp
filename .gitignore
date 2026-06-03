@@ -10,6 +10,7 @@ scripts/*probe*.json
 
 *.tmp
 *.bak
+nexuswpp-loading-snapshot-*.html
 deploy_error.txt
 
 Desktop.ini
