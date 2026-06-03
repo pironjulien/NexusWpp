@@ -252,6 +252,12 @@ namespace DesktopHtmlHost
         private static extern IntPtr GetForegroundWindow();
 
         [DllImport("user32.dll")]
+        private static extern IntPtr WindowFromPoint(POINT point);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetParent(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool IsIconic(IntPtr hWnd);
 
@@ -562,34 +568,7 @@ namespace DesktopHtmlHost
                             else if (msg.StartsWith("SET_POWER:"))
                             {
                                 string guidStr = msg.Substring(10);
-                                try
-                                {
-                                    ProcessStartInfo startInfo = new ProcessStartInfo("powercfg", "/setactive " + guidStr)
-                                    {
-                                        CreateNoWindow = true,
-                                        UseShellExecute = false
-                                    };
-                                    using (var p = Process.Start(startInfo))
-                                    {
-                                        p.WaitForExit(1000);
-                                    }
-                                    Program.LogDebug("Set active power plan via powercfg: " + guidStr);
-                                }
-                                catch (Exception ex)
-                                {
-                                    Program.LogDebug("Error setting power plan via powercfg: " + ex.Message);
-                                }
-                                
-                                // Trigger telemetry update with 300ms delay to allow registry propagation
-                                System.Windows.Forms.Timer oneShot = new System.Windows.Forms.Timer();
-                                oneShot.Interval = 300;
-                                oneShot.Tick += (timerSender, timerArgs) =>
-                                {
-                                    oneShot.Stop();
-                                    oneShot.Dispose();
-                                    this.TelemetryTimer_Tick(null, null);
-                                };
-                                oneShot.Start();
+                                SetPowerPlanFromUi(guidStr);
                             }
                             else if (msg == "REQUEST_TELEMETRY")
                             {
@@ -712,6 +691,80 @@ namespace DesktopHtmlHost
             }
 
             Program.LogDebug(suspended ? "Runtime suspended: fullscreen foreground detected (" + fullscreenReason + ")." : "Runtime resumed: fullscreen foreground cleared.");
+        }
+
+        private void SetPowerPlanFromUi(string guidStr)
+        {
+            bool success = false;
+            string activeGuid = "";
+            string error = "";
+
+            try
+            {
+                if (telemetryCollector == null)
+                {
+                    error = "telemetry collector not ready";
+                }
+                else
+                {
+                    success = telemetryCollector.SetActivePowerPlan(guidStr, out activeGuid, out error);
+                }
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+            }
+
+            Program.LogDebug(string.Format(CultureInfo.InvariantCulture,
+                "Power plan request: requested={0}, active={1}, success={2}, error={3}",
+                guidStr,
+                activeGuid,
+                success,
+                error));
+
+            try
+            {
+                if (webView != null && webView.CoreWebView2 != null)
+                {
+                    string payload = string.Format(CultureInfo.InvariantCulture,
+                        "{{\"control\":\"POWER_RESULT\",\"requestedGuid\":{0},\"activeGuid\":{1},\"success\":{2},\"error\":{3}}}",
+                        JsonString(guidStr),
+                        JsonString(activeGuid),
+                        success ? "true" : "false",
+                        JsonString(error));
+                    webView.CoreWebView2.PostWebMessageAsJson(payload);
+                }
+            }
+            catch (Exception ex)
+            {
+                Program.LogDebug("Power result post error: " + ex.Message);
+            }
+
+            TelemetryTimer_Tick(null, null);
+        }
+
+        private static string JsonString(string value)
+        {
+            if (value == null) return "\"\"";
+            StringBuilder sb = new StringBuilder(value.Length + 2);
+            sb.Append('"');
+            foreach (char c in value)
+            {
+                switch (c)
+                {
+                    case '\\': sb.Append(@"\\"); break;
+                    case '"': sb.Append("\\\""); break;
+                    case '\r': sb.Append(@"\r"); break;
+                    case '\n': sb.Append(@"\n"); break;
+                    case '\t': sb.Append(@"\t"); break;
+                    default:
+                        if (c < 32) sb.Append("\\u" + ((int)c).ToString("x4", CultureInfo.InvariantCulture));
+                        else sb.Append(c);
+                        break;
+                }
+            }
+            sb.Append('"');
+            return sb.ToString();
         }
 
         private bool IsAnyFullscreenWindow(out string reason)
@@ -933,6 +986,11 @@ namespace DesktopHtmlHost
 
                         if (remotePanelBounds.Contains(clientPt))
                         {
+                            if (!activeInstance.ShouldForwardDesktopClick(screenPt))
+                            {
+                                return CallNextHookEx(hookId, nCode, wParam, lParam);
+                            }
+
                             if (renderWindow == IntPtr.Zero)
                             {
                                 activeInstance.FindRenderWindow();
@@ -953,6 +1011,37 @@ namespace DesktopHtmlHost
                 Program.LogDebug(string.Format("HookCallback Exception: {0}", ex.ToString()));
             }
             return CallNextHookEx(hookId, nCode, wParam, lParam);
+        }
+
+        private bool ShouldForwardDesktopClick(System.Drawing.Point screenPt)
+        {
+            IntPtr hit = WindowFromPoint(new POINT { x = screenPt.X, y = screenPt.Y });
+            if (hit == IntPtr.Zero) return false;
+            if (hit == this.Handle || hit == renderWindow) return true;
+
+            IntPtr current = hit;
+            for (int i = 0; i < 8 && current != IntPtr.Zero; i++)
+            {
+                if (current == this.Handle || current == renderWindow) return true;
+
+                string cls = GetWindowClassName(current);
+                if (cls == "Progman" || cls == "WorkerW" || cls == "SHELLDLL_DefView" || cls == "SysListView32")
+                {
+                    return true;
+                }
+
+                current = GetParent(current);
+            }
+
+            return false;
+        }
+
+        private static string GetWindowClassName(IntPtr hwnd)
+        {
+            if (hwnd == IntPtr.Zero) return "";
+            System.Text.StringBuilder className = new System.Text.StringBuilder(256);
+            GetClassName(hwnd, className, className.Capacity);
+            return className.ToString();
         }
 
         private void FindRenderWindow()
@@ -1038,9 +1127,6 @@ namespace DesktopHtmlHost
 
     public static class Win32
     {
-        public const uint QDC_ONLY_ACTIVE_PATHS = 0x00000002;
-        public const int DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO = 9;
-
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool GlobalMemoryStatusEx([In, Out] MEMORYSTATUSEX lpBuffer);
@@ -1060,260 +1146,6 @@ namespace DesktopHtmlHost
 
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern IntPtr LocalFree(IntPtr hMem);
-
-        [DllImport("user32.dll")]
-        public static extern int GetDisplayConfigBufferSizes(
-            uint flags,
-            out uint numPathArrayElements,
-            out uint numModeInfoArrayElements
-        );
-
-        [DllImport("user32.dll")]
-        public static extern int QueryDisplayConfig(
-            uint flags,
-            ref uint numPathArrayElements,
-            [Out] DISPLAYCONFIG_PATH_INFO[] pathArray,
-            ref uint numModeInfoArrayElements,
-            [Out] DISPLAYCONFIG_MODE_INFO[] modeInfoArray,
-            IntPtr currentTopologyId
-        );
-
-        [DllImport("user32.dll")]
-        public static extern int DisplayConfigGetDeviceInfo(ref DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO requestPacket);
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct LUID
-        {
-            public uint LowPart;
-            public int HighPart;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct DISPLAYCONFIG_PATH_INFO
-        {
-            public DISPLAYCONFIG_PATH_SOURCE_INFO sourceInfo;
-            public DISPLAYCONFIG_PATH_TARGET_INFO targetInfo;
-            public uint flags;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct DISPLAYCONFIG_PATH_SOURCE_INFO
-        {
-            public LUID adapterId;
-            public uint id;
-            public uint modeInfoIdx;
-            public uint statusFlags;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct DISPLAYCONFIG_PATH_TARGET_INFO
-        {
-            public LUID adapterId;
-            public uint id;
-            public uint modeInfoIdx;
-            public uint outputTechnology;
-            public uint rotation;
-            public uint scaling;
-            public DISPLAYCONFIG_RATIONAL refreshRate;
-            public uint scanLineOrdering;
-            [MarshalAs(UnmanagedType.Bool)]
-            public bool targetAvailable;
-            public uint statusFlags;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct DISPLAYCONFIG_RATIONAL
-        {
-            public uint Numerator;
-            public uint Denominator;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct DISPLAYCONFIG_MODE_INFO
-        {
-            public uint infoType;
-            public uint id;
-            public LUID adapterId;
-            public DISPLAYCONFIG_MODE_INFO_UNION modeInfo;
-        }
-
-        [StructLayout(LayoutKind.Explicit)]
-        public struct DISPLAYCONFIG_MODE_INFO_UNION
-        {
-            [FieldOffset(0)]
-            public DISPLAYCONFIG_TARGET_MODE targetMode;
-            [FieldOffset(0)]
-            public DISPLAYCONFIG_SOURCE_MODE sourceMode;
-            [FieldOffset(0)]
-            public DISPLAYCONFIG_DESKTOP_IMAGE_INFO desktopImageInfo;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct DISPLAYCONFIG_TARGET_MODE
-        {
-            public DISPLAYCONFIG_VIDEO_SIGNAL_INFO targetVideoSignalInfo;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct DISPLAYCONFIG_VIDEO_SIGNAL_INFO
-        {
-            public ulong pixelRate;
-            public DISPLAYCONFIG_RATIONAL hSyncFreq;
-            public DISPLAYCONFIG_RATIONAL vSyncFreq;
-            public DISPLAYCONFIG_2DREGION activeSize;
-            public DISPLAYCONFIG_2DREGION totalSize;
-            public uint videoStandard;
-            public uint scanLineOrdering;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct DISPLAYCONFIG_2DREGION
-        {
-            public uint cx;
-            public uint cy;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct DISPLAYCONFIG_SOURCE_MODE
-        {
-            public uint width;
-            public uint height;
-            public uint pixelFormat;
-            public POINTL position;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct POINTL
-        {
-            public int x;
-            public int y;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct DISPLAYCONFIG_DESKTOP_IMAGE_INFO
-        {
-            public POINTL PathSourceSize;
-            public RECTL DesktopImageRegion;
-            public RECTL DesktopImageClip;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct RECTL
-        {
-            public int left;
-            public int top;
-            public int right;
-            public int bottom;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct DISPLAYCONFIG_DEVICE_INFO_HEADER
-        {
-            public int type;
-            public uint size;
-            public LUID adapterId;
-            public uint id;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO
-        {
-            public DISPLAYCONFIG_DEVICE_INFO_HEADER header;
-            public uint value;
-            public uint colorEncoding;
-            public uint bitsPerColorChannel;
-        }
-    }
-
-    public class AdvancedColorStatus
-    {
-        public bool Available = false;
-        public bool Supported = false;
-        public bool Enabled = false;
-        public bool WideColorEnforced = false;
-        public bool ForceDisabled = false;
-        public int BitsPerColorChannel = 0;
-        public string ColorEncoding = "unknown";
-        public int ActivePathCount = 0;
-        public string Error = "";
-    }
-
-    public static class AdvancedColorDetector
-    {
-        public static AdvancedColorStatus Query()
-        {
-            AdvancedColorStatus status = new AdvancedColorStatus();
-            try
-            {
-                uint pathCount;
-                uint modeCount;
-                int result = Win32.GetDisplayConfigBufferSizes(Win32.QDC_ONLY_ACTIVE_PATHS, out pathCount, out modeCount);
-                if (result != 0 || pathCount == 0)
-                {
-                    status.Error = "GetDisplayConfigBufferSizes=" + result;
-                    return status;
-                }
-
-                Win32.DISPLAYCONFIG_PATH_INFO[] paths = new Win32.DISPLAYCONFIG_PATH_INFO[pathCount];
-                Win32.DISPLAYCONFIG_MODE_INFO[] modes = new Win32.DISPLAYCONFIG_MODE_INFO[modeCount];
-                result = Win32.QueryDisplayConfig(Win32.QDC_ONLY_ACTIVE_PATHS, ref pathCount, paths, ref modeCount, modes, IntPtr.Zero);
-                if (result != 0)
-                {
-                    status.Error = "QueryDisplayConfig=" + result;
-                    return status;
-                }
-
-                status.Available = true;
-                status.ActivePathCount = (int)pathCount;
-
-                for (int i = 0; i < pathCount; i++)
-                {
-                    Win32.DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO request = new Win32.DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO();
-                    request.header.type = Win32.DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO;
-                    request.header.size = (uint)Marshal.SizeOf(typeof(Win32.DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO));
-                    request.header.adapterId = paths[i].targetInfo.adapterId;
-                    request.header.id = paths[i].targetInfo.id;
-
-                    result = Win32.DisplayConfigGetDeviceInfo(ref request);
-                    if (result != 0)
-                    {
-                        status.Error = "DisplayConfigGetDeviceInfo=" + result;
-                        continue;
-                    }
-
-                    bool supported = (request.value & 0x1) != 0;
-                    bool enabled = (request.value & 0x2) != 0;
-                    bool wideColorEnforced = (request.value & 0x4) != 0;
-                    bool forceDisabled = (request.value & 0x8) != 0;
-
-                    status.Supported = status.Supported || supported;
-                    status.Enabled = status.Enabled || enabled;
-                    status.WideColorEnforced = status.WideColorEnforced || wideColorEnforced;
-                    status.ForceDisabled = status.ForceDisabled || forceDisabled;
-                    status.BitsPerColorChannel = Math.Max(status.BitsPerColorChannel, (int)request.bitsPerColorChannel);
-                    status.ColorEncoding = ColorEncodingName(request.colorEncoding);
-                }
-            }
-            catch (Exception ex)
-            {
-                status.Error = ex.Message;
-            }
-
-            return status;
-        }
-
-        private static string ColorEncodingName(uint value)
-        {
-            switch (value)
-            {
-                case 0: return "RGB";
-                case 1: return "YCbCr444";
-                case 2: return "YCbCr422";
-                case 3: return "YCbCr420";
-                case 4: return "INTENSITY";
-                default: return "unknown-" + value.ToString(CultureInfo.InvariantCulture);
-            }
-        }
     }
 
     public static class Nvml
@@ -1444,9 +1276,6 @@ namespace DesktopHtmlHost
         private int cachedIgpuUtil = 0;
         private long cachedIgpuMemBytes = 0;
         private int cachedDgpuUtil = 0;
-        private DateTime lastAdvancedColorTime = DateTime.MinValue;
-        private AdvancedColorStatus cachedAdvancedColorStatus = new AdvancedColorStatus();
-
         public void Initialize()
         {
             // Read GPUs AdapterLuid and names from Registry
@@ -1653,6 +1482,72 @@ namespace DesktopHtmlHost
             {
                 Program.LogDebug("UpdatePowerPlansCache error: " + ex.Message);
             }
+        }
+
+        public string GetActivePowerPlanGuid()
+        {
+            try
+            {
+                IntPtr activeGuidPtr;
+                uint res = Win32.PowerGetActiveScheme(IntPtr.Zero, out activeGuidPtr);
+                if (res == 0 && activeGuidPtr != IntPtr.Zero)
+                {
+                    Guid activeGuid = (Guid)Marshal.PtrToStructure(activeGuidPtr, typeof(Guid));
+                    Win32.LocalFree(activeGuidPtr);
+                    return activeGuid.ToString();
+                }
+            }
+            catch {}
+
+            return "";
+        }
+
+        public bool SetActivePowerPlan(string guidStr, out string activeGuid, out string error)
+        {
+            activeGuid = "";
+            error = "";
+
+            Guid requestedGuid;
+            if (!Guid.TryParse(guidStr, out requestedGuid))
+            {
+                error = "invalid GUID";
+                activeGuid = GetActivePowerPlanGuid();
+                return false;
+            }
+
+            if (PowerPlans.Count > 0 && !PowerPlans.Any(p => p.Guid.Equals(guidStr, StringComparison.OrdinalIgnoreCase)))
+            {
+                UpdatePowerPlansCache();
+                if (!PowerPlans.Any(p => p.Guid.Equals(guidStr, StringComparison.OrdinalIgnoreCase)))
+                {
+                    error = "GUID not found in powercfg /list";
+                    activeGuid = GetActivePowerPlanGuid();
+                    return false;
+                }
+            }
+
+            uint result = Win32.PowerSetActiveScheme(IntPtr.Zero, ref requestedGuid);
+            if (result != 0)
+            {
+                error = "PowerSetActiveScheme=" + result.ToString(CultureInfo.InvariantCulture);
+            }
+
+            Thread.Sleep(120);
+            activeGuid = GetActivePowerPlanGuid();
+            bool success = activeGuid.Equals(guidStr, StringComparison.OrdinalIgnoreCase);
+            if (success)
+            {
+                foreach (var plan in PowerPlans)
+                {
+                    plan.Active = plan.Guid.Equals(activeGuid, StringComparison.OrdinalIgnoreCase);
+                }
+            }
+            else if (string.IsNullOrEmpty(error))
+            {
+                error = "active scheme did not match request";
+            }
+
+            return success;
         }
 
         private void UpdateNetworkStats()
@@ -2108,44 +2003,12 @@ namespace DesktopHtmlHost
 
             UpdatePing();
             UpdateTopProcesses();
-            AdvancedColorStatus advancedColor = cachedAdvancedColorStatus;
-            if (lastAdvancedColorTime == DateTime.MinValue || (DateTime.Now - lastAdvancedColorTime).TotalSeconds >= 30.0)
-            {
-                bool firstAdvancedColorRead = lastAdvancedColorTime == DateTime.MinValue;
-                advancedColor = AdvancedColorDetector.Query();
-                cachedAdvancedColorStatus = advancedColor;
-                lastAdvancedColorTime = DateTime.Now;
-                if (firstAdvancedColorRead)
-                {
-                    Program.LogDebug(string.Format(CultureInfo.InvariantCulture,
-                        "AdvancedColor status: available={0}, supported={1}, enabled={2}, bpc={3}, encoding={4}, paths={5}, renderer=WebView2 SDR",
-                        advancedColor.Available,
-                        advancedColor.Supported,
-                        advancedColor.Enabled,
-                        advancedColor.BitsPerColorChannel,
-                        advancedColor.ColorEncoding,
-                        advancedColor.ActivePathCount));
-                }
-            }
 
             // Fan speeds
             int fan1 = cpuTemp > 45 ? (int)Math.Round(1000 + (cpuLoad * 8.0) + (cpuTemp - 45) * 20.0) : (int)Math.Round(800 + cpuLoad * 4.0);
             int fan2 = (gpuUtil > 5 || gpuTemp > 45) ? (int)Math.Round(900 + (gpuUtil * 6.0) + (gpuTemp - 40) * 15.0) : 0;
 
-            // Get Active Power Plan GUID
-            string activePlanGuidStr = "";
-            try
-            {
-                IntPtr activeGuidPtr;
-                uint res = Win32.PowerGetActiveScheme(IntPtr.Zero, out activeGuidPtr);
-                if (res == 0 && activeGuidPtr != IntPtr.Zero)
-                {
-                    Guid activeGuid = (Guid)Marshal.PtrToStructure(activeGuidPtr, typeof(Guid));
-                    activePlanGuidStr = activeGuid.ToString();
-                    Win32.LocalFree(activeGuidPtr);
-                }
-            }
-            catch {}
+            string activePlanGuidStr = GetActivePowerPlanGuid();
 
             foreach (var plan in PowerPlans)
             {
@@ -2192,17 +2055,6 @@ namespace DesktopHtmlHost
 
             // fans
             sb.AppendFormat(CultureInfo.InvariantCulture, "\"fans\":{{\"fan1\":{0},\"fan2\":{1}}},", fan1, fan2);
-
-            // display / Advanced Color. This detects real Windows HDR capability/state; WebView2 still renders SDR.
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"display\":{{\"advancedColorAvailable\":{0},\"hdrSupported\":{1},\"hdrEnabled\":{2},\"wideColorEnforced\":{3},\"advancedColorForceDisabled\":{4},\"bitsPerColorChannel\":{5},\"colorEncoding\":{6},\"activePathCount\":{7},\"renderer\":\"WebView2 SDR\"}},",
-                advancedColor.Available ? "true" : "false",
-                advancedColor.Supported ? "true" : "false",
-                advancedColor.Enabled ? "true" : "false",
-                advancedColor.WideColorEnforced ? "true" : "false",
-                advancedColor.ForceDisabled ? "true" : "false",
-                advancedColor.BitsPerColorChannel,
-                JsonString(advancedColor.ColorEncoding),
-                advancedColor.ActivePathCount);
 
             // network
             sb.AppendFormat(CultureInfo.InvariantCulture, "\"network\":{{\"lan\":{0},\"wifi\":{1},\"ip\":{2},\"ipv6\":{3},\"name\":{4},\"type\":{5},\"linkSpeedMbps\":{6}}},",
