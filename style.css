@@ -1,0 +1,1171 @@
+/* Modern, Premium Gaming Dashboard CSS Design System - Version 4 (Apple Frosted Glass) */
+:root {
+    --bg-dark: #040509;
+    
+    /* Apple Frosted Glass Variables */
+    --glass-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+    --glass-border: rgba(255, 255, 255, 0.16);
+    --glass-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.3), 
+                    inset 0 1px 1px rgba(255, 255, 255, 0.12), 
+                    inset 0 -1px 1px rgba(255, 255, 255, 0.04);
+    
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.78); /* Increased contrast for WCAG AA compliance */
+    --text-dark: rgba(255, 255, 255, 0.52);      /* Increased contrast for WCAG AA compliance */
+    
+    /* Neon glow colors */
+    --cpu-glow: #bf5aff;
+    --vram-glow: #30d158;
+    --gpu-glow: #ff375f;
+    --ram-color: #0a84ff;
+    --disk-color: #00c7be;
+    
+    /* Fonts */
+    --font-heading: 'Bahnschrift', 'Segoe UI Variable Display', 'Segoe UI', sans-serif;
+    --font-body: 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
+}
+
+/* Helper class for visually hidden content (A11y) */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+html {
+    background: transparent !important;
+}
+
+body {
+    background: transparent !important;
+    background-color: transparent !important;
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+}
+
+.loading-snapshot {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+    background-color: #040509;
+    background-image: url("loading-zero-1440p.png");
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    opacity: 1;
+    transition: opacity 0.45s ease;
+    contain: strict;
+}
+
+.loading-snapshot.is-hidden {
+    opacity: 0;
+}
+
+.loading-snapshot.is-removed {
+    display: none;
+}
+
+/* --- COSMIC BACKGROUND (SATURATED BOOSTER FOR APPLE GLASS) --- */
+.cosmos-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    overflow: hidden;
+    background: radial-gradient(circle at center center, #070914 0%, #020204 100%);
+}
+
+.stars, .stars2 {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: 
+        radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.22) 1px, transparent 1px),
+        radial-gradient(circle at 45% 65%, rgba(255, 255, 255, 0.18) 1.5px, transparent 1.5px),
+        radial-gradient(circle at 70% 30%, rgba(255, 255, 255, 0.25) 1px, transparent 1px),
+        radial-gradient(circle at 85% 75%, rgba(255, 255, 255, 0.28) 1.2px, transparent 1.2px),
+        radial-gradient(circle at 25% 80%, rgba(255, 255, 255, 0.12) 2px, transparent 2px);
+    background-size: 300px 300px;
+    opacity: 0.75;
+}
+
+.stars2 {
+    background-size: 500px 500px;
+    opacity: 0.5;
+}
+
+/* Brighter, highly-saturated nebulas to illuminate the Apple Glass overlay */
+.nebula {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.nebula-purple {
+    top: 5%;
+    right: 10%;
+    width: 60vw;
+    height: 60vw;
+    background: radial-gradient(circle, rgba(191, 90, 255, 0.7) 0%, rgba(0,0,0,0) 70%);
+    opacity: 0.22;
+}
+
+.nebula-blue {
+    bottom: -10%;
+    left: 5%;
+    width: 70vw;
+    height: 70vw;
+    background: radial-gradient(circle, rgba(10, 132, 255, 0.6) 0%, rgba(0,0,0,0) 70%);
+    opacity: 0.2;
+}
+
+.nebula-cyan {
+    top: 25%;
+    left: 30%;
+    width: 50vw;
+    height: 50vw;
+    background: radial-gradient(circle, rgba(0, 199, 190, 0.45) 0%, rgba(0,0,0,0) 70%);
+    opacity: 0.15;
+}
+
+.nebula-green {
+    bottom: 10%;
+    right: 20%;
+    width: 45vw;
+    height: 45vw;
+    background: radial-gradient(circle, rgba(48, 209, 88, 0.35) 0%, rgba(0,0,0,0) 70%);
+    opacity: 0.12;
+}
+
+/* --- GLASS PANEL SYSTEM (APPLE FROSTED GLASS) --- */
+.glass-panel {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 20px;
+    box-shadow: 
+        0 12px 40px 0 rgba(0, 0, 0, 0.35), 
+        inset 0 1px 1px rgba(255, 255, 255, 0.12), 
+        inset 0 -1px 1px rgba(255, 255, 255, 0.04);
+    transition: border-color 0.4s ease, box-shadow 0.4s ease, background 0.4s ease;
+    
+    /* Hardware GPU acceleration layer promotion to optimize composite rendering */
+    transform: translate3d(0, 0, 0);
+    will-change: transform;
+}
+
+.glass-panel:hover {
+    border-color: rgba(255, 255, 255, 0.32);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.03) 100%) !important;
+    box-shadow: 
+        0 16px 48px 0 rgba(0, 0, 0, 0.48), 
+        inset 0 1px 1px rgba(255, 255, 255, 0.22);
+}
+
+.panel-header-title {
+    font-family: var(--font-heading);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    border-left: 3px solid #ffffff;
+    padding-left: 12px;
+    margin-bottom: 2px;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+}
+
+@keyframes dashboard-fade-in {
+    from {
+        opacity: 0;
+        transform: scale(0.99) translate3d(0, 0, 0);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translate3d(0, 0, 0);
+    }
+}
+
+.dashboard {
+    width: 92vw;
+    max-width: 2700px;
+    height: calc(100vh - 180px) !important;
+    margin-bottom: 85px !important;
+    padding: 0 !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    position: relative;
+    z-index: 1;
+    animation: dashboard-fade-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* 3-Column Responsive Workspace Grid */
+.workspace {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1.22fr 1.12fr; /* Grille ultra-premium, resserrée et équilibrée */
+    gap: 32px;
+    min-height: 0; /* Flexbox containment to prevent overflowing parent padding */
+    align-items: stretch;
+}
+
+/* --- COLUMN LEFT: Telemetry Gauges (CPU, NPU, GPU Vertically Stacked) --- */
+.column-left {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    height: 100%;
+    justify-content: space-between;
+}
+
+.gauge-card {
+    flex: 1;
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start; /* Title stays at the top of the card, preventing vertical clipping */
+    align-items: center;
+    position: relative;
+    overflow: hidden;
+
+    /* SOTA Layout Containment & Paint Optimization (Corrected to 'content' for flexible flex items) */
+    contain: content;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 300px;
+}
+
+.gauge-label {
+    font-family: var(--font-heading);
+    font-size: 15px; /* SOTA adjusted for full hardware names at the top */
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.05);
+    text-align: center;
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.6; /* Prevents compact heading font clipping on Windows */
+    padding-top: 6px; /* Extra breathing space to ensure no top clipping */
+    padding-bottom: 4px;
+}
+
+.gauge-container {
+    position: relative;
+    width: 180px;
+    height: 180px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.progress-ring {
+    transform: rotate(-90deg);
+}
+
+.ring-bg {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.02);
+    stroke-width: 10;
+}
+
+.ring-fill {
+    fill: none;
+    stroke-width: 11;
+    stroke-linecap: round;
+    stroke-dasharray: 477.5; /* 2 * PI * 76 = 477.5 */
+    stroke-dashoffset: 477.5;
+    transition: stroke-dashoffset 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+    
+    /* Optimize stroke animation and prepare layer promotion */
+    will-change: stroke-dashoffset, filter;
+}
+
+/* GPU hardware-accelerated high-performance glow drop-shadow filters */
+#cpu-ring { filter: drop-shadow(0 0 3px var(--cpu-glow)); }
+#vram-ring { filter: drop-shadow(0 0 3px var(--vram-glow)); }
+#npu-ring { filter: drop-shadow(0 0 3px #30d158); }
+#gpu-ring { filter: drop-shadow(0 0 3px var(--gpu-glow)); }
+#ram-ring { filter: drop-shadow(0 0 3px var(--ram-color)); }
+#ssd-ring { filter: drop-shadow(0 0 3px var(--disk-color)); }
+#net-ring { filter: drop-shadow(0 0 3px #ff9f0a); }
+
+.gauge-value {
+    position: absolute;
+    font-family: var(--font-heading);
+    font-size: 54px; /* Grandeur cockpit imposante */
+    font-weight: 900;
+    color: var(--text-primary);
+    display: flex;
+    align-items: baseline;
+    text-shadow: 0 0 15px rgba(255, 255, 255, 0.08);
+}
+
+.gauge-value span {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-left: 2px;
+}
+
+.vram-scanner-eye {
+    position: absolute;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: 1px solid transparent;
+    border-top: 1px solid rgba(48, 209, 88, 0.45);
+    border-bottom: 1px solid rgba(48, 209, 88, 0.45);
+    animation: spin-eye 15s linear infinite;
+    pointer-events: none;
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
+}
+
+@keyframes spin-eye {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* --- COLUMN CENTER: SOTA Physics Engine + Power Controller --- */
+.column-center {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    padding: 24px 28px;
+    justify-content: space-between;
+    height: 100%;
+    position: relative;
+    
+    /* High performance SOTA optimization: disable backdrop-filter blur on the animating center panel */
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: linear-gradient(135deg, rgba(8, 10, 20, 0.3) 0%, rgba(4, 5, 10, 0.4) 100%) !important;
+}
+
+/* SOTA Physics Engine Viewport */
+.hologram-sub-panel {
+    flex: 1.25;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    width: 100%;
+    min-height: 280px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.02) 0%, rgba(0, 0, 0, 0) 70%);
+}
+
+#physics-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 16px;
+    cursor: crosshair;
+    will-change: transform;
+    transform: translateZ(0);
+}
+
+/* Power Plan Controller area */
+.remote-sub-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+}
+
+.remote-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+}
+
+.remote-grid.horizontal {
+    flex-direction: row;
+    gap: 12px;
+}
+
+.remote-btn {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    padding: 18px 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    color: var(--text-secondary);
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    outline: none;
+    width: 100%;
+}
+
+.remote-grid.horizontal .remote-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 12px 10px;
+    gap: 8px;
+    border-radius: 12px;
+}
+
+.remote-grid.horizontal .remote-btn:hover {
+    transform: translateY(-2px);
+}
+
+.remote-grid.horizontal .remote-btn .btn-lbl {
+    font-size: 14px;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.remote-grid.horizontal .remote-btn .icon-wrap svg {
+    width: 22px;
+    height: 22px;
+}
+
+.remote-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.35);
+    color: var(--text-primary);
+    transform: translateX(6px);
+}
+
+.remote-btn .icon-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: transform 0.3s ease;
+}
+
+.remote-btn:hover .icon-wrap {
+    transform: scale(1.12);
+}
+
+.remote-btn .btn-lbl {
+    font-family: var(--font-body);
+    font-size: 20px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Active buttons styling with high-contrast glowing pill overlays */
+#btn-extreme.active {
+    background: rgba(255, 55, 95, 0.12);
+    border-color: var(--gpu-glow);
+    color: var(--gpu-glow);
+    box-shadow: 0 0 20px rgba(255, 55, 95, 0.3), inset 0 1px 1px rgba(255, 55, 95, 0.2);
+}
+
+#btn-balanced.active {
+    background: rgba(10, 132, 255, 0.12);
+    border-color: var(--ram-color);
+    color: var(--ram-color);
+    box-shadow: 0 0 20px rgba(10, 132, 255, 0.3), inset 0 1px 1px rgba(10, 132, 255, 0.2);
+}
+
+#btn-eco.active {
+    background: rgba(48, 209, 88, 0.12);
+    border-color: var(--vram-glow);
+    color: var(--vram-glow);
+    box-shadow: 0 0 20px rgba(48, 209, 88, 0.3), inset 0 1px 1px rgba(48, 209, 88, 0.2);
+}
+
+
+
+/* --- COLUMN RIGHT: SIDEBAR --- */
+.column-right {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    height: 100%;
+    justify-content: space-between;
+}
+
+/* Cyber-Clock Widget */
+.cyber-clock-card {
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+}
+
+.cyber-clock-card .ping-badge {
+    margin-bottom: 10px;
+    font-size: 11px;
+    padding: 3px 10px;
+}
+
+.clock-time {
+    font-family: var(--font-heading);
+    font-size: 40px;
+    font-weight: 900;
+    color: var(--text-primary);
+    letter-spacing: 2px;
+    text-shadow: 0 0 15px rgba(255, 255, 255, 0.15);
+    display: flex;
+    align-items: baseline;
+}
+
+.clock-time .ms-tick {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    width: 48px;
+    margin-left: 2px;
+}
+
+.clock-date {
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    margin-top: 6px;
+    opacity: 0.9;
+}
+
+.clock-mb {
+    font-family: var(--font-heading);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--vram-glow);
+    text-transform: uppercase;
+    margin-top: 5px;
+    opacity: 0.85;
+    text-shadow: 0 0 8px rgba(48, 209, 88, 0.45);
+}
+
+/* Linear metrics (RAM & SSD) */
+.linear-metrics {
+    padding: 22px 26px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 22px;
+}
+
+.linear-card {
+    display: flex;
+    flex-direction: column;
+}
+
+.linear-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+}
+
+.linear-card h2 {
+    font-family: var(--font-body);
+    font-size: 19px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+.linear-value {
+    font-family: var(--font-heading);
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.progress-bar-container {
+    width: 100%;
+    height: 11px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.06);
+}
+
+.progress-bar-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 6px;
+    transition: width 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ram-bar {
+    background: linear-gradient(90deg, #0a84ff, #bf5aff);
+    box-shadow: 0 0 8px rgba(10, 132, 255, 0.4);
+}
+
+.disk-bar {
+    background: linear-gradient(90deg, #30d158, #00c7be);
+    box-shadow: 0 0 8px rgba(48, 209, 88, 0.4);
+}
+
+/* Top Processes Panel & Latency */
+.top-processes-card {
+    padding: 22px 26px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    flex: 1.1;
+}
+
+.top-processes-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+    padding-bottom: 8px;
+}
+
+.top-processes-header .lbl-proc {
+    font-family: var(--font-heading);
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    color: var(--text-primary);
+}
+
+.ping-badge {
+    font-family: var(--font-heading);
+    font-size: 12px;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(48, 209, 88, 0.12);
+    color: var(--npu-glow);
+    border: 1px solid rgba(48, 209, 88, 0.3);
+    text-shadow: 0 0 6px rgba(48, 209, 88, 0.35);
+    letter-spacing: 0.5px;
+    transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease, text-shadow 0.25s ease;
+}
+
+.ping-badge.medium {
+    background: rgba(255, 159, 10, 0.12);
+    color: #ff9f0a;
+    border-color: rgba(255, 159, 10, 0.3);
+    text-shadow: 0 0 6px rgba(255, 159, 10, 0.35);
+}
+
+.ping-badge.critical {
+    background: rgba(255, 55, 95, 0.12);
+    color: #ff375f;
+    border-color: rgba(255, 55, 95, 0.3);
+    text-shadow: 0 0 6px rgba(255, 55, 95, 0.35);
+}
+
+.process-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.process-row {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr 1fr;
+    align-items: center;
+    font-family: var(--font-body);
+    font-size: 17px;
+}
+
+.process-row .p-name {
+    font-weight: 700;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.process-row .p-cpu {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    color: var(--gpu-glow);
+    text-align: right;
+}
+
+.process-row .p-ram {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    color: var(--ram-color);
+    text-align: right;
+}
+
+.process-row-placeholder {
+    font-family: var(--font-body);
+    font-size: 15px;
+    color: var(--text-dark);
+    text-align: center;
+    padding: 10px 0;
+}
+
+/* WMI Specs Sidebar Table (motherboard / general specs) */
+.specs-sidebar {
+    padding: 20px 26px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow-y: auto;
+}
+
+.specs-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.specs-table tr {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.specs-table tr:last-child {
+    border-bottom: none;
+}
+
+.specs-table td {
+    padding: 7px 0;
+    vertical-align: middle;
+}
+
+.spec-label {
+    font-family: var(--font-body);
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    width: 50%;
+}
+
+.spec-value {
+    font-family: var(--font-heading);
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-align: right;
+    letter-spacing: 0.1px;
+}
+
+.separator-row {
+    border-bottom: 2px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.spec-temp {
+    font-size: 19px;
+    font-weight: 800;
+    color: #ff9f0a;
+}
+
+.highlight-pink {
+    color: var(--gpu-glow);
+    text-shadow: 0 0 6px rgba(255, 55, 95, 0.35);
+}
+
+.highlight-green {
+    color: var(--vram-glow);
+    text-shadow: 0 0 6px rgba(48, 209, 88, 0.35);
+}
+
+.highlight-blue {
+    color: var(--ram-color);
+    text-shadow: 0 0 6px rgba(10, 132, 255, 0.35);
+}
+
+.highlight-orange {
+    color: #ff9f0a;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+
+
+/* --- COLUMN LEFT SUB-METRICS SYSTEM --- */
+.card-sub-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    width: 100%;
+    margin-top: 14px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
+    padding-top: 12px;
+}
+
+.sub-metric {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.sub-metric.wide {
+    grid-column: span 2;
+    align-items: center;
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    padding-top: 8px;
+    margin-top: 2px;
+}
+
+.sub-metric .lbl {
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-dark);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.sub-metric .val {
+    font-family: var(--font-heading);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* Custom VRAM Progress Bars */
+.sub-progress-container {
+    grid-column: span 2;
+    width: 100%;
+    height: 7px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    margin-top: 6px;
+}
+
+.sub-progress-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 4px;
+    transition: width 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.igpu-vram-bar {
+    background: linear-gradient(90deg, #30d158, #00c7be);
+    box-shadow: 0 0 6px rgba(48, 209, 88, 0.3);
+}
+
+.gpu-vram-bar {
+    background: linear-gradient(90deg, #ff375f, #ff9f0a);
+    box-shadow: 0 0 6px rgba(255, 55, 95, 0.3);
+}
+
+/* --- RESPONSIVE ADAPTATIONS --- */
+@media (max-width: 2500px) {
+    .dashboard {
+        width: 95vw;
+        height: 100vh;
+        padding: 15px 0 75px 0; /* Shifted further UP to maximize vertical space, and cleared from taskbar */
+    }
+    
+    .workspace {
+        gap: 20px;
+    }
+    
+    .column-left, .column-right {
+        gap: 16px;
+    }
+    
+    .column-center {
+        gap: 20px;
+    }
+    
+    .gauge-card {
+        padding: 14px 20px;
+    }
+    
+    .gauge-label {
+        font-size: 22px;
+        margin-bottom: 6px;
+        line-height: 1.6;
+        padding-top: 8px;
+        padding-bottom: 4px;
+    }
+    
+    .gauge-container {
+        width: 170px;
+        height: 170px;
+    }
+    
+    .gauge-value {
+        font-size: 48px;
+    }
+    
+    .card-sub-metrics {
+        margin-top: 8px;
+        padding-top: 8px;
+    }
+    
+    .chip-name {
+        margin-top: 6px;
+    }
+}
+
+@media (max-width: 1000px) {
+    .dashboard {
+        height: auto;
+        padding: 60px 4vw 80px 4vw;
+        overflow-y: auto;
+    }
+    .workspace {
+        grid-template-columns: 1fr;
+        gap: 24px;
+    }
+    .column-left, .column-center, .column-right {
+        grid-column: span 1;
+        height: auto;
+        gap: 24px;
+    }
+}
+
+/* --- OVERLOAD CYBER-CRISIS EASTER EGGS (>80%) --- */
+.critical-alert {
+    position: absolute;
+    top: 14px;
+    right: 18px;
+    font-family: var(--font-heading);
+    font-size: 11px;
+    font-weight: 900;
+    color: #ff375f;
+    background: rgba(255, 55, 95, 0.15);
+    border: 1px solid rgba(255, 55, 95, 0.4);
+    border-radius: 4px;
+    padding: 2px 8px;
+    letter-spacing: 1px;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    text-shadow: 0 0 6px rgba(255, 55, 95, 0.6);
+    pointer-events: none;
+    z-index: 100;
+}
+
+/* When active, blink alert badge */
+.gauge-card.overload .critical-alert,
+.linear-metrics.overload .critical-alert {
+    opacity: 1;
+    animation: alert-blink 1s steps(2, start) infinite;
+}
+
+@keyframes alert-blink {
+    to { visibility: hidden; }
+}
+
+/* Red glow and hardware cockpit vibrations shake */
+.gauge-card.overload,
+.linear-metrics.overload {
+    border-color: rgba(255, 55, 95, 0.45) !important;
+    box-shadow: 0 16px 48px 0 rgba(0, 0, 0, 0.45), 
+                inset 0 1px 1px rgba(255, 55, 95, 0.18),
+                0 0 20px rgba(255, 55, 95, 0.3) !important;
+    background: linear-gradient(135deg, rgba(255, 55, 95, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%) !important;
+    animation: cockpit-shake 0.35s linear infinite !important;
+}
+
+@keyframes cockpit-shake {
+    0% { transform: translate(0, 0); }
+    20% { transform: translate(-1px, 1px); }
+    40% { transform: translate(-1.5px, -1.5px); }
+    60% { transform: translate(1.5px, 0.5px); }
+    80% { transform: translate(-0.5px, -1.5px); }
+    100% { transform: translate(0, 0); }
+}
+
+/* Global emergency red hue-rotate and pulse on the background star system */
+body.system-critical .cosmos-bg {
+    filter: hue-rotate(320deg) saturate(1.8) !important;
+    transition: filter 1.5s ease-in-out;
+}
+
+body.system-critical .nebula {
+    animation-duration: 10s !important; /* Accelerated drift under stress */
+}
+
+@media (max-height: 1200px) {
+    .dashboard {
+        height: calc(100vh - 180px) !important;
+        margin-bottom: 85px !important;
+        padding: 0 !important;
+    }
+    
+    .workspace {
+        gap: 16px !important;
+    }
+    
+    .column-left, .column-right {
+        gap: 10px !important;
+    }
+    
+    .column-center {
+        gap: 12px !important;
+        padding: 12px 16px !important;
+    }
+      .gauge-card {
+        padding: 12px 16px !important;
+        justify-content: flex-start !important; /* Always align to top to prevent header clipping */
+    }
+    
+    .gauge-label {
+        font-size: 15px !important;
+        margin-bottom: 8px !important;
+        letter-spacing: 1.5px !important;
+        line-height: 1.6 !important; /* Prevents compact heading font clipping */
+        padding-top: 4px !important;
+        padding-bottom: 2px !important;
+    }
+    
+    .gauge-container {
+        width: 140px !important; /* Scaled up from 106px to fill empty space and look premium */
+        height: 140px !important;
+        margin-top: 2px !important;
+        margin-bottom: 2px !important;
+    }
+    
+    .vram-scanner-eye {
+        width: 52px !important;
+        height: 52px !important;
+    }
+    
+    .gauge-value {
+        font-size: 42px !important;
+    }
+    
+    .gauge-value span {
+        font-size: 17px !important;
+    }
+    
+    .card-sub-metrics {
+        margin-top: 8px !important;
+        padding-top: 8px !important;
+        gap: 6px !important;
+    }
+    
+    .sub-metric .lbl {
+        font-size: 10px !important;
+        letter-spacing: 0.5px !important;
+    }
+    
+    .sub-metric .val {
+        font-size: 15px !important;
+    }
+    
+    .sub-progress-container {
+        height: 5px !important;
+        margin-top: 2px !important;
+    }
+    
+    .chip-name {
+        display: none !important;
+    }
+    
+    /* Linear metrics */
+    .linear-metrics {
+        padding: 12px 18px !important;
+        gap: 10px !important;
+    }
+    
+    .linear-card h2 {
+        font-size: 14px !important;
+    }
+    
+    .linear-value {
+        font-size: 18px !important;
+    }
+    
+    .progress-bar-container {
+        height: 8px !important;
+    }
+    
+    /* Top Processes */
+    .top-processes-card {
+        padding: 12px 18px !important;
+        gap: 8px !important;
+    }
+    
+    .process-row {
+        font-size: 14px !important;
+    }
+    
+    /* Specs table */
+    .specs-sidebar {
+        padding: 10px 18px !important;
+    }
+    
+    .specs-table td {
+        padding: 4px 0 !important;
+    }
+    
+    .spec-label, .spec-value {
+        font-size: 13px !important;
+    }
+    
+    /* Clock */
+    .cyber-clock-card {
+        padding: 10px 16px !important;
+    }
+    
+    .clock-time {
+        font-size: 32px !important;
+    }
+    
+    .clock-time .ms-tick {
+        font-size: 14px !important;
+        width: 36px !important;
+    }
+    
+    .clock-date {
+        font-size: 13px !important;
+        margin-top: 2px !important;
+    }
+    
+    .clock-mb {
+        font-size: 11px !important;
+        margin-top: 2px !important;
+    }
+    
+    /* Power buttons container */
+    .remote-sub-panel {
+        gap: 10px !important;
+    }
+    
+    .remote-btn {
+        padding: 10px 14px !important;
+    }
+    
+    .remote-btn .btn-lbl {
+        font-size: 14px !important;
+    }
+    
+    .remote-grid.horizontal .remote-btn .icon-wrap svg {
+        width: 18px !important;
+        height: 18px !important;
+    }
+}
