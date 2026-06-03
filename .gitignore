@@ -1,0 +1,16 @@
+bin/
+scripts/bin/
+
+*.log
+server_output.log
+
+scripts/last-*.json
+scripts/*-benchmark*.json
+scripts/*probe*.json
+
+*.tmp
+*.bak
+deploy_error.txt
+
+Desktop.ini
+Thumbs.db
