@@ -115,7 +115,7 @@ if (Test-Path $vbsCombinedPath) { Remove-Item $vbsCombinedPath -Force }
 $vbsPath = Join-Path $localFolder "launch.vbs"
 if (Test-Path $vbsPath) { Remove-Item $vbsPath -Force }
 
-# 5. Create fast logon launchers targeting nexuswpp.exe directly.
+# 5. Create one fast logon launcher targeting nexuswpp.exe directly.
 $startupFolder = [Environment]::GetFolderPath("Startup")
 $oldShortcutPath = Join-Path $startupFolder "MSI_Hardware_Desktop_Dashboard.lnk"
 if (Test-Path $oldShortcutPath) { Remove-Item $oldShortcutPath -Force }
@@ -123,20 +123,21 @@ $oldDashboardShortcutPath = Join-Path $startupFolder "NexusWpp_Dashboard.lnk"
 if (Test-Path $oldDashboardShortcutPath) { Remove-Item $oldDashboardShortcutPath -Force }
 $oldShortcutPath2 = Join-Path $startupFolder "nexuswpp.lnk"
 if (Test-Path $oldShortcutPath2) { Remove-Item $oldShortcutPath2 -Force }
+$oldShortcutPath3 = Join-Path $startupFolder "NexusWpp.lnk"
+if (Test-Path $oldShortcutPath3) { Remove-Item $oldShortcutPath3 -Force }
 
-if (!(Test-Path $startupFolder)) {
-    New-Item -ItemType Directory -Path $startupFolder -Force | Out-Null
+$commonStartupFolder = [Environment]::GetFolderPath("CommonStartup")
+$oldCommonShortcutPath = Join-Path $commonStartupFolder "NexusWpp.lnk"
+if (Test-Path $oldCommonShortcutPath) { Remove-Item $oldCommonShortcutPath -Force }
+
+$runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+Remove-ItemProperty -Path $runKey -Name "NexusWpp" -ErrorAction SilentlyContinue
+
+try {
+    Get-ScheduledTask -TaskName "NexusWpp" -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
+} catch {
+    Write-Host "Warning: could not remove old scheduled task. Continuing with HKLM Run." -ForegroundColor Yellow
 }
-
-$shortcutPath = Join-Path $startupFolder "NexusWpp.lnk"
-$shell = New-Object -ComObject WScript.Shell
-$shortcut = $shell.CreateShortcut($shortcutPath)
-$shortcut.TargetPath = "C:\nexuswpp\nexuswpp.exe"
-$shortcut.WorkingDirectory = "C:\nexuswpp"
-$shortcut.IconLocation = "C:\nexuswpp\icon.ico"
-$shortcut.WindowStyle = 7
-$shortcut.Save()
-Write-Host "Startup shortcut registered for fastest user-session launch." -ForegroundColor Green
 
 $serializeKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize"
 if (!(Test-Path $serializeKey)) {
@@ -145,38 +146,9 @@ if (!(Test-Path $serializeKey)) {
 New-ItemProperty -Path $serializeKey -Name "StartupDelayInMSec" -Value 0 -PropertyType DWord -Force | Out-Null
 Write-Host "Windows startup app delay disabled for this user." -ForegroundColor Green
 
-$runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-New-ItemProperty -Path $runKey -Name "NexusWpp" -Value '"C:\nexuswpp\nexuswpp.exe"' -PropertyType String -Force | Out-Null
-$startupApprovedRunKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
-if (Test-Path $startupApprovedRunKey) {
-    New-ItemProperty -Path $startupApprovedRunKey -Name "NexusWpp" -Value ([byte[]](0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)) -PropertyType Binary -Force | Out-Null
-}
-Write-Host "HKCU Run startup entry registered for immediate user logon launch." -ForegroundColor Green
-
-Write-Host "Registering non-elevated backup Windows Scheduled Task for nexuswpp.exe..." -ForegroundColor Yellow
-
-# Clean up old Telemetry task
-Get-ScheduledTask -TaskName "NexusWppTelemetry" -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
-
-$taskName = "NexusWpp"
-$action = New-ScheduledTaskAction -Execute "C:\nexuswpp\nexuswpp.exe" -WorkingDirectory "C:\nexuswpp"
-$trigger = New-ScheduledTaskTrigger -AtLogOn
-# Run in the normal user session. Highest elevation can delay launch at logon and is not needed here.
-$principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -RunLevel Limited
-# Configure settings for earliest practical user-session launch.
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 0 -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Seconds 0)
-
-try {
-    # Remove existing task if any to prevent conflicts
-    Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
-
-    # Register the new task
-    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
-
-    Write-Host "Windows Scheduled Task '$taskName' successfully registered as a non-elevated backup launcher!" -ForegroundColor Green
-} catch {
-    Write-Host "Warning: Scheduled Task registration was refused by Windows. HKCU Run and Startup shortcut remain active." -ForegroundColor Yellow
-}
+$machineRunKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
+New-ItemProperty -Path $machineRunKey -Name "NexusWpp" -Value '"C:\nexuswpp\nexuswpp.exe"' -PropertyType String -Force | Out-Null
+Write-Host "HKLM Run startup entry registered for all users." -ForegroundColor Green
 
 Write-Host "--- DEPLOYMENT COMPLETED! ---" -ForegroundColor Cyan
 } catch {
