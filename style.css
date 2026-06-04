@@ -249,14 +249,6 @@ body {
     z-index: 1;
 }
 
-.glass-panel:hover {
-    border-color: rgba(255, 255, 255, 0.32);
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.03) 100%) !important;
-    box-shadow: 
-        0 16px 48px 0 rgba(0, 0, 0, 0.48), 
-        inset 0 1px 1px rgba(255, 255, 255, 0.22);
-}
-
 .panel-header-title {
     font-family: var(--font-heading);
     font-size: 14px;
@@ -524,10 +516,6 @@ body {
         radial-gradient(circle at 48% 44%, rgba(10, 132, 255, 0.075), transparent 42%),
         linear-gradient(135deg, rgba(255, 255, 255, 0.042), rgba(255, 255, 255, 0.012));
     opacity: 0.84;
-}
-
-.column-center:hover {
-    border-color: rgba(255, 255, 255, 0.32);
 }
 
 /* SOTA Physics Engine Viewport */
