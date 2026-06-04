@@ -34,6 +34,33 @@ Prérequis:
 .\deploy_local.ps1
 ```
 
+Pour produire un installeur `.exe` autonome:
+
+```powershell
+.\scripts\build_installer.ps1
+```
+
+Le fichier généré est `dist\NexusWppSetup.exe`. Il embarque l'application compilée, les DLL WebView2 SDK, les assets et le générateur de snapshot zéro. Au lancement, il demande les droits administrateur, installe dans `C:\nexuswpp`, vérifie le Runtime WebView2 Evergreen, le télécharge depuis Microsoft si nécessaire, régénère `loading-zero-5120x1440.png` pour le bureau virtuel complet quand possible, configure un seul lancement Windows via `HKLM\...\Run`, inscrit NexusWpp dans Applications installées avec une commande de désinstallation, puis démarre le fond d'écran.
+
+Pour signer l'installeur, installer le Windows SDK puis définir l'une des configurations suivantes avant le build:
+
+```powershell
+$env:NEXUSWPP_SIGN_CERT_THUMBPRINT = "THUMBPRINT_CERTIFICAT_CODESIGNING"
+.\scripts\build_installer.ps1
+```
+
+ou:
+
+```powershell
+$env:NEXUSWPP_SIGN_PFX = "C:\certs\nexuswpp.pfx"
+$env:NEXUSWPP_SIGN_PFX_PASSWORD = "mot-de-passe"
+.\scripts\build_installer.ps1
+```
+
+Sans certificat code-signing public, l'installeur fonctionne mais peut afficher un avertissement SmartScreen.
+
+Pour mettre a jour une installation existante, relancer simplement un `NexusWppSetup.exe` plus recent. L'installeur arrete l'instance active, remplace les fichiers, nettoie les anciens lanceurs, conserve un seul demarrage `HKLM\...\Run`, regenere l'image zero et relance le fond. La desinstallation Windows utilise `C:\nexuswpp\NexusWppSetup.exe /uninstall`.
+
 Le déploiement configure deux lanceurs:
 
 - un raccourci `NexusWpp.lnk` dans le dossier Startup, pour un lancement utilisateur très tôt;
