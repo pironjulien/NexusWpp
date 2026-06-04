@@ -64,6 +64,7 @@ $compilerArgs = @(
     "/resource:$payloadZip,NexusWpp.Payload.zip",
     "/reference:System.IO.Compression.dll",
     "/reference:System.IO.Compression.FileSystem.dll",
+    "/reference:System.Drawing.dll",
     "/reference:System.Management.dll",
     "/reference:System.Windows.Forms.dll",
     $installerSource
