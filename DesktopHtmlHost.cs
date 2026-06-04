@@ -35,17 +35,11 @@ namespace DesktopHtmlHost
                     return;
                 }
 
-                CleanupStaleWebView2Processes();
-
                 // Force Process DPI Awareness to prevent Windows from virtualizing coordinates
                 SetProcessDPIAware();
 
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
-
-                // Configure system graphics preferences to enforce Integrated GPU (iGPU)
-                // to avoid dedicated GPU (dGPU) VRAM usage.
-                ConfigureIGpu();
 
                 // Set up local HTML file path
                 string defaultHtml = @"C:\nexuswpp\index.html";
@@ -101,58 +95,6 @@ namespace DesktopHtmlHost
             AppendLog(@"C:\nexuswpp\webview_debug.log", line);
         }
 
-        private static void ConfigureIGpu()
-        {
-            try
-            {
-                // Register the current host executable
-                string processPath = null;
-                var mainModule = Process.GetCurrentProcess().MainModule;
-                if (mainModule != null)
-                {
-                    processPath = mainModule.FileName;
-                }
-                if (!string.IsNullOrEmpty(processPath))
-                {
-                    RegisterGpuPreference(processPath);
-                }
-
-                // Register all versions of Edge WebView2 runtimes installed in standard locations
-                string edgeWebViewDir = @"C:\Program Files (x86)\Microsoft\EdgeWebView\Application";
-                if (Directory.Exists(edgeWebViewDir))
-                {
-                    var exeFiles = Directory.GetFiles(edgeWebViewDir, "msedgewebview2.exe", SearchOption.AllDirectories);
-                    foreach (var exe in exeFiles)
-                    {
-                        RegisterGpuPreference(exe);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("iGPU config exception: " + ex.Message);
-            }
-        }
-
-        private static void RegisterGpuPreference(string exePath)
-        {
-            try
-            {
-                using (var key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\DirectX\UserGpuPreferences"))
-                {
-                    if (key != null)
-                    {
-                        // GpuPreference=1; forces Windows to run the application on the Integrated GPU (iGPU)
-                        key.SetValue(exePath, "GpuPreference=1;", RegistryValueKind.String);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine(string.Format("Failed to write registry for {0}: {1}", exePath, ex.Message));
-            }
-        }
-
         private static void CleanupStaleWebView2Processes()
         {
             try
@@ -200,8 +142,11 @@ namespace DesktopHtmlHost
         private System.Windows.Forms.Timer searchTimer;
         private int retryCount = 0;
         private const int maxRetries = 300;
+        private const int progmanFallbackRetries = 8;
         private bool webViewInitialized = false;
         private bool desktopAttached = false;
+        private bool attachedToTemporaryParent = false;
+        private IntPtr currentDesktopParent = IntPtr.Zero;
         private DateTime startupTime = DateTime.Now;
 
         // --- Telemetry state ---
@@ -212,6 +157,7 @@ namespace DesktopHtmlHost
         private System.Windows.Forms.Timer fullscreenTimer;
         private bool runtimeSuspended = false;
         private string fullscreenReason = "";
+        private bool isClosing = false;
 
         // --- Static Hook and Bounds State ---
         private static DesktopForm activeInstance;
@@ -403,6 +349,7 @@ namespace DesktopHtmlHost
 
             // Listen for system resolution or display setting changes
             SystemEvents.DisplaySettingsChanged += SystemEvents_DisplaySettingsChanged;
+            SystemEvents.SessionEnding += SystemEvents_SessionEnding;
 
             // Create and configure the WebView2 UI component
             webView = new WebView2();
@@ -421,7 +368,7 @@ namespace DesktopHtmlHost
 
         private void SearchTimer_Tick(object sender, EventArgs e)
         {
-            if (desktopAttached)
+            if (desktopAttached && !attachedToTemporaryParent)
             {
                 searchTimer.Stop();
                 return;
@@ -452,43 +399,68 @@ namespace DesktopHtmlHost
                 return true;
             }, IntPtr.Zero);
 
-            if (workerw == IntPtr.Zero && retryCount >= 50 && progman != IntPtr.Zero)
-            {
-                workerw = progman;
-                Program.LogDebug("WorkerW not ready after 5s; using Progman as early wallpaper parent.");
-            }
-
             if (workerw != IntPtr.Zero)
             {
+                AttachToDesktopParent(workerw, false);
                 searchTimer.Stop();
-                desktopAttached = true;
-
-                // 3. Inject our WinForms application handle directly into the WorkerW layer
-                SetParent(this.Handle, workerw);
-
-                // Modify window styles to ensure it behaves strictly as a native child controls container
-                int style = GetWindowLong(this.Handle, GWL_STYLE);
-                style |= WS_CHILD;
-                style &= ~WS_POPUP;
-                SetWindowLong(this.Handle, GWL_STYLE, style);
-                SetWindowPos(this.Handle, IntPtr.Zero, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
-
-                // Safely size the form to cover all available virtual screens
-                UpdateBoundsToVirtualScreen();
-                MoveWindow(this.Handle, this.Left, this.Top, this.Width, this.Height, true);
-
-                // Display window immediately within the wallpaper stack
-                ShowWindow(this.Handle, SW_SHOW);
-                Program.LogDebug(string.Format(CultureInfo.InvariantCulture, "Wallpaper attached after {0:F2}s.", (DateTime.Now - startupTime).TotalSeconds));
             }
             else
             {
+                if (!desktopAttached && progman != IntPtr.Zero && retryCount >= progmanFallbackRetries)
+                {
+                    AttachToDesktopParent(progman, true);
+                }
+
                 retryCount++;
                 if (retryCount >= maxRetries)
                 {
                     searchTimer.Stop();
-                    Application.Exit();
+                    if (!desktopAttached)
+                    {
+                        Application.Exit();
+                    }
                 }
+            }
+        }
+
+        private void AttachToDesktopParent(IntPtr parent, bool temporary)
+        {
+            if (parent == IntPtr.Zero || (desktopAttached && currentDesktopParent == parent))
+            {
+                return;
+            }
+
+            bool firstAttach = !desktopAttached;
+
+            // Inject our WinForms application handle into the desktop wallpaper layer.
+            SetParent(this.Handle, parent);
+
+            int style = GetWindowLong(this.Handle, GWL_STYLE);
+            style |= WS_CHILD;
+            style &= ~WS_POPUP;
+            SetWindowLong(this.Handle, GWL_STYLE, style);
+            SetWindowPos(this.Handle, IntPtr.Zero, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+
+            UpdateBoundsToVirtualScreen();
+            MoveWindow(this.Handle, this.Left, this.Top, this.Width, this.Height, true);
+            ShowWindow(this.Handle, SW_SHOW);
+
+            desktopAttached = true;
+            attachedToTemporaryParent = temporary;
+            currentDesktopParent = parent;
+
+            double elapsed = (DateTime.Now - startupTime).TotalSeconds;
+            if (temporary)
+            {
+                Program.LogDebug(string.Format(CultureInfo.InvariantCulture, "Wallpaper attached after {0:F2}s (Progman fallback while WorkerW is not ready).", elapsed));
+            }
+            else if (firstAttach)
+            {
+                Program.LogDebug(string.Format(CultureInfo.InvariantCulture, "Wallpaper attached after {0:F2}s.", elapsed));
+            }
+            else
+            {
+                Program.LogDebug(string.Format(CultureInfo.InvariantCulture, "Wallpaper reparented to WorkerW after {0:F2}s.", elapsed));
             }
         }
 
@@ -502,10 +474,44 @@ namespace DesktopHtmlHost
 
         private void SystemEvents_DisplaySettingsChanged(object sender, EventArgs e)
         {
+            if (isClosing || IsDisposed) return;
             UpdateBoundsToVirtualScreen();
             if (this.Handle != IntPtr.Zero)
             {
                 MoveWindow(this.Handle, this.Left, this.Top, this.Width, this.Height, true);
+            }
+        }
+
+        private void SystemEvents_SessionEnding(object sender, SessionEndingEventArgs e)
+        {
+            Program.LogDebug("Windows session ending: closing NexusWpp cleanly.");
+            BeginCleanShutdown();
+            try
+            {
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    Close();
+                });
+            }
+            catch
+            {
+                Close();
+            }
+        }
+
+        private void BeginCleanShutdown()
+        {
+            isClosing = true;
+            telemetryCollectPending = false;
+            runtimeSuspended = true;
+
+            if (searchTimer != null) searchTimer.Stop();
+            if (telemetryTimer != null) telemetryTimer.Stop();
+            if (fullscreenTimer != null) fullscreenTimer.Stop();
+            if (hookId != IntPtr.Zero)
+            {
+                UnhookWindowsHookEx(hookId);
+                hookId = IntPtr.Zero;
             }
         }
 
@@ -844,6 +850,7 @@ namespace DesktopHtmlHost
 
         private void TelemetryTimer_Tick(object sender, EventArgs e)
         {
+            if (isClosing || IsDisposed) return;
             if (runtimeSuspended) return;
             if (!telemetryReady || telemetryCollector == null || telemetryCollectPending) return;
             telemetryCollectPending = true;
@@ -855,12 +862,17 @@ namespace DesktopHtmlHost
                     string statsJson = "";
                     try
                     {
+                        if (isClosing || IsDisposed)
+                        {
+                            telemetryCollectPending = false;
+                            return;
+                        }
                         statsJson = telemetryCollector.CollectStats();
                         BeginInvoke((MethodInvoker)delegate
                         {
                             try
                             {
-                                if (webView != null && webView.CoreWebView2 != null)
+                                if (!isClosing && !IsDisposed && webView != null && !webView.IsDisposed && webView.CoreWebView2 != null)
                                 {
                                     webView.CoreWebView2.PostWebMessageAsJson(statsJson);
                                 }
@@ -901,19 +913,7 @@ namespace DesktopHtmlHost
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            if (hookId != IntPtr.Zero)
-            {
-                UnhookWindowsHookEx(hookId);
-                hookId = IntPtr.Zero;
-            }
-            if (telemetryTimer != null)
-            {
-                telemetryTimer.Stop();
-            }
-            if (fullscreenTimer != null)
-            {
-                fullscreenTimer.Stop();
-            }
+            BeginCleanShutdown();
             try
             {
                 Nvml.nvmlShutdown();
@@ -927,6 +927,7 @@ namespace DesktopHtmlHost
             if (disposing)
             {
                 SystemEvents.DisplaySettingsChanged -= SystemEvents_DisplaySettingsChanged;
+                SystemEvents.SessionEnding -= SystemEvents_SessionEnding;
                 if (hookId != IntPtr.Zero)
                 {
                     UnhookWindowsHookEx(hookId);
@@ -1208,25 +1209,32 @@ namespace DesktopHtmlHost
     public class TelemetryCollector
     {
         // Static / Boot cached specs
-        public string MotherboardInfo = "ASUS (ROG STRIX B760-I GAMING WIFI)";
-        public string CpuInfo = "Intel Core i7-14700K";
-        public string CpuL2Cache = "18.0 Mo";
-        public string CpuL3Cache = "24.0 Mo";
-        public int CpuCores = 16;
-        public int CpuLogical = 22;
-        public string CpuBaseSpeed = "3.80";
-        public int TotalRamGb = 32;
-        public int RamSpeedMts = 5600;
-        public string NetworkName = "Ethernet";
-        public string IgpuInfo = "Intel(R) UHD Graphics 770";
+        public string MotherboardInfo = "";
+        public string CpuInfo = "";
+        public string CpuL2Cache = "";
+        public string CpuL3Cache = "";
+        public int CpuCores = 0;
+        public int CpuLogical = 0;
+        public string CpuBaseSpeed = "0.00";
+        public int TotalRamGb = 0;
+        public int RamSpeedMts = 0;
+        public string NetworkName = "";
+        public string IgpuInfo = "";
         public string IgpuDriver = "";
         public string IgpuDriverDate = "";
         public string DgpuDriver = "";
         public string DgpuDriverDate = "";
-        public string GpuName = "NVIDIA GeForce RTX 4080 SUPER";
+        public string GpuName = "";
+        public string NpuName = "";
+        public string NpuDriver = "";
+        public string NpuDriverDate = "";
+        public bool NpuDetected = false;
+        public string DiskName = "";
 
         private string igpuLuid = "";
         private string dgpuLuid = "";
+        private string npuLuid = "";
+        private readonly List<string> directxAdapterLuids = new List<string>();
         private double cpuBaseSpeedVal = 3.80;
 
         // Active power plans cached list
@@ -1275,6 +1283,8 @@ namespace DesktopHtmlHost
         private DateTime lastGpuPerfTime = DateTime.MinValue;
         private int cachedIgpuUtil = 0;
         private long cachedIgpuMemBytes = 0;
+        private int cachedNpuUtil = 0;
+        private long cachedNpuMemBytes = 0;
         private int cachedDgpuUtil = 0;
         public void Initialize()
         {
@@ -1300,6 +1310,10 @@ namespace DesktopHtmlHost
                                         uint low = (uint)(luidVal & 0xFFFFFFFF);
                                         uint high = (uint)((luidVal >> 32) & 0xFFFFFFFF);
                                         string formattedLuid = string.Format("0x{0:x8}_0x{1:x8}", high, low);
+                                        if (!directxAdapterLuids.Contains(formattedLuid))
+                                        {
+                                            directxAdapterLuids.Add(formattedLuid);
+                                        }
                                         
                                         if (desc.ToLower().Contains("nvidia"))
                                         {
@@ -1417,6 +1431,111 @@ namespace DesktopHtmlHost
                         }
                     }
                 }
+
+                using (var searcher = new ManagementObjectSearcher("SELECT DeviceName, DriverVersion, DriverDate FROM Win32_PnPSignedDriver WHERE DeviceName LIKE '%AI Boost%' OR DeviceName LIKE '%Neural%' OR DeviceName LIKE '%VPU%' OR DeviceName LIKE '%Inference%'"))
+                {
+                    foreach (ManagementObject obj in searcher.Get())
+                    {
+                        object nameVal = obj["DeviceName"];
+                        object driverVerVal = obj["DriverVersion"];
+                        object dateRawVal = obj["DriverDate"];
+                        string name = nameVal != null ? nameVal.ToString() : "";
+                        if (!IsLikelyNpuDeviceName(name))
+                        {
+                            continue;
+                        }
+
+                        NpuName = name;
+                        NpuDetected = true;
+                        NpuDriver = driverVerVal != null ? driverVerVal.ToString() : "";
+
+                        string dateRaw = dateRawVal != null ? dateRawVal.ToString() : "";
+                        if (dateRaw.Length >= 8)
+                        {
+                            try
+                            {
+                                int y = int.Parse(dateRaw.Substring(0, 4));
+                                int m = int.Parse(dateRaw.Substring(4, 2));
+                                int d = int.Parse(dateRaw.Substring(6, 2));
+                                NpuDriverDate = string.Format("{0:D2}/{1:D2}/{2:D4}", d, m, y);
+                            }
+                            catch {}
+                        }
+                        break;
+                    }
+                }
+
+                try
+                {
+                    string partitionDeviceId = "";
+                    using (var searcher = new ManagementObjectSearcher("ASSOCIATORS OF {Win32_LogicalDisk.DeviceID='C:'} WHERE AssocClass=Win32_LogicalDiskToPartition"))
+                    {
+                        foreach (ManagementObject obj in searcher.Get())
+                        {
+                            object deviceId = obj["DeviceID"];
+                            if (deviceId != null)
+                            {
+                                partitionDeviceId = deviceId.ToString().Replace("\\", "\\\\").Replace("'", "\\'");
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(partitionDeviceId))
+                    {
+                        string query = string.Format(CultureInfo.InvariantCulture, "ASSOCIATORS OF {{Win32_DiskPartition.DeviceID='{0}'}} WHERE AssocClass=Win32_DiskDriveToDiskPartition", partitionDeviceId);
+                        using (var searcher = new ManagementObjectSearcher(query))
+                        {
+                            foreach (ManagementObject obj in searcher.Get())
+                            {
+                                object model = obj["Model"];
+                                if (model != null)
+                                {
+                                    DiskName = model.ToString().Trim();
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (string.IsNullOrEmpty(DiskName))
+                    {
+                        using (var searcher = new ManagementObjectSearcher("SELECT Model FROM Win32_DiskDrive"))
+                        {
+                            foreach (ManagementObject obj in searcher.Get())
+                            {
+                                object model = obj["Model"];
+                                if (model != null)
+                                {
+                                    DiskName = model.ToString().Trim();
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Program.LogDebug("Disk name detection error: " + ex.Message);
+                }
+
+                if (!NpuDetected)
+                {
+                    using (var searcher = new ManagementObjectSearcher("SELECT Name FROM Win32_PnPEntity WHERE Name LIKE '%AI Boost%' OR Name LIKE '%Neural%' OR Name LIKE '%VPU%' OR Name LIKE '%Inference%'"))
+                    {
+                        foreach (ManagementObject obj in searcher.Get())
+                        {
+                            object nameVal = obj["Name"];
+                            string name = nameVal != null ? nameVal.ToString() : "";
+                            if (IsLikelyNpuDeviceName(name))
+                            {
+                                NpuName = name;
+                                NpuDetected = true;
+                                break;
+                            }
+                        }
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -1443,6 +1562,75 @@ namespace DesktopHtmlHost
 
             // Initialize power plans
             UpdatePowerPlansCache();
+        }
+
+        private static bool IsLikelyNpuDeviceName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return false;
+            }
+
+            string lower = name.ToLowerInvariant();
+            return lower.Contains("ai boost") ||
+                   lower.Contains("neural") ||
+                   lower.Contains("inference") ||
+                   lower.Contains(" vpu") ||
+                   lower.Contains("(vpu") ||
+                   lower.Equals("npu") ||
+                   lower.StartsWith("npu ") ||
+                   lower.Contains(" npu ") ||
+                   lower.Contains("(npu");
+        }
+
+        private string DiscoverNpuLuid()
+        {
+            try
+            {
+                using (var searcher = new ManagementObjectSearcher(@"root\cimv2", "SELECT Name FROM Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine WHERE Name LIKE '%engtype_compute%'"))
+                {
+                    foreach (ManagementObject obj in searcher.Get())
+                    {
+                        string name = Convert.ToString(obj["Name"] ?? "");
+                        string luid = ExtractLuidFromCounterName(name);
+                        if (string.IsNullOrEmpty(luid))
+                        {
+                            continue;
+                        }
+                        if (luid.Equals(igpuLuid, StringComparison.OrdinalIgnoreCase) ||
+                            luid.Equals(dgpuLuid, StringComparison.OrdinalIgnoreCase) ||
+                            directxAdapterLuids.Contains(luid))
+                        {
+                            continue;
+                        }
+                        return luid;
+                    }
+                }
+            }
+            catch {}
+
+            return "";
+        }
+
+        private static string ExtractLuidFromCounterName(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                return "";
+            }
+
+            int start = name.IndexOf("luid_", StringComparison.OrdinalIgnoreCase);
+            if (start < 0)
+            {
+                return "";
+            }
+            start += 5;
+            int end = name.IndexOf("_phys_", start, StringComparison.OrdinalIgnoreCase);
+            if (end <= start)
+            {
+                return "";
+            }
+            return name.Substring(start, end - start).ToLowerInvariant();
         }
 
         public void UpdatePowerPlansCache()
@@ -1892,14 +2080,23 @@ namespace DesktopHtmlHost
             // GPU stats
             int igpuUtil = cachedIgpuUtil;
             long igpuMemBytes = cachedIgpuMemBytes;
+            int npuUtil = cachedNpuUtil;
+            long npuMemBytes = cachedNpuMemBytes;
             int dgpuUtil = cachedDgpuUtil;
             if (lastGpuPerfTime == DateTime.MinValue || (DateTime.Now - lastGpuPerfTime).TotalSeconds >= 2.0)
             {
                 int nextIgpuUtil = 0;
                 long nextIgpuMemBytes = igpuMemBytes;
+                int nextNpuUtil = 0;
+                long nextNpuMemBytes = npuMemBytes;
                 int nextDgpuUtil = 0;
                 try
                 {
+                    if (NpuDetected && string.IsNullOrEmpty(npuLuid))
+                    {
+                        npuLuid = DiscoverNpuLuid();
+                    }
+
                     if (!string.IsNullOrEmpty(igpuLuid))
                     {
                         string filter = string.Format("Name LIKE '%{0}%engtype_3d%'", igpuLuid);
@@ -1934,11 +2131,37 @@ namespace DesktopHtmlHost
                         }
                     }
 
+                    if (!string.IsNullOrEmpty(npuLuid))
+                    {
+                        string filter = string.Format("Name LIKE '%{0}%engtype_compute%'", npuLuid);
+                        using (var searcher = new ManagementObjectSearcher(@"root\cimv2", "SELECT UtilizationPercentage FROM Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine WHERE " + filter))
+                        {
+                            foreach (ManagementObject obj in searcher.Get())
+                            {
+                                nextNpuUtil += Convert.ToInt32(obj["UtilizationPercentage"] ?? 0);
+                            }
+                        }
+
+                        string memFilter = string.Format("Name LIKE '%{0}%'", npuLuid);
+                        using (var searcher = new ManagementObjectSearcher(@"root\cimv2", "SELECT SharedUsage FROM Win32_PerfFormattedData_GPUPerformanceCounters_GPUAdapterMemory WHERE " + memFilter))
+                        {
+                            foreach (ManagementObject obj in searcher.Get())
+                            {
+                                nextNpuMemBytes = Convert.ToInt64(obj["SharedUsage"] ?? 0L);
+                                break;
+                            }
+                        }
+                    }
+
                     cachedIgpuUtil = nextIgpuUtil;
                     cachedIgpuMemBytes = nextIgpuMemBytes;
+                    cachedNpuUtil = nextNpuUtil;
+                    cachedNpuMemBytes = nextNpuMemBytes;
                     cachedDgpuUtil = nextDgpuUtil;
                     igpuUtil = cachedIgpuUtil;
                     igpuMemBytes = cachedIgpuMemBytes;
+                    npuUtil = cachedNpuUtil;
+                    npuMemBytes = cachedNpuMemBytes;
                     dgpuUtil = cachedDgpuUtil;
                     lastGpuPerfTime = DateTime.Now;
                 }
@@ -2028,6 +2251,11 @@ namespace DesktopHtmlHost
             sb.AppendFormat(CultureInfo.InvariantCulture, "\"igpu\":{{\"utilization\":{0},\"usedMb\":{1},\"totalMb\":{2},\"totalGb\":{3},\"name\":{4},\"driver\":{5},\"driverDate\":{6}}},",
                 igpuUtil, igpuMemBytes / (1024 * 1024), ramTotalPhys / 1024 / 1024 / 2, ramTotalPhys / 1024 / 1024 / 1024 / 2, JsonString(IgpuInfo), JsonString(IgpuDriver), JsonString(IgpuDriverDate));
 
+            // npu
+            long npuTotalMb = (long)(ramTotalPhys / 1024 / 1024 / 2);
+            sb.AppendFormat(CultureInfo.InvariantCulture, "\"npu\":{{\"detected\":{0},\"utilization\":{1},\"usedMb\":{2},\"totalMb\":{3},\"totalGb\":{4},\"name\":{5}}},",
+                NpuDetected ? "true" : "false", npuUtil, npuMemBytes / (1024 * 1024), npuTotalMb, npuTotalMb / 1024, JsonString(NpuName));
+
             // vram
             sb.AppendFormat(CultureInfo.InvariantCulture, "\"vram\":{{\"utilization\":{0},\"usedMb\":{1},\"totalMb\":{2},\"totalGb\":{3}}},",
                 (int)Math.Round((double)vramUsed / vramTotal * 100), vramUsed / (1024 * 1024), vramTotal / (1024 * 1024), vramTotal / 1024 / 1024 / 1024);
@@ -2050,8 +2278,8 @@ namespace DesktopHtmlHost
             string diskReadMbStr = diskReadMbNum.ToString("F1", CultureInfo.InvariantCulture);
             string diskWriteMbStr = diskWriteMbNum.ToString("F1", CultureInfo.InvariantCulture);
             string diskResponseMsStr = (diskResponse * 1000.0).ToString("F1", CultureInfo.InvariantCulture);
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"disk\":{{\"freeGb\":{0},\"utilization\":{1},\"storagePercent\":{2},\"totalGb\":{3},\"readMb\":\"{4}\",\"writeMb\":\"{5}\",\"responseTimeMs\":{6}}},",
-                diskFreeGbStr, diskActiveTime, diskStoragePercent, (int)diskTotalGb, diskReadMbStr, diskWriteMbStr, diskResponseMsStr);
+            sb.AppendFormat(CultureInfo.InvariantCulture, "\"disk\":{{\"freeGb\":{0},\"utilization\":{1},\"storagePercent\":{2},\"totalGb\":{3},\"readMb\":\"{4}\",\"writeMb\":\"{5}\",\"responseTimeMs\":{6},\"name\":{7}}},",
+                diskFreeGbStr, diskActiveTime, diskStoragePercent, (int)diskTotalGb, diskReadMbStr, diskWriteMbStr, diskResponseMsStr, JsonString(DiskName));
 
             // fans
             sb.AppendFormat(CultureInfo.InvariantCulture, "\"fans\":{{\"fan1\":{0},\"fan2\":{1}}},", fan1, fan2);

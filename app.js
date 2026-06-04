@@ -8,23 +8,26 @@ const cpuRing = document.getElementById("cpu-ring");
 const cpuVal = document.getElementById("cpu-val");
 const vramRing = document.getElementById("vram-ring");
 const vramVal = document.getElementById("vram-val");
+const npuRing = document.getElementById("npu-ring");
+const npuVal = document.getElementById("npu-val");
 const gpuRing = document.getElementById("gpu-ring");
 const gpuVal = document.getElementById("gpu-val");
 
 // ARIA gauge containers bindings (A11y Progressbars)
 const cpuGaugeContainer = document.getElementById("cpu-gauge-container");
 const vramGaugeContainer = document.getElementById("vram-gauge-container");
+const npuGaugeContainer = document.getElementById("npu-gauge-container");
 const gpuGaugeContainer = document.getElementById("gpu-gauge-container");
 
 // Overload Card Elements
 const cpuCard = document.getElementById("cpu-card");
 const gpuCard = document.getElementById("gpu-card");
+const npuCard = document.getElementById("npu-card");
+const acceleratorRow = document.querySelector(".accelerator-row");
 const ramCard = document.getElementById("ram-card");
 const vramCard = document.getElementById("vram-card");
 const vramTotalSub = document.getElementById("vram-total-sub");
-const igpuDriverSub = document.getElementById("igpu-driver-sub");
 const igpuTempSub = document.getElementById("igpu-temp-sub");
-const igpuDriverDateSub = document.getElementById("igpu-driver-date-sub");
 
 // Sub-metrics DOM bindings
 const cpuTempSub = document.getElementById("cpu-temp-sub");
@@ -37,8 +40,6 @@ const cpuCachesSub = document.getElementById("cpu-caches-sub");
 const gpuTempSub = document.getElementById("gpu-temp-sub");
 const gpuFanSub = document.getElementById("gpu-fan-sub");
 const gpuCoreSub = document.getElementById("gpu-core-sub");
-const gpuVramUsedSub = document.getElementById("gpu-vram-used-sub");
-const gpuDriverSub = document.getElementById("gpu-driver-sub");
 const gpuTopsSub = document.getElementById("gpu-tops-sub");
 
 // Right Column DOM Elements
@@ -73,6 +74,7 @@ const netTypeSub = document.getElementById("net-type-sub");
 const netPingSub = document.getElementById("net-ping-sub");
 
 const specCpuName = document.getElementById("spec-cpu-name");
+const specNpuName = document.getElementById("spec-npu-name");
 const specGpuName = document.getElementById("spec-gpu-name");
 const specRamName = document.getElementById("spec-ram-name");
 const specNetMode = document.getElementById("spec-net-mode");
@@ -81,29 +83,30 @@ const specSsdName = document.getElementById("spec-ssd-name");
 const vramUsedSub = document.getElementById("vram-used-sub");
 const vramFreeSub = document.getElementById("vram-free-sub");
 const igpuVramBar = document.getElementById("igpu-vram-bar");
+const npuUsedSub = document.getElementById("npu-used-sub");
+const npuSharedSub = document.getElementById("npu-shared-sub");
+const npuFreeSub = document.getElementById("npu-free-sub");
+const npuTotalSub = document.getElementById("npu-total-sub");
+const npuUtilBar = document.getElementById("npu-util-bar");
 const gpuVramBar = document.getElementById("gpu-vram-bar");
 const ssdTotalSub = document.getElementById("ssd-total-sub");
 const clockMb = document.getElementById("clock-mb");
-
-const pingSub = document.getElementById("ping-sub");
 
 // Remote Control Container
 const powerPlansContainer = document.getElementById("power-plans-container");
 
 // Local state
-let eventSource = null;
 let currentPowerPlan = "";
 let systemIsOverloaded = false;
 let isPowerPlanSwitching = false;
 let pendingPowerPlanGuid = "";
 let powerPlanSwitchTimer = 0;
-let vramActivity = 0; // Sync wave animation speed to iGPU usage
 let lastRemoteBoundsMsg = "";
 let loadingSnapshotDismissed = false;
 let runtimeSuspended = false;
-let lastPacketGlobalTime = 0;
 const lastPacketNodeTime = {};
 const lastTelemetryNodeValues = {};
+const MAX_DATA_PACKETS = 72;
 
 // --- 🕰️ CYBER-CLOCK WIDGET ENGINE ---
 const days = ["DIMANCHE", "LUNDI", "MARDI", "MERCREDI", "JEUDI", "VENDREDI", "SAMEDI"];
@@ -219,6 +222,21 @@ const telemetryNodes = {
         suffix: "%",
         rotAngle: 0,
         desc: "CHARGE iGPU"
+    },
+    npuAccel: {
+        x: 0, y: 0,
+        targetX: 0, targetY: 0,
+        radius: 26,
+        color: "#00c7be",
+        colorEnd: "#64d2ff",
+        glow: "#00c7be",
+        label: "NPU",
+        subLabel: "-- Go",
+        value: 0,
+        suffix: "%",
+        rotAngle: 0,
+        desc: "CHARGE NPU",
+        visible: false
     },
     ram: {
         x: 0, y: 0,
@@ -345,30 +363,34 @@ function updateNodeTargets() {
     telemetryNodes.npu.targetX = cx;
     telemetryNodes.npu.targetY = cy;
     
-    // Surround nodes laid out in a symmetric 6-node regular hexagon
+    // Surround nodes laid out around the core, including the dedicated NPU node.
     // CPU: -150 deg
-    telemetryNodes.cpu.targetX = cx + Math.cos(-150 * Math.PI / 180) * rx;
-    telemetryNodes.cpu.targetY = cy + Math.sin(-150 * Math.PI / 180) * ry;
+    telemetryNodes.cpu.targetX = cx + Math.cos(-145 * Math.PI / 180) * rx;
+    telemetryNodes.cpu.targetY = cy + Math.sin(-145 * Math.PI / 180) * ry;
     
     // Net: -90 deg (Top Center)
     telemetryNodes.net.targetX = cx + Math.cos(-90 * Math.PI / 180) * rx;
     telemetryNodes.net.targetY = cy + Math.sin(-90 * Math.PI / 180) * ry;
     
     // RAM: -30 deg
-    telemetryNodes.ram.targetX = cx + Math.cos(-30 * Math.PI / 180) * rx;
-    telemetryNodes.ram.targetY = cy + Math.sin(-30 * Math.PI / 180) * ry;
+    telemetryNodes.ram.targetX = cx + Math.cos(-35 * Math.PI / 180) * rx;
+    telemetryNodes.ram.targetY = cy + Math.sin(-35 * Math.PI / 180) * ry;
     
     // SSD: 30 deg
-    telemetryNodes.ssd.targetX = cx + Math.cos(30 * Math.PI / 180) * rx;
-    telemetryNodes.ssd.targetY = cy + Math.sin(30 * Math.PI / 180) * ry;
+    telemetryNodes.ssd.targetX = cx + Math.cos(25 * Math.PI / 180) * rx;
+    telemetryNodes.ssd.targetY = cy + Math.sin(25 * Math.PI / 180) * ry;
     
     // GPU: 90 deg (Bottom Center)
     telemetryNodes.gpu.targetX = cx + Math.cos(90 * Math.PI / 180) * rx;
     telemetryNodes.gpu.targetY = cy + Math.sin(90 * Math.PI / 180) * ry;
     
     // iGPU: 150 deg
-    telemetryNodes.igpu.targetX = cx + Math.cos(150 * Math.PI / 180) * rx;
-    telemetryNodes.igpu.targetY = cy + Math.sin(150 * Math.PI / 180) * ry;
+    telemetryNodes.igpu.targetX = cx + Math.cos(145 * Math.PI / 180) * rx;
+    telemetryNodes.igpu.targetY = cy + Math.sin(145 * Math.PI / 180) * ry;
+
+    // NPU: left side between CPU and iGPU
+    telemetryNodes.npuAccel.targetX = cx + Math.cos(180 * Math.PI / 180) * rx;
+    telemetryNodes.npuAccel.targetY = cy + Math.sin(180 * Math.PI / 180) * ry;
 }
 
 // Initialize nodes at targets
@@ -422,6 +444,19 @@ class DataPacket {
     }
 }
 
+function getPacketIntervalMs(pct) {
+    const normalized = Math.max(1, Math.min(100, Number(pct) || 0));
+    return Math.max(520, 2600 - normalized * 19);
+}
+
+function getPacketBurstCount(pct) {
+    const normalized = Math.max(0, Math.min(100, Number(pct) || 0));
+    if (normalized >= 85) return 4;
+    if (normalized >= 55) return 3;
+    if (normalized >= 25) return 2;
+    return 1;
+}
+
 // Particle splash effects when packets reach NPU Core
 let coreParticles = [];
 function spawnCoreSplash(x, y, color) {
@@ -452,6 +487,7 @@ canvas.addEventListener("mousedown", (e) => {
     let closestDist = 60;
     Object.keys(telemetryNodes).forEach(key => {
         const node = telemetryNodes[key];
+        if (node.visible === false) return;
         const d = Math.hypot(node.x - mouse.x, node.y - mouse.y);
         if (d < closestDist) {
             closestDist = d;
@@ -500,13 +536,15 @@ function renderStaticBackground() {
     bgCanvas.height = height;
     const bgCtx = bgCanvas.getContext("2d");
     
-    bgCtx.strokeStyle = "rgba(255, 255, 255, 0.015)";
+    bgCtx.strokeStyle = "rgba(255, 255, 255, 0.032)";
     bgCtx.lineWidth = 1;
     
-    // Draw concentric radar lines
+    // Draw concentric radar lines inside the visible map area.
     const cx = width / 2;
     const cy = height / 2;
-    for (let r = 80; r <= 360; r += 70) {
+    const maxRadarRadius = Math.max(80, Math.min(width, height) / 2 - 28);
+    const radarStep = Math.max(54, maxRadarRadius / 5);
+    for (let r = radarStep; r <= maxRadarRadius; r += radarStep) {
         bgCtx.beginPath();
         bgCtx.arc(cx, cy, r, 0, Math.PI * 2);
         bgCtx.stroke();
@@ -514,10 +552,10 @@ function renderStaticBackground() {
     
     // Draw crosshair grid lines
     bgCtx.beginPath();
-    bgCtx.moveTo(cx - 380, cy);
-    bgCtx.lineTo(cx + 380, cy);
-    bgCtx.moveTo(cx, cy - 260);
-    bgCtx.lineTo(cx, cy + 260);
+    bgCtx.moveTo(cx - maxRadarRadius, cy);
+    bgCtx.lineTo(cx + maxRadarRadius, cy);
+    bgCtx.moveTo(cx, cy - maxRadarRadius);
+    bgCtx.lineTo(cx, cy + maxRadarRadius);
     bgCtx.stroke();
 }
 
@@ -594,6 +632,7 @@ function updatePhysics(timestamp) {
     // 2. Update node physics (elastic spring return back to target coordinates)
     for (let i = 0; i < telemetryNodeList.length; i++) {
         const node = telemetryNodeList[i];
+        if (node.visible === false) continue;
         
         // Jitter under stress mode (>80%)
         let jitterX = 0, jitterY = 0;
@@ -630,6 +669,7 @@ function updatePhysics(timestamp) {
     // 4. Update and draw neural pathways (lines between surround nodes and NPU center)
     for (let i = 0; i < telemetryNodeList.length; i++) {
         const node = telemetryNodeList[i];
+        if (node.visible === false) continue;
         if (node === telemetryNodes.npu) continue;
         const npu = telemetryNodes.npu;
         
@@ -690,6 +730,7 @@ function updatePhysics(timestamp) {
     // 6. Draw component nodes
     for (let i = 0; i < telemetryNodeList.length; i++) {
         const node = telemetryNodeList[i];
+        if (node.visible === false) continue;
         
         ctx.save();
         ctx.translate(node.x, node.y);
@@ -889,7 +930,41 @@ function getNetworkLinkSpeedKb(stats) {
     return Math.max(1024, Math.round((linkSpeedMbps * 1000000) / 8 / 1024));
 }
 
+function setNpuVisibility(hasNpu) {
+    if (acceleratorRow) {
+        acceleratorRow.classList.toggle("no-npu", !hasNpu);
+        acceleratorRow.classList.toggle("has-npu", hasNpu);
+    }
+
+    if (npuCard) {
+        npuCard.setAttribute("aria-hidden", hasNpu ? "false" : "true");
+    }
+
+    if (telemetryNodes.npuAccel) {
+        const changed = telemetryNodes.npuAccel.visible !== hasNpu;
+        telemetryNodes.npuAccel.visible = hasNpu;
+        if (hasNpu && !telemetryNodes.npuAccel.offscreenCanvas) {
+            renderNodeOffscreen(telemetryNodes.npuAccel);
+        }
+        if (changed) {
+            updateNodeTargets();
+            needsRender = true;
+        }
+    }
+}
+
 function updateDOM(stats) {
+    const npuStats = stats.npu || {
+        utilization: 0,
+        name: "Intel(R) AI Boost",
+        usedMb: 0,
+        totalMb: 0,
+        totalGb: 0,
+        detected: false
+    };
+    const hasNpu = npuStats.detected === true;
+    setNpuVisibility(hasNpu);
+
     // 1. Update circular telemetry gauges (Left Column)
     setCircularProgress(cpuRing, stats.cpu.utilization);
     animateTextValue(cpuVal, stats.cpu.utilization, "%");
@@ -897,8 +972,11 @@ function updateDOM(stats) {
 
     setCircularProgress(vramRing, stats.igpu.utilization);
     animateTextValue(vramVal, stats.igpu.utilization, "%");
-    vramActivity = stats.igpu.utilization; // Sync wave animation speed to iGPU usage
     setAttrIfChanged(vramGaugeContainer, "aria-valuenow", stats.igpu.utilization);
+
+    setCircularProgress(npuRing, npuStats.utilization);
+    animateTextValue(npuVal, npuStats.utilization, "%");
+    setAttrIfChanged(npuGaugeContainer, "aria-valuenow", npuStats.utilization);
 
     setCircularProgress(gpuRing, stats.gpu.utilization);
     animateTextValue(gpuVal, stats.gpu.utilization, "%");
@@ -929,14 +1007,6 @@ function updateDOM(stats) {
     gpuTempSub.textContent = `${stats.gpu.temp} °C`;
     gpuFanSub.textContent = stats.fans.fan2 > 0 ? `${stats.fans.fan2} RPM` : "SILENT";
     gpuCoreSub.textContent = `${stats.gpu.coreClock} MHz`;
-    if (gpuVramUsedSub) {
-        const dGpuUsedVram = (stats.vram.usedMb / 1024).toFixed(1);
-        const dGpuTotalVram = (stats.vram.totalMb / 1024).toFixed(0);
-        gpuVramUsedSub.textContent = `${dGpuUsedVram} Go / ${dGpuTotalVram} Go`;
-    }
-    if (gpuDriverSub) {
-        gpuDriverSub.textContent = stats.gpu.driver || "--";
-    }
     if (gpuTopsSub) {
         gpuTopsSub.textContent = `${stats.gpu.tops} TOPS`;
     }
@@ -1041,23 +1111,40 @@ function updateDOM(stats) {
     if (vramTotalSub) {
         vramTotalSub.textContent = `${totalVramGb} Go`;
     }
-    if (igpuDriverSub) {
-        igpuDriverSub.textContent = stats.igpu.driver || "--";
-    }
     if (igpuTempSub) {
         igpuTempSub.textContent = `${stats.cpu.temp} °C`;
-    }
-    if (igpuDriverDateSub) {
-        igpuDriverDateSub.textContent = stats.igpu.driverDate || "--";
     }
     if (igpuVramBar) {
         const igpuVramPct = Math.round((stats.igpu.usedMb / stats.igpu.totalMb) * 100) || 0;
         setWidthIfChanged(igpuVramBar, igpuVramPct);
     }
+    const npuUsedGb = ((Number(npuStats.usedMb) || 0) / 1024).toFixed(1);
+    const npuTotalMb = Number(npuStats.totalMb) || 0;
+    const npuTotalGb = npuTotalMb > 0 ? (npuTotalMb / 1024).toFixed(0) : "0";
+    const npuFreeGb = npuTotalMb > 0 ? ((npuTotalMb - (Number(npuStats.usedMb) || 0)) / 1024).toFixed(1) : "0.0";
+    if (npuUsedSub) {
+        npuUsedSub.textContent = `${npuUsedGb} Go`;
+    }
+    if (npuSharedSub) {
+        npuSharedSub.textContent = `${npuUsedGb} Go`;
+    }
+    if (npuFreeSub) {
+        npuFreeSub.textContent = `${npuFreeGb} Go`;
+    }
+    if (npuTotalSub) {
+        npuTotalSub.textContent = `${npuTotalGb} Go`;
+    }
+    if (npuUtilBar) {
+        const npuMemPct = Math.round(((Number(npuStats.usedMb) || 0) / npuTotalMb) * 100) || 0;
+        setWidthIfChanged(npuUtilBar, npuMemPct);
+    }
 
     // 6. Dynamically update specs descriptions in DOM
     if (stats.cpu.name && specCpuName) {
         specCpuName.textContent = stats.cpu.name.startsWith("CPU") ? stats.cpu.name : "CPU " + stats.cpu.name;
+    }
+    if (npuStats.name && specNpuName) {
+        specNpuName.textContent = npuStats.name.startsWith("NPU") ? npuStats.name : "NPU " + npuStats.name;
     }
     if (stats.gpu.name && specGpuName) {
         specGpuName.textContent = stats.gpu.name.startsWith("GPU") ? stats.gpu.name : "GPU " + stats.gpu.name;
@@ -1076,7 +1163,7 @@ function updateDOM(stats) {
     }
 
     if (specSsdName) {
-        specSsdName.textContent = "SSD Samsung 990 PRO PCIe Gen4 NVMe M.2";
+        specSsdName.textContent = stats.disk.name ? `SSD ${stats.disk.name}` : "SSD";
     }
     if (stats.motherboard && clockMb) {
         clockMb.textContent = stats.motherboard.startsWith("CARTE MÈRE") ? stats.motherboard : "CARTE MÈRE " + stats.motherboard;
@@ -1091,6 +1178,9 @@ function updateDOM(stats) {
         
         telemetryNodes.igpu.value = stats.igpu.utilization;
         telemetryNodes.igpu.subLabel = `${usedVramGb} Go`;
+
+        telemetryNodes.npuAccel.value = npuStats.utilization || 0;
+        telemetryNodes.npuAccel.subLabel = `${npuUsedGb} Go`;
         
         // Rolling minimum baseline for page faults/sec to filter idle background noise on any PC
         if (!window.ramFaultsHistory) {
@@ -1144,14 +1234,6 @@ function updateDOM(stats) {
         
         const speedStr = formatNetSpeed(totalNetKb);
         telemetryNodes.net.subLabel = speedStr;
-    }
-
-    // 8. Update Latency Ping dynamic badge inside Clock Widget
-    if (pingSub) {
-        pingSub.textContent = stats.ping > 0 ? `PING: ${stats.ping} ms` : "PING: -- ms";
-        pingSub.className = "ping-badge"; // reset
-        if (stats.ping > 45 && stats.ping <= 90) pingSub.classList.add("medium");
-        if (stats.ping > 90 || stats.ping === 0) pingSub.classList.add("critical");
     }
 
     // 9. Update Remote controllers buttons dynamically based on actual Windows power plans
@@ -1244,6 +1326,17 @@ function updateDOM(stats) {
         gpuCard.classList.remove("overload");
     }
 
+    if (npuCard && hasNpu) {
+        if (npuStats.utilization > 90) {
+            npuCard.classList.add("overload");
+            hasOverload = true;
+        } else {
+            npuCard.classList.remove("overload");
+        }
+    } else if (npuCard) {
+        npuCard.classList.remove("overload");
+    }
+
     if (stats.ram.utilization > 80) {
         ramCard.classList.add("overload");
         hasOverload = true;
@@ -1269,36 +1362,38 @@ function updateDOM(stats) {
         document.body.classList.remove("system-critical");
     }
     
-    // Spawn data packets only on useful changes. This keeps the wallpaper alive without a permanent GPU loop.
+    // Spawn data packets per node so every active circle emits fairly.
     const now = performance.now();
     let spawnedPacket = false;
     let mapValueChanged = false;
     Object.keys(telemetryNodes).forEach(key => {
         if (key === "npu") return;
         const node = telemetryNodes[key];
+        if (node.visible === false) return;
         const pct = node.value || 0;
         const previous = lastTelemetryNodeValues[key];
         lastTelemetryNodeValues[key] = pct;
         if (previous === undefined || Math.abs(pct - previous) >= 1) {
             mapValueChanged = true;
         }
-        if (pct < 4) return;
+        if (pct < 1) return;
 
-        const changedEnough = previous === undefined || Math.abs(pct - previous) >= 4;
-        const heartbeatDue = pct >= 15 && now - (lastPacketNodeTime[key] || 0) >= 2000;
+        const elapsedForNode = now - (lastPacketNodeTime[key] || 0);
+        const interval = getPacketIntervalMs(pct);
+        const changedEnough = previous === undefined || Math.abs(pct - previous) >= Math.max(2, Math.min(8, Math.round(pct / 12)));
+        const heartbeatDue = elapsedForNode >= interval;
         if (!changedEnough && !heartbeatDue) return;
 
-        if (now - lastPacketGlobalTime < 500) return;
+        if (dataPackets.length >= MAX_DATA_PACKETS) return;
         
-        const count = Math.min(2, Math.max(1, Math.ceil(pct / 55)));
+        const count = Math.min(getPacketBurstCount(pct), MAX_DATA_PACKETS - dataPackets.length);
         
         for (let i = 0; i < count; i++) {
             const packet = new DataPacket(node, node.color);
-            packet.progress = -Math.random() * 0.3; // Staggered start
+            packet.progress = -Math.random() * 0.35; // Staggered start
             dataPackets.push(packet);
         }
         lastPacketNodeTime[key] = now;
-        lastPacketGlobalTime = now;
         spawnedPacket = true;
     });
     
@@ -1429,6 +1524,7 @@ function connectStream() {
 function dimGauges() {
     setCircularProgress(cpuRing, 0);
     setCircularProgress(vramRing, 0);
+    setCircularProgress(npuRing, 0);
     setCircularProgress(gpuRing, 0);
     setCircularProgress(ramRing, 0);
     setCircularProgress(ssdRing, 0);
@@ -1436,6 +1532,7 @@ function dimGauges() {
     
     if (cpuGaugeContainer) cpuGaugeContainer.setAttribute("aria-valuenow", 0);
     if (vramGaugeContainer) vramGaugeContainer.setAttribute("aria-valuenow", 0);
+    if (npuGaugeContainer) npuGaugeContainer.setAttribute("aria-valuenow", 0);
     if (gpuGaugeContainer) gpuGaugeContainer.setAttribute("aria-valuenow", 0);
     if (ramGaugeContainer) ramGaugeContainer.setAttribute("aria-valuenow", 0);
     if (ssdGaugeContainer) ssdGaugeContainer.setAttribute("aria-valuenow", 0);
@@ -1443,6 +1540,7 @@ function dimGauges() {
     
     cpuVal.innerHTML = `0<span>%</span>`;
     vramVal.innerHTML = `0<span>%</span>`;
+    npuVal.innerHTML = `0<span>%</span>`;
     gpuVal.innerHTML = `0<span>%</span>`;
     ramVal.innerHTML = `0<span>%</span>`;
     ssdVal.innerHTML = `0<span>%</span>`;
@@ -1464,18 +1562,17 @@ function dimGauges() {
     gpuTempSub.textContent = `0 °C`;
     gpuFanSub.textContent = `SILENT`;
     gpuCoreSub.textContent = `0 MHz`;
-    if (gpuVramUsedSub) {
-        gpuVramUsedSub.textContent = `0.0 Go / 0 Go`;
-    }
-    if (gpuDriverSub) gpuDriverSub.textContent = `--`;
     if (gpuTopsSub) gpuTopsSub.textContent = `0 TOPS`;
 
     vramUsedSub.textContent = `0.0 Go`;
     vramFreeSub.textContent = `0.0 Go`;
     if (vramTotalSub) vramTotalSub.textContent = `0 Go`;
-    if (igpuDriverSub) igpuDriverSub.textContent = `--`;
     if (igpuTempSub) igpuTempSub.textContent = `0 °C`;
-    if (igpuDriverDateSub) igpuDriverDateSub.textContent = `--`;
+    if (npuUsedSub) npuUsedSub.textContent = `0.0 Go`;
+    if (npuSharedSub) npuSharedSub.textContent = `0.0 Go`;
+    if (npuFreeSub) npuFreeSub.textContent = `0.0 Go`;
+    if (npuTotalSub) npuTotalSub.textContent = `0 Go`;
+    if (npuUtilBar) npuUtilBar.style.width = "0%";
 
     ramFreeSub.textContent = `0.0 Go`;
     if (ramCachedSub) ramCachedSub.textContent = `0.0 Go`;
@@ -1501,10 +1598,6 @@ function dimGauges() {
     if (netTypeSub) netTypeSub.textContent = `--`;
     if (netPingSub) netPingSub.textContent = `0 ms`;
     
-    if (pingSub) {
-        pingSub.textContent = "PING: 0 ms";
-    }
-
     if (clockMb) {
         clockMb.textContent = "--";
     }

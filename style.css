@@ -16,6 +16,7 @@
     /* Neon glow colors */
     --cpu-glow: #bf5aff;
     --vram-glow: #30d158;
+    --npu-glow: #00c7be;
     --gpu-glow: #ff375f;
     --ram-color: #0a84ff;
     --disk-color: #00c7be;
@@ -68,8 +69,9 @@ body {
     inset: 0;
     z-index: 9999;
     pointer-events: none;
+    display: block;
     background-color: #040509;
-    background-image: url("loading-zero-1440p.png");
+    background-image: url("loading-zero-5120x1440.png?v=10");
     background-position: center;
     background-size: cover;
     background-repeat: no-repeat;
@@ -174,8 +176,77 @@ body {
     transition: border-color 0.4s ease, box-shadow 0.4s ease, background 0.4s ease;
     
     /* Hardware GPU acceleration layer promotion to optimize composite rendering */
+    position: relative;
+    overflow: hidden;
     transform: translate3d(0, 0, 0);
     will-change: transform;
+}
+
+.glass-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background:
+        radial-gradient(circle at 50% 16%, rgba(255, 255, 255, 0.04), transparent 42%),
+        linear-gradient(135deg, rgba(10, 132, 255, 0.03), rgba(191, 90, 255, 0.018) 50%, rgba(255, 55, 95, 0.014));
+    opacity: 0.66;
+    z-index: 0;
+}
+
+#cpu-card::before {
+    background:
+        radial-gradient(circle at 100% 100%, rgba(0, 199, 190, 0.12), transparent 48%),
+        radial-gradient(circle at 86% 76%, rgba(10, 132, 255, 0.062), transparent 40%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.038), rgba(255, 255, 255, 0.012));
+    opacity: 0.78;
+}
+
+#vram-card::before,
+#npu-card::before {
+    background:
+        radial-gradient(circle at 100% 50%, rgba(0, 199, 190, 0.108), transparent 46%),
+        radial-gradient(circle at 86% 50%, rgba(10, 132, 255, 0.055), transparent 38%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.038), rgba(255, 255, 255, 0.012));
+    opacity: 0.78;
+}
+
+#gpu-card::before {
+    background:
+        radial-gradient(circle at 100% 0%, rgba(0, 199, 190, 0.115), transparent 48%),
+        radial-gradient(circle at 86% 24%, rgba(10, 132, 255, 0.058), transparent 40%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.038), rgba(255, 255, 255, 0.012));
+    opacity: 0.78;
+}
+
+#ram-card::before {
+    background:
+        radial-gradient(circle at 0% 100%, rgba(0, 199, 190, 0.105), transparent 48%),
+        radial-gradient(circle at 14% 76%, rgba(191, 90, 255, 0.06), transparent 40%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.036), rgba(255, 255, 255, 0.012));
+    opacity: 0.76;
+}
+
+#ssd-card::before {
+    background:
+        radial-gradient(circle at 0% 50%, rgba(0, 199, 190, 0.098), transparent 46%),
+        radial-gradient(circle at 14% 50%, rgba(191, 90, 255, 0.054), transparent 38%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.036), rgba(255, 255, 255, 0.012));
+    opacity: 0.76;
+}
+
+#net-card::before {
+    background:
+        radial-gradient(circle at 0% 0%, rgba(0, 199, 190, 0.102), transparent 48%),
+        radial-gradient(circle at 14% 24%, rgba(191, 90, 255, 0.058), transparent 40%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.036), rgba(255, 255, 255, 0.012));
+    opacity: 0.76;
+}
+
+.glass-panel > * {
+    position: relative;
+    z-index: 1;
 }
 
 .glass-panel:hover {
@@ -232,6 +303,15 @@ body {
     gap: 32px;
     min-height: 0; /* Flexbox containment to prevent overflowing parent padding */
     align-items: stretch;
+    position: relative;
+    isolation: isolate;
+}
+
+.column-left,
+.column-center,
+.column-right {
+    position: relative;
+    z-index: 1;
 }
 
 /* --- COLUMN LEFT: Telemetry Gauges (CPU, NPU, GPU Vertically Stacked) --- */
@@ -241,6 +321,22 @@ body {
     gap: 24px;
     height: 100%;
     justify-content: space-between;
+}
+
+.accelerator-row {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 16px;
+    min-height: 0;
+}
+
+.accelerator-row.no-npu {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.accelerator-row.no-npu .npu-card {
+    display: none;
 }
 
 .gauge-card {
@@ -257,6 +353,46 @@ body {
     contain: content;
     content-visibility: auto;
     contain-intrinsic-size: auto 300px;
+}
+
+.accelerator-card {
+    min-width: 0;
+    height: 100%;
+    padding: 16px 18px;
+}
+
+.accelerator-card .gauge-label {
+    font-size: 13px;
+    letter-spacing: 1.2px;
+    margin-bottom: 8px;
+}
+
+.accelerator-card .gauge-container {
+    width: 136px;
+    height: 136px;
+}
+
+.accelerator-card .gauge-value {
+    font-size: 42px;
+}
+
+.accelerator-card .gauge-value span {
+    font-size: 17px;
+}
+
+.accelerator-card .card-sub-metrics {
+    gap: 7px;
+    margin-top: 9px;
+    padding-top: 9px;
+}
+
+.accelerator-card .sub-metric .lbl {
+    font-size: 10px;
+    letter-spacing: 0.6px;
+}
+
+.accelerator-card .sub-metric .val {
+    font-size: 15px;
 }
 
 .gauge-label {
@@ -312,7 +448,7 @@ body {
 /* GPU hardware-accelerated high-performance glow drop-shadow filters */
 #cpu-ring { filter: drop-shadow(0 0 3px var(--cpu-glow)); }
 #vram-ring { filter: drop-shadow(0 0 3px var(--vram-glow)); }
-#npu-ring { filter: drop-shadow(0 0 3px #30d158); }
+#npu-ring { filter: drop-shadow(0 0 3px var(--npu-glow)); }
 #gpu-ring { filter: drop-shadow(0 0 3px var(--gpu-glow)); }
 #ram-ring { filter: drop-shadow(0 0 3px var(--ram-color)); }
 #ssd-ring { filter: drop-shadow(0 0 3px var(--disk-color)); }
@@ -350,6 +486,20 @@ body {
     transform: translate3d(0, 0, 0);
 }
 
+.npu-scanner-eye {
+    position: absolute;
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    border: 1px solid transparent;
+    border-left: 1px solid rgba(0, 199, 190, 0.48);
+    border-right: 1px solid rgba(100, 210, 255, 0.48);
+    animation: spin-eye 12s linear infinite reverse;
+    pointer-events: none;
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
+}
+
 @keyframes spin-eye {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
@@ -364,11 +514,20 @@ body {
     justify-content: space-between;
     height: 100%;
     position: relative;
-    
-    /* High performance SOTA optimization: disable backdrop-filter blur on the animating center panel */
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-    background: linear-gradient(135deg, rgba(8, 10, 20, 0.3) 0%, rgba(4, 5, 10, 0.4) 100%) !important;
+    overflow: hidden;
+    isolation: isolate;
+}
+
+.column-center::before {
+    background:
+        radial-gradient(circle at 50% 48%, rgba(0, 199, 190, 0.125), transparent 38%),
+        radial-gradient(circle at 48% 44%, rgba(10, 132, 255, 0.075), transparent 42%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.042), rgba(255, 255, 255, 0.012));
+    opacity: 0.84;
+}
+
+.column-center:hover {
+    border-color: rgba(255, 255, 255, 0.32);
 }
 
 /* SOTA Physics Engine Viewport */
@@ -401,6 +560,9 @@ body {
     flex-direction: column;
     gap: 16px;
     width: 100%;
+    position: relative;
+    z-index: 2;
+    isolation: isolate;
 }
 
 .remote-grid {
@@ -484,21 +646,21 @@ body {
     background: rgba(255, 55, 95, 0.12);
     border-color: var(--gpu-glow);
     color: var(--gpu-glow);
-    box-shadow: 0 0 20px rgba(255, 55, 95, 0.3), inset 0 1px 1px rgba(255, 55, 95, 0.2);
+    box-shadow: inset 0 1px 1px rgba(255, 55, 95, 0.22), inset 0 0 18px rgba(255, 55, 95, 0.12);
 }
 
 #btn-balanced.active {
     background: rgba(10, 132, 255, 0.12);
     border-color: var(--ram-color);
     color: var(--ram-color);
-    box-shadow: 0 0 20px rgba(10, 132, 255, 0.3), inset 0 1px 1px rgba(10, 132, 255, 0.2);
+    box-shadow: inset 0 1px 1px rgba(10, 132, 255, 0.22), inset 0 0 18px rgba(10, 132, 255, 0.12);
 }
 
 #btn-eco.active {
     background: rgba(48, 209, 88, 0.12);
     border-color: var(--vram-glow);
     color: var(--vram-glow);
-    box-shadow: 0 0 20px rgba(48, 209, 88, 0.3), inset 0 1px 1px rgba(48, 209, 88, 0.2);
+    box-shadow: inset 0 1px 1px rgba(48, 209, 88, 0.22), inset 0 0 18px rgba(48, 209, 88, 0.12);
 }
 
 
@@ -800,6 +962,11 @@ body {
     text-shadow: 0 0 6px rgba(10, 132, 255, 0.35);
 }
 
+.text-cyan {
+    color: var(--npu-glow);
+    text-shadow: 0 0 6px rgba(0, 199, 190, 0.35);
+}
+
 .highlight-orange {
     color: #ff9f0a;
     font-weight: 800;
@@ -879,6 +1046,11 @@ body {
     box-shadow: 0 0 6px rgba(255, 55, 95, 0.3);
 }
 
+.npu-util-bar {
+    background: linear-gradient(90deg, #00c7be, #64d2ff);
+    box-shadow: 0 0 6px rgba(0, 199, 190, 0.3);
+}
+
 /* --- RESPONSIVE ADAPTATIONS --- */
 @media (max-width: 2500px) {
     .dashboard {
@@ -893,6 +1065,10 @@ body {
     
     .column-left, .column-right {
         gap: 16px;
+    }
+
+    .accelerator-row {
+        gap: 12px;
     }
     
     .column-center {
@@ -915,9 +1091,18 @@ body {
         width: 170px;
         height: 170px;
     }
+
+    .accelerator-card .gauge-container {
+        width: 128px;
+        height: 128px;
+    }
     
     .gauge-value {
         font-size: 48px;
+    }
+
+    .accelerator-card .gauge-value {
+        font-size: 38px;
     }
     
     .card-sub-metrics {
@@ -944,6 +1129,10 @@ body {
         grid-column: span 1;
         height: auto;
         gap: 24px;
+    }
+
+    .accelerator-row {
+        grid-template-columns: 1fr;
     }
 }
 
@@ -1023,6 +1212,10 @@ body.system-critical .nebula {
     .column-left, .column-right {
         gap: 10px !important;
     }
+
+    .accelerator-row {
+        gap: 10px !important;
+    }
     
     .column-center {
         gap: 12px !important;
@@ -1048,14 +1241,37 @@ body.system-critical .nebula {
         margin-top: 2px !important;
         margin-bottom: 2px !important;
     }
+
+    .accelerator-card {
+        padding: 10px 12px !important;
+    }
+
+    .accelerator-card .gauge-label {
+        font-size: 12px !important;
+        letter-spacing: 1px !important;
+    }
+
+    .accelerator-card .gauge-container {
+        width: 112px !important;
+        height: 112px !important;
+    }
     
     .vram-scanner-eye {
         width: 52px !important;
         height: 52px !important;
     }
+
+    .npu-scanner-eye {
+        width: 48px !important;
+        height: 48px !important;
+    }
     
     .gauge-value {
         font-size: 42px !important;
+    }
+
+    .accelerator-card .gauge-value {
+        font-size: 32px !important;
     }
     
     .gauge-value span {

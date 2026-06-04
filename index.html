@@ -4,8 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JULIENPIRON.FR - Control Cockpit</title>
-    <link rel="preload" as="image" href="loading-zero-1440p.png">
-    <link rel="stylesheet" href="style.css?v=5">
+    <link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
     <div class="loading-snapshot" id="loading-snapshot" aria-hidden="true"></div>
@@ -28,7 +27,7 @@
             <div class="column-left">
                 <!-- CPU Card -->
                 <div class="gauge-card glass-panel" id="cpu-card">
-                    <h2 class="gauge-label" id="spec-cpu-name">CPU Intel(R) Core(TM) i7-14700K</h2>
+                    <h2 class="gauge-label" id="spec-cpu-name">CPU</h2>
                     <div class="critical-alert">ALERT: CPU OVERLOAD</div>
                     <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-cpu-name" id="cpu-gauge-container">
                         <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
@@ -65,52 +64,93 @@
                     <!-- Removed chip-name -->
                 </div>
 
-                <!-- iGPU Card -->
-                <div class="gauge-card glass-panel" id="vram-card">
-                    <h2 class="gauge-label" id="spec-vram-name">iGPU Intel(R) UHD Graphics 770</h2>
-                    <div class="critical-alert">ALERT: iGPU OVERLOAD</div>
-                    <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-vram-name" id="vram-gauge-container">
-                        <div class="vram-scanner-eye"></div>
-                        <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
-                            <defs>
-                                <linearGradient id="vram-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" stop-color="#30d158" />
-                                    <stop offset="100%" stop-color="#1db954" />
-                                </linearGradient>
-                            </defs>
-                            <circle class="ring-bg" cx="90" cy="90" r="76" />
-                            <circle class="ring-fill" id="vram-ring" cx="90" cy="90" r="76" stroke="url(#vram-grad)" />
-                        </svg>
-                        <div class="gauge-value" id="vram-val">0<span>%</span></div>
+                <div class="accelerator-row no-npu">
+                    <!-- iGPU Card -->
+                    <div class="gauge-card glass-panel accelerator-card" id="vram-card">
+                        <h2 class="gauge-label" id="spec-vram-name">iGPU</h2>
+                        <div class="critical-alert">ALERT: iGPU OVERLOAD</div>
+                        <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-vram-name" id="vram-gauge-container">
+                            <div class="vram-scanner-eye"></div>
+                            <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
+                                <defs>
+                                    <linearGradient id="vram-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#30d158" />
+                                        <stop offset="100%" stop-color="#1db954" />
+                                    </linearGradient>
+                                </defs>
+                                <circle class="ring-bg" cx="90" cy="90" r="76" />
+                                <circle class="ring-fill" id="vram-ring" cx="90" cy="90" r="76" stroke="url(#vram-grad)" />
+                            </svg>
+                            <div class="gauge-value" id="vram-val">0<span>%</span></div>
+                        </div>
+                        <div class="card-sub-metrics">
+                            <div class="sub-metric">
+                                <span class="lbl">TEMPÉRATURE</span>
+                                <span class="val highlight-green" id="igpu-temp-sub">-- °C</span>
+                            </div>
+                            <div class="sub-metric">
+                                <span class="lbl">VRAM PARTAGÉE</span>
+                                <span class="val highlight-green" id="vram-used-sub">-- Go</span>
+                            </div>
+                            <div class="sub-metric">
+                                <span class="lbl">VRAM LIBRE</span>
+                                <span class="val highlight-green" id="vram-free-sub">-- Go</span>
+                            </div>
+                            <div class="sub-metric">
+                                <span class="lbl">VRAM TOTALE</span>
+                                <span class="val highlight-green" id="vram-total-sub">-- Go</span>
+                            </div>
+                            <div class="sub-progress-container">
+                                <div class="sub-progress-fill igpu-vram-bar" id="igpu-vram-bar"></div>
+                            </div>
+                        </div>
                     </div>
-                    <!-- Sub-metrics Grid for iGPU -->
-                    <div class="card-sub-metrics">
-                        <div class="sub-metric">
-                            <span class="lbl">TEMPÉRATURE</span>
-                            <span class="val highlight-green" id="igpu-temp-sub">-- °C</span>
-                        </div>
-                        <div class="sub-metric">
-                            <span class="lbl">VRAM PARTAGÉE</span>
-                            <span class="val highlight-green" id="vram-used-sub">-- Go</span>
-                        </div>
-                        <div class="sub-metric">
-                            <span class="lbl">VRAM LIBRE</span>
-                            <span class="val highlight-green" id="vram-free-sub">-- Go</span>
-                        </div>
-                        <div class="sub-metric">
-                            <span class="lbl">VRAM TOTALE</span>
-                            <span class="val highlight-green" id="vram-total-sub">-- Go</span>
-                        </div>
 
-                        <div class="sub-progress-container">
-                            <div class="sub-progress-fill igpu-vram-bar" id="igpu-vram-bar"></div>
+                    <!-- NPU Card -->
+                    <div class="gauge-card glass-panel accelerator-card npu-card" id="npu-card">
+                        <h2 class="gauge-label" id="spec-npu-name">NPU</h2>
+                        <div class="critical-alert">ALERT: NPU OVERLOAD</div>
+                        <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-npu-name" id="npu-gauge-container">
+                            <div class="npu-scanner-eye"></div>
+                            <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
+                                <defs>
+                                    <linearGradient id="npu-card-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#00c7be" />
+                                        <stop offset="100%" stop-color="#64d2ff" />
+                                    </linearGradient>
+                                </defs>
+                                <circle class="ring-bg" cx="90" cy="90" r="76" />
+                                <circle class="ring-fill" id="npu-ring" cx="90" cy="90" r="76" stroke="url(#npu-card-grad)" />
+                            </svg>
+                            <div class="gauge-value" id="npu-val">0<span>%</span></div>
+                        </div>
+                        <div class="card-sub-metrics">
+                            <div class="sub-metric">
+                                <span class="lbl">MÉMOIRE UTILISÉE</span>
+                                <span class="val text-cyan" id="npu-used-sub">-- Go</span>
+                            </div>
+                            <div class="sub-metric">
+                                <span class="lbl">MÉMOIRE PARTAGÉE</span>
+                                <span class="val text-cyan" id="npu-shared-sub">-- Go</span>
+                            </div>
+                            <div class="sub-metric">
+                                <span class="lbl">MÉMOIRE LIBRE</span>
+                                <span class="val text-cyan" id="npu-free-sub">-- Go</span>
+                            </div>
+                            <div class="sub-metric">
+                                <span class="lbl">MÉMOIRE TOTALE</span>
+                                <span class="val text-cyan" id="npu-total-sub">-- Go</span>
+                            </div>
+                            <div class="sub-progress-container">
+                                <div class="sub-progress-fill npu-util-bar" id="npu-util-bar"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- GPU Card -->
                 <div class="gauge-card glass-panel" id="gpu-card">
-                    <h2 class="gauge-label" id="spec-gpu-name">GPU NVIDIA GeForce RTX 4080 SUPER</h2>
+                    <h2 class="gauge-label" id="spec-gpu-name">GPU</h2>
                     <div class="critical-alert">ALERT: GPU OVERLOAD</div>
                     <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-gpu-name" id="gpu-gauge-container">
                         <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
@@ -172,33 +212,7 @@
                 <!-- Windows Power Plan Remote Control (Horizontal bottom) -->
                 <div class="remote-sub-panel">
 
-                    <div class="remote-grid horizontal" id="power-plans-container">
-                        <!-- Pre-populated actual power plans for instant UI display & zero-flicker premium feel -->
-                        <button class="remote-btn" data-guid="381b4222-f694-41f0-9685-ff5bb260df2e" id="btn-balanced" aria-pressed="false">
-                            <div class="icon-wrap">
-                                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
-                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-                                </svg>
-                            </div>
-                            <span class="btn-lbl">AUTO DEV</span>
-                        </button>
-                        <button class="remote-btn" data-guid="a1841308-3541-4fab-bc81-f71556f20b4a" id="btn-eco" aria-pressed="false">
-                            <div class="icon-wrap">
-                                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
-                                    <path d="M9.5 2c-1.82 0-3.53.5-5 1.35 2.99 1.73 5 4.95 5 8.65s-2.01 6.92-5 8.65c1.47.85 3.18 1.35 5 1.35 5.52 0 10-4.48 10-10S15.02 2 9.5 2z"/>
-                                </svg>
-                            </div>
-                            <span class="btn-lbl">AUTO VEILLE</span>
-                        </button>
-                        <button class="remote-btn" data-guid="ad8c1557-d464-489f-ad7a-d6ce812ffed3" id="btn-extreme" aria-pressed="false">
-                            <div class="icon-wrap">
-                                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
-                                    <path d="M12 2L1 21h22L12 2zm0 4l7.5 13h-15L12 6zm-1 5h2v4h-2v-4zm0-3h2v2h-2V8z"/>
-                                </svg>
-                            </div>
-                            <span class="btn-lbl">FULL GAMER</span>
-                        </button>
-                    </div>
+                    <div class="remote-grid horizontal" id="power-plans-container"></div>
                 </div>
             </div>
 
@@ -206,7 +220,7 @@
             <div class="column-right">
                 <!-- RAM Card -->
                 <div class="gauge-card glass-panel" id="ram-card">
-                    <h2 class="gauge-label" id="spec-ram-name">RAM 32 Go DDR5 Dual-Channel</h2>
+                    <h2 class="gauge-label" id="spec-ram-name">RAM</h2>
                     <div class="critical-alert">ALERT: RAM OVERLOAD</div>
                     <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-ram-name" id="ram-gauge-container">
                         <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
@@ -245,7 +259,7 @@
 
                 <!-- SSD Card -->
                 <div class="gauge-card glass-panel" id="ssd-card">
-                    <h2 class="gauge-label" id="spec-ssd-name">SSD Samsung 990 PRO PCIe Gen4 NVMe M.2</h2>
+                    <h2 class="gauge-label" id="spec-ssd-name">SSD</h2>
                     <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-ssd-name" id="ssd-gauge-container">
                         <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
                             <defs>
@@ -283,7 +297,7 @@
 
                 <!-- Network Card -->
                 <div class="gauge-card glass-panel" id="net-card">
-                    <h2 class="gauge-label" id="spec-net-mode">RÉSEAU Intel Killer Wi-Fi 7 BE200 / LAN 2.5G</h2>
+                    <h2 class="gauge-label" id="spec-net-mode">RÉSEAU</h2>
                     <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-net-mode" id="net-gauge-container">
                         <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
                             <defs>
@@ -324,6 +338,6 @@
         </section>
     </main>
 
-    <script src="app.js?v=5"></script>
+    <script src="app.js?v=10" charset="UTF-8"></script>
 </body>
 </html>

@@ -94,7 +94,7 @@ function Invoke-NexusBenchmarkRun {
 
     $attach = $recentLog | Select-String -Pattern "Wallpaper attached after ([0-9.]+)s" | Select-Object -Last 1
     $request = $recentLog | Select-String -Pattern "\[(.*?)\] REQUEST_TELEMETRY" | Select-Object -Last 1
-    $errors = @($recentLog | Select-String -Pattern "ERROR|CONSOLE_ERROR|Telemetry .*error|UpdateTopProcesses error|Violation")
+    $errors = @($recentLog | Select-String -Pattern "CONSOLE_ERROR|\] ERROR:|Telemetry .*error|UpdateTopProcesses error|Violation")
 
     $attachSeconds = $null
     if ($attach -and $attach.Matches.Count -gt 0) {
