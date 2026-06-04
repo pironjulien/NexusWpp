@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 using System.IO.Compression;
 using System.Management;
@@ -32,41 +33,29 @@ namespace NexusWppInstaller
             bool silent = HasArg(args, "/silent") || HasArg(args, "-silent") || HasArg(args, "/quiet") || HasArg(args, "-quiet");
             bool uninstall = HasArg(args, "/uninstall") || HasArg(args, "-uninstall");
 
+            try { SetProcessDPIAware(); } catch { }
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+
+            if (!IsAdministrator())
+            {
+                Show(silent, "NexusWpp installer must be run as administrator.");
+                return 1;
+            }
+
+            if (!silent)
+            {
+                return RunWithProgressWindow(uninstall);
+            }
+
             try
             {
-                try { SetProcessDPIAware(); } catch { }
-                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
-
-                if (!IsAdministrator())
-                {
-                    Show(silent, "NexusWpp installer must be run as administrator.");
-                    return 1;
-                }
-
                 if (uninstall)
                 {
-                    Uninstall(silent);
+                    Uninstall(new NullProgressReporter());
                     return 0;
                 }
 
-                Log("Starting NexusWpp installation.");
-                StopRunningWallpaper();
-                Directory.CreateDirectory(InstallDir);
-
-                if (!IsWebView2RuntimeInstalled())
-                {
-                    InstallWebView2Runtime();
-                }
-
-                ExtractPayload();
-                GenerateScreenMatchedLoadingSnapshot();
-                RegisterStartup();
-                RegisterStartMenuShortcut();
-                RegisterUninstallEntry();
-                PersistInstallerForUninstall();
-                StartWallpaper();
-
-                Log("Installation completed.");
+                Install(new NullProgressReporter());
                 Show(silent, "NexusWpp is installed and running.");
                 return 0;
             }
@@ -78,17 +67,98 @@ namespace NexusWppInstaller
             }
         }
 
-        private static void Uninstall(bool silent)
+        private static int RunWithProgressWindow(bool uninstall)
+        {
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+
+            using (InstallerProgressForm form = new InstallerProgressForm(uninstall))
+            {
+                form.Shown += delegate
+                {
+                    ThreadPool.QueueUserWorkItem(delegate
+                    {
+                        try
+                        {
+                            if (uninstall)
+                            {
+                                Uninstall(form);
+                                form.Complete(true, "NexusWpp a ete desinstalle.", 0);
+                            }
+                            else
+                            {
+                                Install(form);
+                                form.Complete(true, "NexusWpp est installe et lance.", 0);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Log((uninstall ? "Uninstall" : "Installation") + " failed: " + ex);
+                            form.Complete(false, ex.Message + "\r\n\r\nLog: " + Path.Combine(InstallDir, "install.log"), 1);
+                        }
+                    });
+                };
+
+                Application.Run(form);
+                return form.ExitCode;
+            }
+        }
+
+        private static void Install(IProgressReporter progress)
+        {
+            Log("Starting NexusWpp installation.");
+            progress.Report(5, "Preparation de l'installation...");
+
+            progress.Report(12, "Arret de l'ancienne version...");
+            StopRunningWallpaper();
+            Directory.CreateDirectory(InstallDir);
+
+            progress.Report(24, "Verification du runtime WebView2...");
+            if (!IsWebView2RuntimeInstalled())
+            {
+                progress.Report(30, "Installation du runtime WebView2 Microsoft...");
+                InstallWebView2Runtime();
+            }
+
+            progress.Report(48, "Copie des fichiers NexusWpp...");
+            ExtractPayload();
+
+            progress.Report(64, "Generation de l'image zero adaptee a l'ecran...");
+            GenerateScreenMatchedLoadingSnapshot();
+
+            progress.Report(78, "Configuration du demarrage Windows...");
+            RegisterStartup();
+
+            progress.Report(86, "Ajout au menu Demarrer...");
+            RegisterStartMenuShortcut();
+
+            progress.Report(91, "Enregistrement de la desinstallation...");
+            RegisterUninstallEntry();
+            PersistInstallerForUninstall();
+
+            progress.Report(96, "Lancement du fond d'ecran...");
+            StartWallpaper();
+
+            progress.Report(100, "Installation terminee.");
+            Log("Installation completed.");
+        }
+
+        private static void Uninstall(IProgressReporter progress)
         {
             Log("Starting NexusWpp uninstall.");
+            progress.Report(10, "Arret de NexusWpp...");
             StopRunningWallpaper();
+            progress.Report(35, "Nettoyage du demarrage Windows...");
             CleanupStartupEntries();
+            progress.Report(55, "Suppression du menu Demarrer...");
             RemoveStartMenuShortcut();
+            progress.Report(70, "Suppression de l'entree Applications installees...");
             RemoveUninstallEntry();
 
             string self = Assembly.GetExecutingAssembly().Location;
             string installFullPath = Path.GetFullPath(InstallDir);
             string selfFullPath = Path.GetFullPath(self);
+            progress.Report(84, "Suppression des fichiers...");
             if (selfFullPath.StartsWith(installFullPath, StringComparison.OrdinalIgnoreCase))
             {
                 ScheduleInstallDirectoryRemoval();
@@ -98,7 +168,7 @@ namespace NexusWppInstaller
                 Directory.Delete(InstallDir, true);
             }
 
-            Show(silent, "NexusWpp has been uninstalled.");
+            progress.Report(100, "Desinstallation terminee.");
         }
 
         private static bool HasArg(string[] args, string value)
@@ -592,6 +662,157 @@ namespace NexusWppInstaller
             {
                 MessageBox.Show(message, "NexusWpp Installer", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
+        }
+    }
+
+    internal interface IProgressReporter
+    {
+        void Report(int percent, string message);
+    }
+
+    internal sealed class NullProgressReporter : IProgressReporter
+    {
+        public void Report(int percent, string message)
+        {
+        }
+    }
+
+    internal sealed class InstallerProgressForm : Form, IProgressReporter
+    {
+        private readonly Label titleLabel;
+        private readonly Label statusLabel;
+        private readonly Label percentLabel;
+        private readonly Panel progressTrack;
+        private readonly Panel progressFill;
+        private readonly Button closeButton;
+        private bool completed;
+
+        public int ExitCode { get; private set; }
+
+        public InstallerProgressForm(bool uninstall)
+        {
+            ExitCode = 1;
+            Text = uninstall ? "Desinstallation NexusWpp" : "Installation NexusWpp";
+            StartPosition = FormStartPosition.CenterScreen;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ControlBox = false;
+            ClientSize = new Size(520, 230);
+            BackColor = Color.FromArgb(22, 26, 31);
+            ForeColor = Color.White;
+            Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point);
+
+            titleLabel = new Label();
+            titleLabel.AutoSize = false;
+            titleLabel.Left = 28;
+            titleLabel.Top = 24;
+            titleLabel.Width = 464;
+            titleLabel.Height = 34;
+            titleLabel.Text = uninstall ? "Desinstallation de NexusWpp" : "Installation de NexusWpp";
+            titleLabel.Font = new Font("Segoe UI Semibold", 16F, FontStyle.Bold, GraphicsUnit.Point);
+            titleLabel.ForeColor = Color.White;
+
+            statusLabel = new Label();
+            statusLabel.AutoSize = false;
+            statusLabel.Left = 30;
+            statusLabel.Top = 72;
+            statusLabel.Width = 460;
+            statusLabel.Height = 44;
+            statusLabel.Text = "Preparation...";
+            statusLabel.ForeColor = Color.FromArgb(210, 220, 230);
+
+            progressTrack = new Panel();
+            progressTrack.Left = 30;
+            progressTrack.Top = 130;
+            progressTrack.Width = 460;
+            progressTrack.Height = 12;
+            progressTrack.BackColor = Color.FromArgb(48, 55, 64);
+
+            progressFill = new Panel();
+            progressFill.Left = 0;
+            progressFill.Top = 0;
+            progressFill.Width = 0;
+            progressFill.Height = progressTrack.Height;
+            progressFill.BackColor = Color.FromArgb(0, 199, 190);
+            progressTrack.Controls.Add(progressFill);
+
+            percentLabel = new Label();
+            percentLabel.AutoSize = false;
+            percentLabel.Left = 30;
+            percentLabel.Top = 150;
+            percentLabel.Width = 460;
+            percentLabel.Height = 28;
+            percentLabel.Text = "0 %";
+            percentLabel.TextAlign = ContentAlignment.MiddleRight;
+            percentLabel.ForeColor = Color.FromArgb(150, 166, 178);
+
+            closeButton = new Button();
+            closeButton.Left = 370;
+            closeButton.Top = 178;
+            closeButton.Width = 120;
+            closeButton.Height = 34;
+            closeButton.Text = "Fermer";
+            closeButton.Enabled = false;
+            closeButton.FlatStyle = FlatStyle.Flat;
+            closeButton.FlatAppearance.BorderColor = Color.FromArgb(80, 94, 108);
+            closeButton.BackColor = Color.FromArgb(36, 43, 51);
+            closeButton.ForeColor = Color.White;
+            closeButton.Click += delegate { Close(); };
+
+            Controls.Add(titleLabel);
+            Controls.Add(statusLabel);
+            Controls.Add(progressTrack);
+            Controls.Add(percentLabel);
+            Controls.Add(closeButton);
+        }
+
+        public void Report(int percent, string message)
+        {
+            if (IsDisposed) return;
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action<int, string>(Report), percent, message);
+                return;
+            }
+
+            int safePercent = Math.Max(0, Math.Min(100, percent));
+            statusLabel.Text = message;
+            percentLabel.Text = safePercent.ToString() + " %";
+            progressFill.Width = (int)Math.Round(progressTrack.Width * (safePercent / 100.0));
+            progressFill.Refresh();
+        }
+
+        public void Complete(bool success, string message, int exitCode)
+        {
+            if (IsDisposed) return;
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action<bool, string, int>(Complete), success, message, exitCode);
+                return;
+            }
+
+            completed = true;
+            ExitCode = exitCode;
+            Report(100, message);
+            progressFill.BackColor = success ? Color.FromArgb(48, 209, 88) : Color.FromArgb(255, 69, 58);
+            titleLabel.Text = success ? "Termine" : "Erreur d'installation";
+            closeButton.Enabled = true;
+            closeButton.Focus();
+            ControlBox = true;
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            if (!completed)
+            {
+                e.Cancel = true;
+                return;
+            }
+
+            base.OnFormClosing(e);
         }
     }
 }
