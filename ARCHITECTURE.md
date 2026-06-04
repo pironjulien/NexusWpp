@@ -50,5 +50,5 @@ The injected WebView2 window lives below desktop icons, so normal mouse delivery
 - WebView2 is warmed before `WorkerW` is found.
 - The Canvas loop sleeps when particles/interactions stop.
 - Top-process WMI collection is throttled and protected against overlapping calls.
-- GPU routing preferences are written in `HKCU\Software\Microsoft\DirectX\UserGpuPreferences`.
+- GPU routing is left to Windows; NexusWpp does not write DirectX GPU preferences.
 - Fullscreen app detection suspends telemetry and Canvas work, then resumes immediately when fullscreen clears.

@@ -61,7 +61,7 @@ if (!(Test-Path $localFolder)) {
 # 1.8 Clean up obsolete files and leftovers in destination directory C:\nexuswpp
 Write-Host "Cleaning up obsolete files in C:\nexuswpp..." -ForegroundColor Yellow
 $allowedFiles = @(
-    "app.js", "style.css", "index.html", "loading-zero.png", "loading-zero-1440p.png", "julienpiron.png", "splash.jpg", "icon.ico", "nexuswpp.exe",
+    "app.js", "style.css", "index.html", "loading-zero-5120x1440.png", "julienpiron.png", "splash.jpg", "icon.ico", "nexuswpp.exe",
     "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll", "WebView2Loader.dll",
     "webview_debug.log"
 )
@@ -77,7 +77,7 @@ Get-ChildItem -Path $localFolder | ForEach-Object {
 }
 
 Write-Host "Copying optimized files from $PSScriptRoot to local folder..." -ForegroundColor Yellow
-$filesToCopy = @("app.js", "style.css", "index.html", "loading-zero.png", "loading-zero-1440p.png", "julienpiron.png", "splash.jpg", "icon.ico")
+$filesToCopy = @("app.js", "style.css", "index.html", "loading-zero-5120x1440.png", "julienpiron.png", "splash.jpg", "icon.ico")
 foreach ($file in $filesToCopy) {
     $src = Join-Path $PSScriptRoot $file
     $dest = Join-Path $localFolder $file
@@ -138,6 +138,21 @@ $shortcut.WindowStyle = 7
 $shortcut.Save()
 Write-Host "Startup shortcut registered for fastest user-session launch." -ForegroundColor Green
 
+$serializeKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize"
+if (!(Test-Path $serializeKey)) {
+    New-Item -Path $serializeKey -Force | Out-Null
+}
+New-ItemProperty -Path $serializeKey -Name "StartupDelayInMSec" -Value 0 -PropertyType DWord -Force | Out-Null
+Write-Host "Windows startup app delay disabled for this user." -ForegroundColor Green
+
+$runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+New-ItemProperty -Path $runKey -Name "NexusWpp" -Value '"C:\nexuswpp\nexuswpp.exe"' -PropertyType String -Force | Out-Null
+$startupApprovedRunKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
+if (Test-Path $startupApprovedRunKey) {
+    New-ItemProperty -Path $startupApprovedRunKey -Name "NexusWpp" -Value ([byte[]](0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)) -PropertyType Binary -Force | Out-Null
+}
+Write-Host "HKCU Run startup entry registered for immediate user logon launch." -ForegroundColor Green
+
 Write-Host "Registering non-elevated backup Windows Scheduled Task for nexuswpp.exe..." -ForegroundColor Yellow
 
 # Clean up old Telemetry task
@@ -148,27 +163,21 @@ $action = New-ScheduledTaskAction -Execute "C:\nexuswpp\nexuswpp.exe" -WorkingDi
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 # Run in the normal user session. Highest elevation can delay launch at logon and is not needed here.
 $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -RunLevel Limited
-# Configure settings (Priority = 2, run on battery enabled, do not stop on battery transition)
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 2
+# Configure settings for earliest practical user-session launch.
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 0 -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Seconds 0)
 
-# Remove existing task if any to prevent conflicts
-Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
+try {
+    # Remove existing task if any to prevent conflicts
+    Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
 
-# Register the new task
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
+    # Register the new task
+    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
 
-Write-Host "Windows Scheduled Task '$taskName' successfully registered as a non-elevated backup launcher!" -ForegroundColor Green
-
-# 6. Ensure DirectX GPU Registry key is configured for the host
-Write-Host "Configuring DirectX GPU preferences for nexuswpp.exe..." -ForegroundColor Yellow
-$directxKey = "HKCU:\Software\Microsoft\DirectX\UserGpuPreferences"
-if (!(Test-Path $directxKey)) {
-    New-Item -Path $directxKey -Force | Out-Null
+    Write-Host "Windows Scheduled Task '$taskName' successfully registered as a non-elevated backup launcher!" -ForegroundColor Green
+} catch {
+    Write-Host "Warning: Scheduled Task registration was refused by Windows. HKCU Run and Startup shortcut remain active." -ForegroundColor Yellow
 }
-$hostExePath = "C:\nexuswpp\nexuswpp.exe"
-Set-ItemProperty -Path $directxKey -Name $hostExePath -Value "GpuPreference=1;" -Force
 
-Write-Host "Registry GpuPreference=1; applied for nexuswpp.exe!" -ForegroundColor Green
 Write-Host "--- DEPLOYMENT COMPLETED! ---" -ForegroundColor Cyan
 } catch {
     $errMessage = "Deployment failed at $(Get-Date):`n$_`n`nStack Trace:`n$($_.ScriptStackTrace)"
