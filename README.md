@@ -14,7 +14,7 @@ NexusWpp affiche un cockpit matériel dynamique directement dans le bureau Windo
 - `DesktopHtmlHost.cs` : hôte WinForms/WebView2, injection desktop, hook souris, collecte télémétrie native.
 - `index.html`, `app.js`, `style.css` : interface du cockpit et moteur Canvas.
 - `compile.ps1` : compile `DesktopHtmlHost.cs` en `bin\nexuswpp.exe`.
-- `deploy_local.ps1` : copie l'app dans `C:\nexuswpp`, crée un raccourci Startup et une tâche planifiée de secours.
+- `deploy_local.ps1` : copie l'app dans `C:\nexuswpp` et configure le lancement Windows via `HKLM\...\Run`.
 - `run.bat` : menu local pour démarrer, compiler, déployer ou arrêter l'app.
 - `scripts/benchmark_nexuswpp.ps1` : benchmark multi-run CPU/RAM/startup.
 - `scripts/benchmark_fullscreen_suspend.ps1` : mesure actif vs suspension plein écran.
@@ -40,7 +40,7 @@ Pour produire un installeur `.exe` autonome:
 .\scripts\build_installer.ps1
 ```
 
-Le fichier généré est `dist\NexusWppSetup.exe`. Il embarque l'application compilée, les DLL WebView2 SDK, les assets et le générateur de snapshot zéro. Au lancement, il demande les droits administrateur, installe dans `C:\nexuswpp`, vérifie le Runtime WebView2 Evergreen, le télécharge depuis Microsoft si nécessaire, régénère `loading-zero-5120x1440.png` pour le bureau virtuel complet quand possible, configure un seul lancement Windows via `HKLM\...\Run`, inscrit NexusWpp dans Applications installées avec une commande de désinstallation, puis démarre le fond d'écran.
+Le fichier généré est `dist\NexusWppSetup.exe`. Il embarque l'application compilée, les DLL WebView2 SDK, les assets et le générateur de snapshot zéro. Au lancement, il demande les droits administrateur, installe dans `C:\nexuswpp`, vérifie le Runtime WebView2 Evergreen, le télécharge depuis Microsoft si nécessaire, régénère `loading-zero-5120x1440.png` pour le bureau virtuel complet quand possible, configure un seul lancement Windows via `HKLM\...\Run`, ajoute `NexusWpp` au menu Démarrer, inscrit NexusWpp dans Applications installées avec une commande de désinstallation, puis démarre le fond d'écran.
 
 Pour signer l'installeur, installer le Windows SDK puis définir l'une des configurations suivantes avant le build:
 
@@ -59,20 +59,21 @@ $env:NEXUSWPP_SIGN_PFX_PASSWORD = "mot-de-passe"
 
 Sans certificat code-signing public, l'installeur fonctionne mais peut afficher un avertissement SmartScreen.
 
-Pour mettre a jour une installation existante, relancer simplement un `NexusWppSetup.exe` plus recent. L'installeur arrete l'instance active, remplace les fichiers, nettoie les anciens lanceurs, conserve un seul demarrage `HKLM\...\Run`, regenere l'image zero et relance le fond. La desinstallation Windows utilise `C:\nexuswpp\NexusWppSetup.exe /uninstall`.
+Pour mettre a jour une installation existante, relancer simplement un `NexusWppSetup.exe` plus recent. L'installeur arrete l'instance active, remplace les fichiers, nettoie les anciens lanceurs, conserve un seul demarrage `HKLM\...\Run`, met a jour le raccourci du menu Demarrer, regenere l'image zero et relance le fond. La desinstallation Windows utilise `C:\nexuswpp\NexusWppSetup.exe /uninstall`.
 
-Le déploiement configure deux lanceurs:
+L'installeur configure:
 
-- un raccourci `NexusWpp.lnk` dans le dossier Startup, pour un lancement utilisateur très tôt;
-- une tâche planifiée `NexusWpp` non élevée, comme secours.
+- une entrée de démarrage unique `NexusWpp` dans `HKLM\...\Run`;
+- un raccourci `NexusWpp.lnk` dans le menu Démarrer commun;
+- une entrée de désinstallation dans Applications installées.
 
-L'application contient un verrou single-instance, donc les deux lanceurs ne créent pas deux fonds d'écran.
+L'application contient un verrou single-instance, donc relancer `NexusWpp` depuis le menu Démarrer ne crée pas deux fonds d'écran.
 
 ## Portabilité
 
 - Le matériel est détecté automatiquement via WMI, Win32, interfaces réseau Windows et NVML quand disponible.
 - Le dossier de production reste `C:\nexuswpp` pour accélérer le démarrage et éviter OneDrive.
-- Le raccourci de démarrage utilise le dossier Startup de l'utilisateur courant, pas un chemin utilisateur codé en dur.
+- Le raccourci du menu Démarrer est créé dans le dossier commun Windows, pas dans un chemin utilisateur codé en dur.
 - Le fond d'écran fonctionne sans serveur Node et sans dépendance npm.
 - Le sélecteur d'alimentation confirme le GUID actif Windows et ignore les clics quand une autre application recouvre le panneau.
 - `loading-zero-5120x1440.png` masque le chargement WebView2 avec le layout courant, les modes d'alimentation Windows réels et la hauteur de barre des tâches détectée.

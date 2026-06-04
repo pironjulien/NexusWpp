@@ -61,6 +61,7 @@ namespace NexusWppInstaller
                 ExtractPayload();
                 GenerateScreenMatchedLoadingSnapshot();
                 RegisterStartup();
+                RegisterStartMenuShortcut();
                 RegisterUninstallEntry();
                 PersistInstallerForUninstall();
                 StartWallpaper();
@@ -82,6 +83,7 @@ namespace NexusWppInstaller
             Log("Starting NexusWpp uninstall.");
             StopRunningWallpaper();
             CleanupStartupEntries();
+            RemoveStartMenuShortcut();
             RemoveUninstallEntry();
 
             string self = Assembly.GetExecutingAssembly().Location;
@@ -407,6 +409,79 @@ namespace NexusWppInstaller
             catch (Exception ex)
             {
                 Log("Startup shortcut cleanup failed: " + ex.Message);
+            }
+        }
+
+        private static void RegisterStartMenuShortcut()
+        {
+            string shortcutPath = GetCommonStartMenuShortcutPath();
+            string shortcutDir = Path.GetDirectoryName(shortcutPath);
+            if (!string.IsNullOrEmpty(shortcutDir)) Directory.CreateDirectory(shortcutDir);
+
+            CreateShellShortcut(
+                shortcutPath,
+                Path.Combine(InstallDir, "nexuswpp.exe"),
+                InstallDir,
+                Path.Combine(InstallDir, "icon.ico"),
+                "NexusWpp dynamic desktop wallpaper");
+
+            Log("Start Menu shortcut registered: " + shortcutPath);
+        }
+
+        private static void RemoveStartMenuShortcut()
+        {
+            DeleteStartMenuShortcut(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms));
+            DeleteStartMenuShortcut(Environment.GetFolderPath(Environment.SpecialFolder.Programs));
+        }
+
+        private static string GetCommonStartMenuShortcutPath()
+        {
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "NexusWpp.lnk");
+        }
+
+        private static void DeleteStartMenuShortcut(string programsFolder)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(programsFolder)) return;
+                string shortcut = Path.Combine(programsFolder, "NexusWpp.lnk");
+                if (File.Exists(shortcut)) File.Delete(shortcut);
+            }
+            catch (Exception ex)
+            {
+                Log("Start Menu shortcut cleanup failed: " + ex.Message);
+            }
+        }
+
+        private static void CreateShellShortcut(string shortcutPath, string targetPath, string workingDirectory, string iconPath, string description)
+        {
+            Type shellType = Type.GetTypeFromProgID("WScript.Shell");
+            if (shellType == null) throw new InvalidOperationException("WScript.Shell is unavailable.");
+
+            object shell = null;
+            object shortcut = null;
+            try
+            {
+                shell = Activator.CreateInstance(shellType);
+                shortcut = shellType.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { shortcutPath });
+                Type shortcutType = shortcut.GetType();
+                shortcutType.InvokeMember("TargetPath", BindingFlags.SetProperty, null, shortcut, new object[] { targetPath });
+                shortcutType.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, shortcut, new object[] { workingDirectory });
+                shortcutType.InvokeMember("IconLocation", BindingFlags.SetProperty, null, shortcut, new object[] { iconPath });
+                shortcutType.InvokeMember("Description", BindingFlags.SetProperty, null, shortcut, new object[] { description });
+                shortcutType.InvokeMember("Save", BindingFlags.InvokeMethod, null, shortcut, null);
+            }
+            finally
+            {
+                if (shortcut != null && System.Runtime.InteropServices.Marshal.IsComObject(shortcut))
+                {
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(shortcut);
+                }
+
+                if (shell != null && System.Runtime.InteropServices.Marshal.IsComObject(shell))
+                {
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(shell);
+                }
             }
         }
 
