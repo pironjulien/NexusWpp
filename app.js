@@ -103,10 +103,21 @@ let pendingPowerPlanGuid = "";
 let powerPlanSwitchTimer = 0;
 let lastRemoteBoundsMsg = "";
 let loadingSnapshotDismissed = false;
+let initialTelemetryApplied = false;
+let firstCanvasFrameRendered = false;
+let logoReadyForInitialRender = false;
 let runtimeSuspended = false;
 const lastPacketNodeTime = {};
 const lastTelemetryNodeValues = {};
 const MAX_DATA_PACKETS = 72;
+const LOADING_SNAPSHOT_MAX_WAIT_MS = 3200;
+
+setTimeout(() => {
+    initialTelemetryApplied = true;
+    firstCanvasFrameRendered = true;
+    logoReadyForInitialRender = true;
+    maybeHideLoadingSnapshot();
+}, LOADING_SNAPSHOT_MAX_WAIT_MS);
 
 // --- 🕰️ CYBER-CLOCK WIDGET ENGINE ---
 const days = ["DIMANCHE", "LUNDI", "MARDI", "MERCREDI", "JEUDI", "VENDREDI", "SAMEDI"];
@@ -137,6 +148,23 @@ const canvas = document.getElementById("physics-canvas");
 const ctx = canvas.getContext("2d");
 let width, height;
 let bgCanvas = null;
+let telemetryMapReady = false;
+let telemetryNodesInitialized = false;
+const CORE_TARGET_OFFSET_X = 10;
+const CORE_TARGET_OFFSET_Y = -26;
+const TELEMETRY_ORBIT_SCALE = 0.38;
+const TELEMETRY_ORBIT_MAX = 320;
+const TELEMETRY_ORBIT_RING_INDEX = 3;
+const TELEMETRY_RADAR_RING_COUNT = 5;
+const TELEMETRY_NODE_ANGLES = {
+    cpu: -150,
+    net: -90,
+    ram: -30,
+    ssd: 30,
+    gpu: 90,
+    igpu: 150,
+    npuAccel: 180
+};
 
 function resizeCanvas() {
     const rect = canvas.parentElement.getBoundingClientRect();
@@ -146,6 +174,7 @@ function resizeCanvas() {
 }
 window.addEventListener("resize", () => {
     resizeCanvas();
+    syncTelemetryLayoutAfterResize(true);
     wakeCanvas();
 });
 resizeCanvas();
@@ -154,6 +183,7 @@ resizeCanvas();
 if (canvas.parentElement && typeof ResizeObserver !== 'undefined') {
     const resizeObserver = new ResizeObserver(() => {
         resizeCanvas();
+        syncTelemetryLayoutAfterResize(true);
         wakeCanvas();
     });
     resizeObserver.observe(canvas.parentElement);
@@ -173,7 +203,16 @@ document.addEventListener("visibilitychange", () => {
 const logoImg = new Image();
 logoImg.src = "julienpiron.png";
 let logoLoaded = false;
-logoImg.onload = () => logoLoaded = true;
+logoImg.onload = () => {
+    logoLoaded = true;
+    logoReadyForInitialRender = true;
+    wakeCanvas();
+    maybeHideLoadingSnapshot();
+};
+logoImg.onerror = () => {
+    logoReadyForInitialRender = true;
+    maybeHideLoadingSnapshot();
+};
 
 // Interactive state
 let mouse = { x: null, y: null, isDown: false, grabbedNode: null };
@@ -352,45 +391,40 @@ for (let i = 0; i < telemetryNodeList.length; i++) {
     renderNodeOffscreen(telemetryNodeList[i]);
 }
 
+function getTelemetryLayout() {
+    const cx = (width / 2) + CORE_TARGET_OFFSET_X;
+    const cy = (height / 2) + CORE_TARGET_OFFSET_Y;
+    const maxAvailableRadius = Math.max(80, Math.min(cx, width - cx, cy, height - cy) - 28);
+    const maxSafeNodeOrbit = Math.max(96, Math.min(cx - 44, width - cx - 44, cy - 44, height - cy - 72));
+    const preferredOrbit = Math.min(Math.min(width, height) * TELEMETRY_ORBIT_SCALE, TELEMETRY_ORBIT_MAX);
+    const orbitRadius = Math.max(96, Math.min(preferredOrbit, maxSafeNodeOrbit));
+    const radarStep = orbitRadius / TELEMETRY_ORBIT_RING_INDEX;
+    const maxRadarRadius = Math.max(orbitRadius, Math.min(maxAvailableRadius, radarStep * TELEMETRY_RADAR_RING_COUNT));
+
+    return { cx, cy, orbitRadius, radarStep, maxRadarRadius };
+}
+
 // Position targets setup
 function updateNodeTargets() {
-    const cx = width / 2;
-    const cy = height / 2;
-    const rx = Math.min(cx * 0.70, 320); // Orbit radius X
-    const ry = Math.min(cy * 0.65, cy - 78); // Orbit radius Y (constrained to prevent top/bottom clipping of labels)
+    const layout = getTelemetryLayout();
+    const placeOnOrbit = (node, angleDeg) => {
+        const angle = angleDeg * Math.PI / 180;
+        node.targetX = layout.cx + Math.cos(angle) * layout.orbitRadius;
+        node.targetY = layout.cy + Math.sin(angle) * layout.orbitRadius;
+    };
     
     // Core at Center
-    telemetryNodes.npu.targetX = cx;
-    telemetryNodes.npu.targetY = cy;
+    telemetryNodes.npu.targetX = layout.cx;
+    telemetryNodes.npu.targetY = layout.cy;
     
-    // Surround nodes laid out around the core, including the dedicated NPU node.
-    // CPU: -150 deg
-    telemetryNodes.cpu.targetX = cx + Math.cos(-145 * Math.PI / 180) * rx;
-    telemetryNodes.cpu.targetY = cy + Math.sin(-145 * Math.PI / 180) * ry;
-    
-    // Net: -90 deg (Top Center)
-    telemetryNodes.net.targetX = cx + Math.cos(-90 * Math.PI / 180) * rx;
-    telemetryNodes.net.targetY = cy + Math.sin(-90 * Math.PI / 180) * ry;
-    
-    // RAM: -30 deg
-    telemetryNodes.ram.targetX = cx + Math.cos(-35 * Math.PI / 180) * rx;
-    telemetryNodes.ram.targetY = cy + Math.sin(-35 * Math.PI / 180) * ry;
-    
-    // SSD: 30 deg
-    telemetryNodes.ssd.targetX = cx + Math.cos(25 * Math.PI / 180) * rx;
-    telemetryNodes.ssd.targetY = cy + Math.sin(25 * Math.PI / 180) * ry;
-    
-    // GPU: 90 deg (Bottom Center)
-    telemetryNodes.gpu.targetX = cx + Math.cos(90 * Math.PI / 180) * rx;
-    telemetryNodes.gpu.targetY = cy + Math.sin(90 * Math.PI / 180) * ry;
-    
-    // iGPU: 150 deg
-    telemetryNodes.igpu.targetX = cx + Math.cos(145 * Math.PI / 180) * rx;
-    telemetryNodes.igpu.targetY = cy + Math.sin(145 * Math.PI / 180) * ry;
-
-    // NPU: left side between CPU and iGPU
-    telemetryNodes.npuAccel.targetX = cx + Math.cos(180 * Math.PI / 180) * rx;
-    telemetryNodes.npuAccel.targetY = cy + Math.sin(180 * Math.PI / 180) * ry;
+    // Surround nodes: one shared radius, exact 60-degree spacing for the six visible nodes.
+    placeOnOrbit(telemetryNodes.cpu, TELEMETRY_NODE_ANGLES.cpu);
+    placeOnOrbit(telemetryNodes.net, TELEMETRY_NODE_ANGLES.net);
+    placeOnOrbit(telemetryNodes.ram, TELEMETRY_NODE_ANGLES.ram);
+    placeOnOrbit(telemetryNodes.ssd, TELEMETRY_NODE_ANGLES.ssd);
+    placeOnOrbit(telemetryNodes.gpu, TELEMETRY_NODE_ANGLES.gpu);
+    placeOnOrbit(telemetryNodes.igpu, TELEMETRY_NODE_ANGLES.igpu);
+    placeOnOrbit(telemetryNodes.npuAccel, TELEMETRY_NODE_ANGLES.npuAccel);
 }
 
 // Initialize nodes at targets
@@ -401,7 +435,26 @@ function initNodes() {
         node.x = node.targetX;
         node.y = node.targetY;
     });
+    telemetryNodesInitialized = true;
 }
+
+function syncTelemetryLayoutAfterResize(snapToTargets = false) {
+    if (!telemetryMapReady || !width || !height) return;
+
+    updateNodeTargets();
+    if (snapToTargets || telemetryNodesInitialized) {
+        Object.keys(telemetryNodes).forEach(key => {
+            const node = telemetryNodes[key];
+            if (mouse.grabbedNode === node) return;
+            node.x = node.targetX;
+            node.y = node.targetY;
+        });
+        telemetryNodesInitialized = true;
+    }
+}
+
+telemetryMapReady = true;
+syncTelemetryLayoutAfterResize(true);
 
 // Neural flow data packets system
 let dataPackets = [];
@@ -539,12 +592,9 @@ function renderStaticBackground() {
     bgCtx.strokeStyle = "rgba(255, 255, 255, 0.032)";
     bgCtx.lineWidth = 1;
     
-    // Draw concentric radar lines inside the visible map area.
-    const cx = width / 2;
-    const cy = height / 2;
-    const maxRadarRadius = Math.max(80, Math.min(width, height) / 2 - 28);
-    const radarStep = Math.max(54, maxRadarRadius / 5);
-    for (let r = radarStep; r <= maxRadarRadius; r += radarStep) {
+    // Draw concentric radar lines around the same center used by the telemetry nodes.
+    const { cx, cy, radarStep, maxRadarRadius } = getTelemetryLayout();
+    for (let r = radarStep; r <= maxRadarRadius + 0.01; r += radarStep) {
         bgCtx.beginPath();
         bgCtx.arc(cx, cy, r, 0, Math.PI * 2);
         bgCtx.stroke();
@@ -615,7 +665,7 @@ function updatePhysics(timestamp) {
     lastPhysicsTime = timestamp - (elapsed % physicsFpsInterval);
     
 
-    if (telemetryNodes.npu.x === 0 && width > 0) {
+    if (!telemetryNodesInitialized && width > 0) {
         initNodes();
     }
     
@@ -627,34 +677,15 @@ function updatePhysics(timestamp) {
     }
     ctx.drawImage(bgCanvas, 0, 0);
     
-    const stressMode = systemIsOverloaded;
-    
     // 2. Update node physics (elastic spring return back to target coordinates)
     for (let i = 0; i < telemetryNodeList.length; i++) {
         const node = telemetryNodeList[i];
         if (node.visible === false) continue;
         
-        // Jitter under stress mode (>80%)
-        let jitterX = 0, jitterY = 0;
-        if (stressMode) {
-            jitterX = (Math.random() - 0.5) * 5.0;
-            jitterY = (Math.random() - 0.5) * 5.0;
-        }
-        
-        // Elastic spring solver towards targets if not grabbed by user mouse
+        // Keep resting nodes exactly on the geometric target grid.
         if (mouse.grabbedNode !== node) {
-            const springStrength = 0.082;
-            
-            // Calculate distance to target
-            const dx = node.targetX - node.x;
-            const dy = node.targetY - node.y;
-            
-            // Velocity simulation
-            const vx = dx * springStrength + jitterX;
-            const vy = dy * springStrength + jitterY;
-            
-            node.x += vx;
-            node.y += vy;
+            node.x = node.targetX;
+            node.y = node.targetY;
         }
         
         // Orbit ring rotation angle increment
@@ -780,11 +811,19 @@ function updatePhysics(timestamp) {
         
         // Static NPU Core logo draw on top of dynamic NPU body (or overlayed if logoLoaded)
         if (node === telemetryNodes.npu && logoLoaded) {
+            const logoRadius = node.radius - 5;
+            const logoDiameter = logoRadius * 2;
             ctx.save();
             ctx.beginPath();
-            ctx.arc(0, 0, node.radius - 2, 0, Math.PI * 2);
+            ctx.arc(0, 0, logoRadius, 0, Math.PI * 2);
             ctx.clip();
-            ctx.drawImage(logoImg, -node.radius, -node.radius, node.radius * 2, node.radius * 2);
+            ctx.drawImage(
+                logoImg,
+                -logoDiameter / 2,
+                -logoDiameter / 2,
+                logoDiameter,
+                logoDiameter
+            );
             ctx.restore();
         }
         
@@ -861,6 +900,11 @@ function updatePhysics(timestamp) {
         if (p.life <= 0) {
             coreParticles.splice(i, 1);
         }
+    }
+
+    if (!firstCanvasFrameRendered) {
+        firstCanvasFrameRendered = true;
+        maybeHideLoadingSnapshot();
     }
 
     // 8. Idle-Stop Canvas Engine sleep check
@@ -947,7 +991,7 @@ function setNpuVisibility(hasNpu) {
             renderNodeOffscreen(telemetryNodes.npuAccel);
         }
         if (changed) {
-            updateNodeTargets();
+            syncTelemetryLayoutAfterResize(true);
             needsRender = true;
         }
     }
@@ -1403,6 +1447,12 @@ function updateDOM(stats) {
         wakeCanvas();
     }
     sendRemoteBounds(false);
+    initialTelemetryApplied = true;
+    maybeHideLoadingSnapshot();
+}
+
+function maybeHideLoadingSnapshot() {
+    if (!initialTelemetryApplied || !firstCanvasFrameRendered || !logoReadyForInitialRender) return;
     hideLoadingSnapshot();
 }
 
@@ -1608,6 +1658,7 @@ function dimGauges() {
 
 window.addEventListener("DOMContentLoaded", () => {
     resizeCanvas();
+    syncTelemetryLayoutAfterResize(true);
     dimGauges();
     connectStream();
     wakeCanvas();
@@ -1643,6 +1694,7 @@ window.addEventListener("resize", () => sendRemoteBounds(true));
 
 window.addEventListener("load", () => {
     resizeCanvas();
+    syncTelemetryLayoutAfterResize(true);
     wakeCanvas();
 });
 

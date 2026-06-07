@@ -41,8 +41,12 @@ namespace DesktopHtmlHost
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
 
-                // Set up local HTML file path
-                string defaultHtml = @"C:\nexuswpp\index.html";
+                // Set up local HTML file path. Prefer the executable folder so packaged builds work too.
+                string defaultHtml = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "index.html");
+                if (!File.Exists(defaultHtml))
+                {
+                    defaultHtml = @"C:\nexuswpp\index.html";
+                }
                 string htmlPath = args.Length > 0 ? args[0] : defaultHtml;
 
                 Application.Run(new DesktopForm(htmlPath));
@@ -352,7 +356,7 @@ namespace DesktopHtmlHost
             SystemEvents.SessionEnding += SystemEvents_SessionEnding;
 
             // Create and configure the WebView2 UI component
-            webView = new WebView2();
+            webView = new ResilientWebView2();
             webView.Dock = DockStyle.Fill;
             this.Controls.Add(webView);
 
@@ -513,6 +517,20 @@ namespace DesktopHtmlHost
                 UnhookWindowsHookEx(hookId);
                 hookId = IntPtr.Zero;
             }
+
+            if (webView != null)
+            {
+                try
+                {
+                    webView.Dock = DockStyle.None;
+                    webView.Visible = false;
+                    Controls.Remove(webView);
+                }
+                catch (Exception ex)
+                {
+                    Program.LogDebug("WebView detach during shutdown failed: " + ex.Message);
+                }
+            }
         }
 
         private async void InitializeWebViewAsync()
@@ -531,7 +549,10 @@ namespace DesktopHtmlHost
                 options.AdditionalBrowserArguments = "--disable-features=EdgeSidebar,EdgeTranslate --disable-gpu-driver-bug-workarounds --ignore-gpu-blocklist";
 
                 var environment = await CoreWebView2Environment.CreateAsync(null, userDataFolder, options);
+                if (isClosing || IsDisposed || webView == null || webView.IsDisposed) return;
+
                 await webView.EnsureCoreWebView2Async(environment);
+                if (isClosing || IsDisposed || webView == null || webView.IsDisposed) return;
 
                 webView.DefaultBackgroundColor = System.Drawing.Color.Transparent;
 
@@ -548,6 +569,8 @@ namespace DesktopHtmlHost
                 {
                     try
                     {
+                        if (isClosing || IsDisposed) return;
+
                         string msg = ev.TryGetWebMessageAsString();
                         if (msg != null && !msg.StartsWith("BOUNDS:"))
                         {
@@ -626,7 +649,7 @@ namespace DesktopHtmlHost
                     {
                         var collector = new TelemetryCollector();
                         collector.Initialize();
-                        BeginInvoke((MethodInvoker)delegate
+                        TryBeginInvoke((MethodInvoker)delegate
                         {
                             telemetryCollector = collector;
                             telemetryReady = true;
@@ -644,6 +667,8 @@ namespace DesktopHtmlHost
             }
             catch (Exception ex)
             {
+                if (isClosing || IsDisposed) return;
+
                 MessageBox.Show(
                     string.Format("WebView2 Runtime failed to initialize.\n\nDetails:\n{0}", ex.Message),
                     "Host Initialization Failure", 
@@ -681,10 +706,7 @@ namespace DesktopHtmlHost
 
             try
             {
-                if (webView != null && webView.CoreWebView2 != null)
-                {
-                    webView.CoreWebView2.PostWebMessageAsJson(suspended ? "{\"control\":\"SUSPEND\"}" : "{\"control\":\"RESUME\"}");
-                }
+                PostWebMessageAsJsonSafe(suspended ? "{\"control\":\"SUSPEND\"}" : "{\"control\":\"RESUME\"}", "Runtime suspend post");
             }
             catch (Exception ex)
             {
@@ -730,16 +752,13 @@ namespace DesktopHtmlHost
 
             try
             {
-                if (webView != null && webView.CoreWebView2 != null)
-                {
-                    string payload = string.Format(CultureInfo.InvariantCulture,
-                        "{{\"control\":\"POWER_RESULT\",\"requestedGuid\":{0},\"activeGuid\":{1},\"success\":{2},\"error\":{3}}}",
-                        JsonString(guidStr),
-                        JsonString(activeGuid),
-                        success ? "true" : "false",
-                        JsonString(error));
-                    webView.CoreWebView2.PostWebMessageAsJson(payload);
-                }
+                string payload = string.Format(CultureInfo.InvariantCulture,
+                    "{{\"control\":\"POWER_RESULT\",\"requestedGuid\":{0},\"activeGuid\":{1},\"success\":{2},\"error\":{3}}}",
+                    JsonString(guidStr),
+                    JsonString(activeGuid),
+                    success ? "true" : "false",
+                    JsonString(error));
+                PostWebMessageAsJsonSafe(payload, "Power result post");
             }
             catch (Exception ex)
             {
@@ -868,14 +887,11 @@ namespace DesktopHtmlHost
                             return;
                         }
                         statsJson = telemetryCollector.CollectStats();
-                        BeginInvoke((MethodInvoker)delegate
+                        if (!TryBeginInvoke((MethodInvoker)delegate
                         {
                             try
                             {
-                                if (!isClosing && !IsDisposed && webView != null && !webView.IsDisposed && webView.CoreWebView2 != null)
-                                {
-                                    webView.CoreWebView2.PostWebMessageAsJson(statsJson);
-                                }
+                                PostWebMessageAsJsonSafe(statsJson, "Telemetry post");
                             }
                             catch (Exception ex)
                             {
@@ -885,17 +901,23 @@ namespace DesktopHtmlHost
                             {
                                 telemetryCollectPending = false;
                             }
-                        });
+                        }))
+                        {
+                            telemetryCollectPending = false;
+                        }
                     }
                     catch (Exception ex)
                     {
                         Program.LogDebug("Telemetry collect error: " + ex.Message + " | JSON: " + statsJson);
                         try
                         {
-                            BeginInvoke((MethodInvoker)delegate
+                            if (!TryBeginInvoke((MethodInvoker)delegate
                             {
                                 telemetryCollectPending = false;
-                            });
+                            }))
+                            {
+                                telemetryCollectPending = false;
+                            }
                         }
                         catch
                         {
@@ -948,9 +970,101 @@ namespace DesktopHtmlHost
                 if (webView != null)
                 {
                     webView.Dispose();
+                    webView = null;
                 }
             }
             base.Dispose(disposing);
+        }
+
+        private bool TryBeginInvoke(MethodInvoker action)
+        {
+            if (isClosing || IsDisposed || !IsHandleCreated)
+            {
+                return false;
+            }
+
+            try
+            {
+                BeginInvoke(action);
+                return true;
+            }
+            catch (ObjectDisposedException)
+            {
+                return false;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+        }
+
+        private bool TryGetCoreWebView2(out CoreWebView2 coreWebView)
+        {
+            coreWebView = null;
+            if (isClosing || IsDisposed || webView == null || webView.IsDisposed)
+            {
+                return false;
+            }
+
+            try
+            {
+                coreWebView = webView.CoreWebView2;
+                return coreWebView != null;
+            }
+            catch (ObjectDisposedException)
+            {
+                return false;
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (!isClosing)
+                {
+                    Program.LogDebug("WebView unavailable: " + ex.Message);
+                }
+                return false;
+            }
+        }
+
+        private void PostWebMessageAsJsonSafe(string payload, string context)
+        {
+            CoreWebView2 coreWebView;
+            if (!TryGetCoreWebView2(out coreWebView))
+            {
+                return;
+            }
+
+            try
+            {
+                coreWebView.PostWebMessageAsJson(payload);
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (!isClosing)
+                {
+                    Program.LogDebug(context + " skipped: " + ex.Message);
+                }
+            }
+        }
+
+        private sealed class ResilientWebView2 : WebView2
+        {
+            protected override void OnSizeChanged(EventArgs e)
+            {
+                try
+                {
+                    base.OnSizeChanged(e);
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+                catch (InvalidOperationException ex)
+                {
+                    Program.LogDebug("Suppressed WebView2 resize after disposal: " + ex.Message);
+                }
+            }
         }
 
         private static IntPtr SetHook(LowLevelMouseProc proc)

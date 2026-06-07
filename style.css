@@ -71,9 +71,9 @@ body {
     pointer-events: none;
     display: block;
     background-color: #040509;
-    background-image: url("loading-zero-5120x1440.png?v=10");
+    background-image: url("loading-zero-5120x1440.png?v=17");
     background-position: center;
-    background-size: cover;
+    background-size: 100% 100%;
     background-repeat: no-repeat;
     opacity: 1;
     transition: opacity 0.45s ease;
