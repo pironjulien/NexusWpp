@@ -11,6 +11,12 @@ using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
+[assembly: AssemblyTitle("NexusWpp Installer")]
+[assembly: AssemblyProduct("NexusWpp")]
+[assembly: AssemblyCompany("JULIENPIRON.FR")]
+[assembly: AssemblyFileVersion("1.0.1.0")]
+[assembly: AssemblyVersion("1.0.1.0")]
+
 namespace NexusWppInstaller
 {
     internal static class Program
@@ -20,7 +26,7 @@ namespace NexusWppInstaller
         private const string WebView2BootstrapperUrl = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
         private const string WebView2ClientGuid = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
         private const string ProductName = "NexusWpp";
-        private const string ProductVersion = "1.0.0";
+        internal const string ProductVersion = "1.0.1";
         private const string Publisher = "JULIENPIRON.FR";
         private const string UninstallKeyPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\NexusWpp";
 
@@ -56,7 +62,7 @@ namespace NexusWppInstaller
                 }
 
                 Install(new NullProgressReporter());
-                Show(silent, "NexusWpp is installed and running.");
+                Show(silent, ProductName + " " + ProductVersion + " is installed and running.");
                 return 0;
             }
             catch (Exception ex)
@@ -83,12 +89,12 @@ namespace NexusWppInstaller
                             if (uninstall)
                             {
                                 Uninstall(form);
-                                form.Complete(true, "NexusWpp a ete desinstalle.", 0);
+                                form.Complete(true, "NexusWpp " + ProductVersion + " a ete desinstalle.", 0);
                             }
                             else
                             {
                                 Install(form);
-                                form.Complete(true, "NexusWpp est installe et lance.", 0);
+                                form.Complete(true, "NexusWpp " + ProductVersion + " est installe et lance.", 0);
                             }
                         }
                         catch (Exception ex)
@@ -106,8 +112,8 @@ namespace NexusWppInstaller
 
         private static void Install(IProgressReporter progress)
         {
-            Log("Starting NexusWpp installation.");
-            progress.Report(5, "Preparation de l'installation...");
+            Log("Starting NexusWpp " + ProductVersion + " installation.");
+            progress.Report(5, "Preparation de l'installation " + ProductVersion + "...");
 
             progress.Report(12, "Arret de l'ancienne version...");
             StopRunningWallpaper();
@@ -140,12 +146,12 @@ namespace NexusWppInstaller
             StartWallpaper();
 
             progress.Report(100, "Installation terminee.");
-            Log("Installation completed.");
+            Log("NexusWpp " + ProductVersion + " installation completed.");
         }
 
         private static void Uninstall(IProgressReporter progress)
         {
-            Log("Starting NexusWpp uninstall.");
+            Log("Starting NexusWpp " + ProductVersion + " uninstall.");
             progress.Report(10, "Arret de NexusWpp...");
             StopRunningWallpaper();
             progress.Report(35, "Nettoyage du demarrage Windows...");
@@ -387,12 +393,38 @@ namespace NexusWppInstaller
                     if (process.ExitCode != 0)
                     {
                         Log("Snapshot generation failed with exit code " + process.ExitCode + ". Keeping bundled loading image.");
+                        return;
                     }
                 }
+
+                VerifyGeneratedLoadingSnapshot(width, height);
             }
             catch (Exception ex)
             {
                 Log("Snapshot generation skipped: " + ex.Message);
+            }
+        }
+
+        private static void VerifyGeneratedLoadingSnapshot(int expectedWidth, int expectedHeight)
+        {
+            string snapshotPath = Path.Combine(InstallDir, "loading-zero-5120x1440.png");
+            if (!File.Exists(snapshotPath))
+            {
+                Log("Generated loading snapshot not found after generation.");
+                return;
+            }
+
+            using (Image image = Image.FromFile(snapshotPath))
+            {
+                if (image.Width == expectedWidth && image.Height == expectedHeight)
+                {
+                    Log("Verified zero loading snapshot size: " + image.Width + "x" + image.Height + ".");
+                    return;
+                }
+
+                Log("Generated zero loading snapshot size mismatch. Expected "
+                    + expectedWidth + "x" + expectedHeight
+                    + ", got " + image.Width + "x" + image.Height + ".");
             }
         }
 
@@ -692,7 +724,7 @@ namespace NexusWppInstaller
         public InstallerProgressForm(bool uninstall)
         {
             ExitCode = 1;
-            Text = uninstall ? "Desinstallation NexusWpp" : "Installation NexusWpp";
+            Text = uninstall ? "Desinstallation NexusWpp " + Program.ProductVersion : "Installation NexusWpp " + Program.ProductVersion;
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
@@ -709,7 +741,7 @@ namespace NexusWppInstaller
             titleLabel.Top = 24;
             titleLabel.Width = 464;
             titleLabel.Height = 34;
-            titleLabel.Text = uninstall ? "Desinstallation de NexusWpp" : "Installation de NexusWpp";
+            titleLabel.Text = uninstall ? "Desinstallation de NexusWpp " + Program.ProductVersion : "Installation de NexusWpp " + Program.ProductVersion;
             titleLabel.Font = new Font("Segoe UI Semibold", 16F, FontStyle.Bold, GraphicsUnit.Point);
             titleLabel.ForeColor = Color.White;
 

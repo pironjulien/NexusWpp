@@ -58,6 +58,21 @@ if (!(Test-Path $localFolder)) {
     New-Item -ItemType Directory -Path $localFolder -Force | Out-Null
 }
 
+try {
+    Add-Type -AssemblyName System.Windows.Forms
+    $screenWidth = [System.Windows.Forms.SystemInformation]::VirtualScreen.Width
+    $screenHeight = [System.Windows.Forms.SystemInformation]::VirtualScreen.Height
+    $snapshotScript = Join-Path $PSScriptRoot "scripts\generate_loading_snapshot.ps1"
+    if ($screenWidth -gt 0 -and $screenHeight -gt 0 -and (Test-Path -LiteralPath $snapshotScript)) {
+        Write-Host "Generating screen-matched loading snapshot: ${screenWidth}x${screenHeight}..." -ForegroundColor Yellow
+        & $snapshotScript -Width $screenWidth -Height $screenHeight -RenderScale 1 -Mode Zero -OutputPath ".\loading-zero-5120x1440.png" | Out-Null
+    } else {
+        Write-Warning "Could not generate screen-matched loading snapshot. Existing bundled image will be copied."
+    }
+} catch {
+    Write-Warning "Snapshot generation failed. Existing bundled image will be copied. $_"
+}
+
 # 1.8 Clean up obsolete files and leftovers in destination directory C:\nexuswpp
 Write-Host "Cleaning up obsolete files in C:\nexuswpp..." -ForegroundColor Yellow
 $allowedFiles = @(
