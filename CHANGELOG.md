@@ -2,6 +2,7 @@
 
 ## 2026-06-08
 
+- Passage de l'installateur Windows en version `1.0.2`.
 - Preparation des builds de publication Microsoft Store en version `1.0.2.0`.
 - Alignement du Publisher MSIX sur l'identite reservee dans Partner Center.
 - Signature locale automatique de l'installeur quand le Windows SDK est installe.
