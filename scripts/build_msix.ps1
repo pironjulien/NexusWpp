@@ -4,8 +4,11 @@ $projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $distDir = Join-Path $projectRoot "dist\msix"
 $packageDir = Join-Path $distDir "package"
 $assetsDir = Join-Path $packageDir "Assets"
-$msixPath = Join-Path $distDir "NexusWpp_1.0.1.0_x64.msix"
-$publisher = "CN=JULIENPIRON.FR"
+$version = "1.0.2.0"
+$identityName = "julienpiron.fr.NexusWpp"
+$msixPath = Join-Path $distDir ($identityName + "_" + $version + "_x64.msix")
+$publisher = "CN=C3E3A6F0-11D2-4EE1-B3F2-34EED4CAE7FA"
+$publisherDisplayName = "JULIENPIRON.FR"
 $makeAppx = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\makeappx.exe"
 $signTool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
 
@@ -92,10 +95,10 @@ $manifest = @"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   IgnorableNamespaces="uap rescap">
-  <Identity Name="JulienPiron.NexusWpp" Publisher="$publisher" Version="1.0.1.0" ProcessorArchitecture="x64" />
+  <Identity Name="$identityName" Publisher="$publisher" Version="$version" ProcessorArchitecture="x64" />
   <Properties>
     <DisplayName>NexusWpp</DisplayName>
-    <PublisherDisplayName>JULIENPIRON.FR</PublisherDisplayName>
+    <PublisherDisplayName>$publisherDisplayName</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
   <Dependencies>
