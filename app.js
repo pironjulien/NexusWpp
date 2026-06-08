@@ -102,22 +102,10 @@ let isPowerPlanSwitching = false;
 let pendingPowerPlanGuid = "";
 let powerPlanSwitchTimer = 0;
 let lastRemoteBoundsMsg = "";
-let loadingSnapshotDismissed = false;
-let initialTelemetryApplied = false;
-let firstCanvasFrameRendered = false;
-let logoReadyForInitialRender = false;
 let runtimeSuspended = false;
 const lastPacketNodeTime = {};
 const lastTelemetryNodeValues = {};
 const MAX_DATA_PACKETS = 72;
-const LOADING_SNAPSHOT_MAX_WAIT_MS = 3200;
-
-setTimeout(() => {
-    initialTelemetryApplied = true;
-    firstCanvasFrameRendered = true;
-    logoReadyForInitialRender = true;
-    maybeHideLoadingSnapshot();
-}, LOADING_SNAPSHOT_MAX_WAIT_MS);
 
 // --- 🕰️ CYBER-CLOCK WIDGET ENGINE ---
 const days = ["DIMANCHE", "LUNDI", "MARDI", "MERCREDI", "JEUDI", "VENDREDI", "SAMEDI"];
@@ -205,14 +193,9 @@ logoImg.src = "julienpiron.png";
 let logoLoaded = false;
 logoImg.onload = () => {
     logoLoaded = true;
-    logoReadyForInitialRender = true;
     wakeCanvas();
-    maybeHideLoadingSnapshot();
 };
-logoImg.onerror = () => {
-    logoReadyForInitialRender = true;
-    maybeHideLoadingSnapshot();
-};
+logoImg.onerror = () => {};
 
 // Interactive state
 let mouse = { x: null, y: null, isDown: false, grabbedNode: null };
@@ -902,11 +885,6 @@ function updatePhysics(timestamp) {
         }
     }
 
-    if (!firstCanvasFrameRendered) {
-        firstCanvasFrameRendered = true;
-        maybeHideLoadingSnapshot();
-    }
-
     // 8. Idle-Stop Canvas Engine sleep check
     let nodesAreMoving = false;
     for (let i = 0; i < telemetryNodeList.length; i++) {
@@ -1447,27 +1425,6 @@ function updateDOM(stats) {
         wakeCanvas();
     }
     sendRemoteBounds(false);
-    initialTelemetryApplied = true;
-    maybeHideLoadingSnapshot();
-}
-
-function maybeHideLoadingSnapshot() {
-    if (!initialTelemetryApplied || !firstCanvasFrameRendered || !logoReadyForInitialRender) return;
-    hideLoadingSnapshot();
-}
-
-function hideLoadingSnapshot() {
-    if (loadingSnapshotDismissed) return;
-    loadingSnapshotDismissed = true;
-
-    const snapshot = document.getElementById("loading-snapshot");
-    if (!snapshot) return;
-
-    snapshot.classList.add("is-hidden");
-    setTimeout(() => {
-        snapshot.classList.add("is-removed");
-        snapshot.style.backgroundImage = "none";
-    }, 520);
 }
 
 function setPowerPlan(guid) {

@@ -129,20 +129,17 @@ namespace NexusWppInstaller
             progress.Report(48, "Copie des fichiers NexusWpp...");
             ExtractPayload();
 
-            progress.Report(64, "Generation de l'image zero adaptee a l'ecran...");
-            GenerateScreenMatchedLoadingSnapshot();
-
-            progress.Report(78, "Configuration du demarrage Windows...");
+            progress.Report(64, "Configuration du demarrage Windows...");
             RegisterStartup();
 
-            progress.Report(86, "Ajout au menu Demarrer...");
+            progress.Report(78, "Ajout au menu Demarrer...");
             RegisterStartMenuShortcut();
 
-            progress.Report(91, "Enregistrement de la desinstallation...");
+            progress.Report(86, "Enregistrement de la desinstallation...");
             RegisterUninstallEntry();
             PersistInstallerForUninstall();
 
-            progress.Report(96, "Lancement du fond d'ecran...");
+            progress.Report(94, "Lancement du fond d'ecran...");
             StartWallpaper();
 
             progress.Report(100, "Installation terminee.");
@@ -350,81 +347,6 @@ namespace NexusWppInstaller
                         }
                     }
                 }
-            }
-        }
-
-        private static void GenerateScreenMatchedLoadingSnapshot()
-        {
-            try
-            {
-                string script = Path.Combine(InstallDir, "scripts", "generate_loading_snapshot.ps1");
-                if (!File.Exists(script))
-                {
-                    Log("Snapshot generator not found. Keeping bundled loading image.");
-                    return;
-                }
-
-                int width = SystemInformation.VirtualScreen.Width;
-                int height = SystemInformation.VirtualScreen.Height;
-                if (width <= 0 || height <= 0)
-                {
-                    Log("Invalid primary screen size. Keeping bundled loading image.");
-                    return;
-                }
-
-                Log("Generating virtual-screen zero loading snapshot: " + width + "x" + height + ".");
-
-                ProcessStartInfo psi = new ProcessStartInfo();
-                psi.FileName = "powershell.exe";
-                psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File \"" + script + "\" -Width " + width.ToString() + " -Height " + height.ToString() + " -RenderScale 1 -Mode Zero -OutputPath .\\loading-zero-5120x1440.png";
-                psi.WorkingDirectory = InstallDir;
-                psi.UseShellExecute = false;
-                psi.CreateNoWindow = true;
-
-                using (Process process = Process.Start(psi))
-                {
-                    if (!process.WaitForExit(45000))
-                    {
-                        try { process.Kill(); } catch { }
-                        Log("Snapshot generation timed out. Keeping bundled loading image.");
-                        return;
-                    }
-
-                    if (process.ExitCode != 0)
-                    {
-                        Log("Snapshot generation failed with exit code " + process.ExitCode + ". Keeping bundled loading image.");
-                        return;
-                    }
-                }
-
-                VerifyGeneratedLoadingSnapshot(width, height);
-            }
-            catch (Exception ex)
-            {
-                Log("Snapshot generation skipped: " + ex.Message);
-            }
-        }
-
-        private static void VerifyGeneratedLoadingSnapshot(int expectedWidth, int expectedHeight)
-        {
-            string snapshotPath = Path.Combine(InstallDir, "loading-zero-5120x1440.png");
-            if (!File.Exists(snapshotPath))
-            {
-                Log("Generated loading snapshot not found after generation.");
-                return;
-            }
-
-            using (Image image = Image.FromFile(snapshotPath))
-            {
-                if (image.Width == expectedWidth && image.Height == expectedHeight)
-                {
-                    Log("Verified zero loading snapshot size: " + image.Width + "x" + image.Height + ".");
-                    return;
-                }
-
-                Log("Generated zero loading snapshot size mismatch. Expected "
-                    + expectedWidth + "x" + expectedHeight
-                    + ", got " + image.Width + "x" + image.Height + ".");
             }
         }
 

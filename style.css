@@ -64,30 +64,6 @@ body {
     align-items: flex-end;
 }
 
-.loading-snapshot {
-    position: fixed;
-    inset: 0;
-    z-index: 9999;
-    pointer-events: none;
-    display: block;
-    background-color: #040509;
-    background-image: url("loading-zero-5120x1440.png?v=17");
-    background-position: center;
-    background-size: 100% 100%;
-    background-repeat: no-repeat;
-    opacity: 1;
-    transition: opacity 0.45s ease;
-    contain: strict;
-}
-
-.loading-snapshot.is-hidden {
-    opacity: 0;
-}
-
-.loading-snapshot.is-removed {
-    display: none;
-}
-
 /* --- COSMIC BACKGROUND (SATURATED BOOSTER FOR APPLE GLASS) --- */
 .cosmos-bg {
     position: absolute;
