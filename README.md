@@ -18,7 +18,6 @@ NexusWpp affiche un cockpit matériel dynamique directement dans le bureau Windo
 - `run.bat` : menu local pour démarrer, compiler, déployer ou arrêter l'app.
 - `scripts/benchmark_nexuswpp.ps1` : benchmark multi-run CPU/RAM/startup.
 - `scripts/benchmark_fullscreen_suspend.ps1` : mesure actif vs suspension plein écran.
-- `scripts/generate_loading_snapshot.ps1` : régénère la capture de chargement `0%` en 5120x1440 depuis les infos réelles de Windows.
 
 ## Démarrage Rapide
 
@@ -40,7 +39,7 @@ Pour produire un installeur `.exe` autonome:
 .\scripts\build_installer.ps1
 ```
 
-Le fichier généré est `dist\NexusWppSetup.exe`. Il embarque l'application compilée, les DLL WebView2 SDK, les assets et le générateur de snapshot zéro. Au lancement, il demande les droits administrateur, installe dans `C:\nexuswpp`, vérifie le Runtime WebView2 Evergreen, le télécharge depuis Microsoft si nécessaire, régénère `loading-zero-5120x1440.png` pour le bureau virtuel complet quand possible, configure un seul lancement Windows via `HKLM\...\Run`, ajoute `NexusWpp` au menu Démarrer, inscrit NexusWpp dans Applications installées avec une commande de désinstallation, puis démarre le fond d'écran.
+Le fichier généré est `dist\NexusWppSetup.exe`. Il embarque l'application compilée, les DLL WebView2 SDK et les assets. Au lancement, il demande les droits administrateur, installe dans `C:\nexuswpp`, vérifie le Runtime WebView2 Evergreen, le télécharge depuis Microsoft si nécessaire, configure un seul lancement Windows via `HKLM\...\Run`, ajoute `NexusWpp` au menu Démarrer, inscrit NexusWpp dans Applications installées avec une commande de désinstallation, puis démarre le fond d'écran.
 
 Pour signer l'installeur, installer le Windows SDK puis définir l'une des configurations suivantes avant le build:
 
@@ -59,7 +58,7 @@ $env:NEXUSWPP_SIGN_PFX_PASSWORD = "mot-de-passe"
 
 Sans certificat code-signing public, l'installeur fonctionne mais peut afficher un avertissement SmartScreen.
 
-Pour mettre a jour une installation existante, relancer simplement un `NexusWppSetup.exe` plus recent. L'installeur arrete l'instance active, remplace les fichiers, nettoie les anciens lanceurs, conserve un seul demarrage `HKLM\...\Run`, met a jour le raccourci du menu Demarrer, regenere l'image zero et relance le fond. La desinstallation Windows utilise `C:\nexuswpp\NexusWppSetup.exe /uninstall`.
+Pour mettre a jour une installation existante, relancer simplement un `NexusWppSetup.exe` plus recent. L'installeur arrete l'instance active, remplace les fichiers, nettoie les anciens lanceurs, conserve un seul demarrage `HKLM\...\Run`, met a jour le raccourci du menu Demarrer et relance le fond. La desinstallation Windows utilise `C:\nexuswpp\NexusWppSetup.exe /uninstall`.
 
 L'installeur configure:
 
@@ -76,7 +75,7 @@ L'application contient un verrou single-instance, donc relancer `NexusWpp` depui
 - Le raccourci du menu Démarrer est créé dans le dossier commun Windows, pas dans un chemin utilisateur codé en dur.
 - Le fond d'écran fonctionne sans serveur Node et sans dépendance npm.
 - Le sélecteur d'alimentation confirme le GUID actif Windows et ignore les clics quand une autre application recouvre le panneau.
-- `loading-zero-5120x1440.png` masque le chargement WebView2 avec le layout courant, les modes d'alimentation Windows réels et la hauteur de barre des tâches détectée.
+- Le premier affichage est directement l'interface réelle, avec des valeurs neutres. La télémétrie remplit ensuite les champs existants dès qu'elle arrive.
 
 ## Pourquoi C'est Plus Rapide Qu'Avant
 

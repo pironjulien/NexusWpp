@@ -6,8 +6,8 @@
 - Public-source ready: source tree excludes generated binaries, logs, and benchmark JSON files through `.gitignore`.
 - Secrets scan: no obvious `password`, `secret`, `token`, or `api key` strings were found in project source.
 - Network surface: no Node server, no HTTP listener. WebView2 loads local files through a virtual host mapping.
-- Startup: user Startup shortcut plus non-elevated scheduled task fallback.
-- Privilege: deployment may request elevation only to register/update scheduled-task and registry startup preferences.
+- Startup: single `HKLM\...\Run` entry configured by the installer or deployment script.
+- Privilege: deployment and installation request elevation only to install in `C:\nexuswpp` and register Windows startup/uninstall entries.
 
 ## Performance Gates
 
@@ -20,5 +20,6 @@
 
 ## Known Limits
 
-- Executable signing and installer packaging are not done.
+- Installer packaging is available through `scripts\build_installer.ps1`.
+- Executable signing is not configured unless a signing certificate is provided through environment variables.
 - External build dependency: `compile.ps1` downloads the pinned WebView2 NuGet package over HTTPS if DLLs are absent.

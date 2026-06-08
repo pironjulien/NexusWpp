@@ -25,7 +25,6 @@ $payloadFiles = @(
     "app.js",
     "style.css",
     "index.html",
-    "loading-zero-5120x1440.png",
     "julienpiron.png",
     "splash.jpg",
     "icon.ico"
@@ -34,10 +33,6 @@ $payloadFiles = @(
 foreach ($file in $payloadFiles) {
     Copy-Item -LiteralPath (Join-Path $projectRoot $file) -Destination (Join-Path $payloadDir $file) -Force
 }
-
-$payloadScriptsDir = Join-Path $payloadDir "scripts"
-New-Item -ItemType Directory -Path $payloadScriptsDir -Force | Out-Null
-Copy-Item -LiteralPath (Join-Path $projectRoot "scripts\generate_loading_snapshot.ps1") -Destination (Join-Path $payloadScriptsDir "generate_loading_snapshot.ps1") -Force
 
 $binFiles = @(
     "nexuswpp.exe",

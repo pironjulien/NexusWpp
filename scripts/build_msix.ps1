@@ -27,7 +27,6 @@ $payloadFiles = @(
     "app.js",
     "style.css",
     "index.html",
-    "loading-zero-5120x1440.png",
     "julienpiron.png",
     "splash.jpg",
     "icon.ico"
