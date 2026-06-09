@@ -19,6 +19,7 @@ namespace DesktopHtmlHost
     static class Program
     {
         private static Mutex appMutex;
+        private const string AppDataFolderName = "NexusWpp";
 
         [DllImport("user32.dll")]
         private static extern bool SetProcessDPIAware();
@@ -41,29 +42,52 @@ namespace DesktopHtmlHost
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
 
-                // Set up local HTML file path. Prefer the executable folder so packaged builds work too.
-                string defaultHtml = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "index.html");
-                if (!File.Exists(defaultHtml))
-                {
-                    defaultHtml = @"C:\nexuswpp\index.html";
-                }
+                string defaultHtml = GetDefaultHtmlPath();
                 string htmlPath = args.Length > 0 ? args[0] : defaultHtml;
 
                 Application.Run(new DesktopForm(htmlPath));
             }
             catch (Exception ex)
             {
-                try
-                {
-                    string dir = @"C:\nexuswpp";
-                    if (!Directory.Exists(dir))
-                    {
-                        Directory.CreateDirectory(dir);
-                    }
-                    File.WriteAllText(Path.Combine(dir, "crash.txt"), ex.ToString());
-                }
-                catch { }
+                WriteCrashLog(ex);
             }
+        }
+
+        internal static string GetAppDataFolder()
+        {
+            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrEmpty(localAppData))
+            {
+                localAppData = AppDomain.CurrentDomain.BaseDirectory;
+            }
+            return Path.Combine(localAppData, AppDataFolderName);
+        }
+
+        internal static string GetWebViewUserDataFolder()
+        {
+            return Path.Combine(GetAppDataFolder(), "WebView2");
+        }
+
+        private static string GetDefaultHtmlPath()
+        {
+            string packagedHtml = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "index.html");
+            if (File.Exists(packagedHtml))
+            {
+                return packagedHtml;
+            }
+
+            return @"C:\nexuswpp\index.html";
+        }
+
+        private static void WriteCrashLog(Exception ex)
+        {
+            try
+            {
+                string dir = GetAppDataFolder();
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(Path.Combine(dir, "crash.txt"), ex.ToString());
+            }
+            catch { }
         }
 
         private static readonly object logLock = new object();
@@ -73,6 +97,12 @@ namespace DesktopHtmlHost
             {
                 lock (logLock)
                 {
+                    string directory = Path.GetDirectoryName(filePath);
+                    if (!string.IsNullOrEmpty(directory))
+                    {
+                        Directory.CreateDirectory(directory);
+                    }
+
                     // Basic log rotation (5MB limit)
                     if (File.Exists(filePath))
                     {
@@ -96,17 +126,14 @@ namespace DesktopHtmlHost
         internal static void LogDebug(string message)
         {
             string line = string.Format("[{0}] {1}\r\n", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), message);
-            AppendLog(@"C:\nexuswpp\webview_debug.log", line);
+            AppendLog(Path.Combine(GetAppDataFolder(), "webview_debug.log"), line);
         }
 
         private static void CleanupStaleWebView2Processes()
         {
             try
             {
-                string profileFolder = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    @"nexuswpp\EBWebView"
-                );
+                string profileFolder = Program.GetWebViewUserDataFolder();
 
                 using (var searcher = new ManagementObjectSearcher(
                     "SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name = 'msedgewebview2.exe'"))
@@ -540,13 +567,11 @@ namespace DesktopHtmlHost
 
             try
             {
-                string userDataFolder = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), 
-                    "nexuswpp"
-                );
+                string userDataFolder = Program.GetWebViewUserDataFolder();
+                Directory.CreateDirectory(userDataFolder);
 
                 var options = new CoreWebView2EnvironmentOptions();
-                options.AdditionalBrowserArguments = "--disable-features=EdgeSidebar,EdgeTranslate --disable-gpu-driver-bug-workarounds --ignore-gpu-blocklist";
+                options.AdditionalBrowserArguments = "--disable-features=EdgeSidebar,EdgeTranslate";
 
                 var environment = await CoreWebView2Environment.CreateAsync(null, userDataFolder, options);
                 if (isClosing || IsDisposed || webView == null || webView.IsDisposed) return;
@@ -558,7 +583,7 @@ namespace DesktopHtmlHost
 
                 // Configure virtual host mapping to serve files from local directory without HTTP server
                 string directory = Path.GetDirectoryName(htmlPath);
-                if (string.IsNullOrEmpty(directory)) directory = @"C:\nexuswpp";
+                if (string.IsNullOrEmpty(directory)) directory = AppDomain.CurrentDomain.BaseDirectory;
                 webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                     "nexuswpp.local",
                     directory,
@@ -669,12 +694,8 @@ namespace DesktopHtmlHost
             {
                 if (isClosing || IsDisposed) return;
 
-                MessageBox.Show(
-                    string.Format("WebView2 Runtime failed to initialize.\n\nDetails:\n{0}", ex.Message),
-                    "Host Initialization Failure", 
-                    MessageBoxButtons.OK, 
-                    MessageBoxIcon.Error
-                );
+                Program.LogDebug("WebView2 Runtime failed to initialize: " + ex.ToString());
+                BeginCleanShutdown();
             }
         }
 
