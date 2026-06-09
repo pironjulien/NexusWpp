@@ -93,8 +93,9 @@ $manifest = @"
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap rescap">
+  IgnorableNamespaces="uap uap10 rescap">
   <Identity Name="$identityName" Publisher="$publisher" Version="$version" ProcessorArchitecture="x64" />
   <Properties>
     <DisplayName>NexusWpp</DisplayName>
@@ -102,13 +103,18 @@ $manifest = @"
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
   <Dependencies>
-    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26200.0" />
   </Dependencies>
   <Resources>
     <Resource Language="fr-fr" />
   </Resources>
   <Applications>
-    <Application Id="NexusWpp" Executable="nexuswpp.exe" EntryPoint="Windows.FullTrustApplication">
+    <Application
+      Id="NexusWpp"
+      Executable="nexuswpp.exe"
+      EntryPoint="Windows.FullTrustApplication"
+      uap10:RuntimeBehavior="packagedClassicApp"
+      uap10:TrustLevel="mediumIL">
       <uap:VisualElements
         DisplayName="NexusWpp"
         Description="Fond d'ecran telemetry cockpit"

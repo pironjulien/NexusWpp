@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-09
+
+- Durcissement du lancement MSIX avec un manifeste Desktop Bridge explicite.
+- Deplacement des logs et du profil WebView2 vers le dossier utilisateur local pour eviter les chemins systeme en contexte Store.
+- Retrait des arguments GPU WebView2 agressifs afin de stabiliser le lancement sur les pilotes de certification Microsoft.
+
 ## 2026-06-08
 
 - Passage de l'installateur Windows en version `1.0.2`.
