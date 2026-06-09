@@ -2,6 +2,7 @@
 
 ## 2026-06-09
 
+- Passage du package Microsoft Store en version `1.0.3.0` apres rejet du remplacement `1.0.2.0` a contenu different.
 - Durcissement du lancement MSIX avec un manifeste Desktop Bridge explicite.
 - Deplacement des logs et du profil WebView2 vers le dossier utilisateur local pour eviter les chemins systeme en contexte Store.
 - Retrait des arguments GPU WebView2 agressifs afin de stabiliser le lancement sur les pilotes de certification Microsoft.
