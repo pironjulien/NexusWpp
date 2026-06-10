@@ -2,6 +2,7 @@
 
 ## 2026-06-10
 
+- Bascule automatique du build MSIX signe vers Windows PowerShell quand PowerShell 7 ne peut pas charger le module PKI.
 - Correction de l'encodage des noms de modes d'alimentation Windows avec accents.
 - Passage du package Microsoft Store en version `1.0.5.0` pour publier ce correctif.
 - Correction de l'affichage responsive des modes d'alimentation Windows avec noms longs ou nombreux.
