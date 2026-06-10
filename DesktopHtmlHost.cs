@@ -1776,6 +1776,7 @@ namespace DesktopHtmlHost
                 ProcessStartInfo startInfo = new ProcessStartInfo("powercfg", "/list")
                 {
                     RedirectStandardOutput = true,
+                    StandardOutputEncoding = Encoding.GetEncoding(CultureInfo.CurrentCulture.TextInfo.OEMCodePage),
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };

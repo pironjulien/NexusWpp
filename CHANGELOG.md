@@ -2,6 +2,8 @@
 
 ## 2026-06-10
 
+- Correction de l'encodage des noms de modes d'alimentation Windows avec accents.
+- Passage du package Microsoft Store en version `1.0.5.0` pour publier ce correctif.
 - Correction de l'affichage responsive des modes d'alimentation Windows avec noms longs ou nombreux.
 - Passage du package Microsoft Store en version `1.0.4.0` pour publier ce correctif.
 - Ajout d'une option de build MSIX sans signature locale pour les postes sans module PKI fonctionnel.
