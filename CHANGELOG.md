@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-10
+
+- Correction de l'affichage responsive des modes d'alimentation Windows avec noms longs ou nombreux.
+- Passage du package Microsoft Store en version `1.0.4.0` pour publier ce correctif.
+- Ajout d'une option de build MSIX sans signature locale pour les postes sans module PKI fonctionnel.
+
 ## 2026-06-09
 
 - Passage du package Microsoft Store en version `1.0.3.0` apres rejet du remplacement `1.0.2.0` a contenu different.

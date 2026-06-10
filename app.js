@@ -1260,6 +1260,8 @@ function updateDOM(stats) {
 
     // 9. Update Remote controllers buttons dynamically based on actual Windows power plans
     if (stats.powerPlans && powerPlansContainer) {
+        powerPlansContainer.dataset.planCount = String(stats.powerPlans.length);
+
         if (pendingPowerPlanGuid) {
             const pendingPlan = stats.powerPlans.find(p => p.guid === pendingPowerPlanGuid);
             if (pendingPlan && pendingPlan.active) {
@@ -1279,6 +1281,8 @@ function updateDOM(stats) {
                 const button = document.createElement("button");
                 button.className = "remote-btn";
                 button.dataset.guid = plan.guid;
+                button.title = plan.name;
+                button.setAttribute("aria-label", `Mode d'alimentation ${plan.name}`);
                 
                 // Determine icon based on name
                 let iconSvg = "";

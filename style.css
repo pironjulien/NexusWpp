@@ -537,8 +537,18 @@ body {
 }
 
 .remote-grid.horizontal {
-    flex-direction: row;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
     gap: 12px;
+    align-items: stretch;
+}
+
+.remote-grid.horizontal[data-plan-count="3"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.remote-grid.horizontal[data-plan-count="4"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .remote-btn {
@@ -557,9 +567,10 @@ body {
 }
 
 .remote-grid.horizontal .remote-btn {
-    flex: 1;
     justify-content: center;
-    padding: 12px 10px;
+    min-width: 0;
+    min-height: 64px;
+    padding: 10px 12px;
     gap: 8px;
     border-radius: 12px;
 }
@@ -569,14 +580,26 @@ body {
 }
 
 .remote-grid.horizontal .remote-btn .btn-lbl {
-    font-size: 14px;
-    letter-spacing: 0.5px;
-    white-space: nowrap;
+    min-width: 0;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    font-size: clamp(11px, 0.72vw, 14px);
+    line-height: 1.15;
+    letter-spacing: 0.3px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: center;
 }
 
 .remote-grid.horizontal .remote-btn .icon-wrap svg {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
+}
+
+.remote-grid.horizontal .remote-btn .icon-wrap {
+    flex: 0 0 auto;
 }
 
 .remote-btn:hover {
@@ -1340,8 +1363,9 @@ body.system-critical .nebula {
         padding: 10px 14px !important;
     }
     
-    .remote-btn .btn-lbl {
-        font-size: 14px !important;
+    .remote-grid.horizontal .remote-btn .btn-lbl {
+        font-size: clamp(10px, 0.7vw, 13px) !important;
+        line-height: 1.12;
     }
     
     .remote-grid.horizontal .remote-btn .icon-wrap svg {
