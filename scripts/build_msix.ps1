@@ -4,6 +4,16 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+if (!$SkipSigning -and $PSVersionTable.PSEdition -eq "Core") {
+    $windowsDir = if ($env:WINDIR) { $env:WINDIR } elseif ($env:SystemRoot) { $env:SystemRoot } else { "C:\Windows" }
+    $windowsPowerShell = Join-Path $windowsDir "System32\WindowsPowerShell\v1.0\powershell.exe"
+    if (Test-Path -LiteralPath $windowsPowerShell) {
+        Write-Host "MSIX signing requires Windows PowerShell certificate cmdlets. Relaunching with Windows PowerShell..."
+        & $windowsPowerShell -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath
+        exit $LASTEXITCODE
+    }
+}
+
 $projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $distDir = Join-Path $projectRoot "dist\msix"
 $packageDir = Join-Path $distDir "package"
