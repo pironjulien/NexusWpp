@@ -1,10 +1,14 @@
+param(
+    [switch]$SkipSigning
+)
+
 $ErrorActionPreference = "Stop"
 
 $projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $distDir = Join-Path $projectRoot "dist\msix"
 $packageDir = Join-Path $distDir "package"
 $assetsDir = Join-Path $packageDir "Assets"
-$version = "1.0.3.0"
+$version = "1.0.4.0"
 $identityName = "julienpiron.fr.NexusWpp"
 $msixPath = Join-Path $distDir ($identityName + "_" + $version + "_x64.msix")
 $publisher = "CN=C3E3A6F0-11D2-4EE1-B3F2-34EED4CAE7FA"
@@ -136,14 +140,18 @@ if ($LASTEXITCODE -ne 0) {
     throw "makeappx failed with exit code $LASTEXITCODE"
 }
 
-$cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -eq $publisher -and $_.HasPrivateKey } | Sort-Object NotAfter -Descending | Select-Object -First 1
-if (!$cert) {
-    $cert = New-SelfSignedCertificate -Type Custom -Subject $publisher -KeyUsage DigitalSignature -FriendlyName "NexusWpp MSIX Test Certificate" -CertStoreLocation "Cert:\CurrentUser\My" -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3")
-}
+if (!$SkipSigning) {
+    $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -eq $publisher -and $_.HasPrivateKey } | Sort-Object NotAfter -Descending | Select-Object -First 1
+    if (!$cert) {
+        $cert = New-SelfSignedCertificate -Type Custom -Subject $publisher -KeyUsage DigitalSignature -FriendlyName "NexusWpp MSIX Test Certificate" -CertStoreLocation "Cert:\CurrentUser\My" -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3")
+    }
 
-& $signTool sign /fd SHA256 /sha1 $cert.Thumbprint $msixPath
-if ($LASTEXITCODE -ne 0) {
-    throw "signtool failed with exit code $LASTEXITCODE"
+    & $signTool sign /fd SHA256 /sha1 $cert.Thumbprint $msixPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "signtool failed with exit code $LASTEXITCODE"
+    }
+} else {
+    Write-Warning "MSIX signing skipped. Use this for Store packaging validation only."
 }
 
 Get-Item -LiteralPath $msixPath | Select-Object FullName, Length, LastWriteTime
