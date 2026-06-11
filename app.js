@@ -27,19 +27,19 @@ const acceleratorRow = document.querySelector(".accelerator-row");
 const ramCard = document.getElementById("ram-card");
 const vramCard = document.getElementById("vram-card");
 const vramTotalSub = document.getElementById("vram-total-sub");
-const igpuDriverSub = document.getElementById("igpu-driver-sub");
+const igpuDecodeSub = document.getElementById("igpu-decode-sub");
 
 // Sub-metrics DOM bindings
 const cpuTempSub = document.getElementById("cpu-temp-sub");
-const cpuUptimeSub = document.getElementById("cpu-uptime-sub");
+const cpuTopProcSub = document.getElementById("cpu-top-proc-sub");
 const cpuFreqSub = document.getElementById("cpu-freq-sub");
 const cpuProcThreadsSub = document.getElementById("cpu-proc-threads-sub");
 const cpuCachesSub = document.getElementById("cpu-caches-sub");
 
 const gpuTempSub = document.getElementById("gpu-temp-sub");
-const gpuFanSub = document.getElementById("gpu-fan-sub");
+const gpuVramSub = document.getElementById("gpu-vram-sub");
 const gpuCoreSub = document.getElementById("gpu-core-sub");
-const gpuDriverSub = document.getElementById("gpu-driver-sub");
+const gpuMemClockSub = document.getElementById("gpu-mem-clock-sub");
 
 // Right Column DOM Elements
 const ramVal = document.getElementById("ram-val");
@@ -1030,36 +1030,38 @@ function updateDOM(stats) {
     if (cpuCachesSub) {
         cpuCachesSub.textContent = `${stats.cpu.l2Cache} / ${stats.cpu.l3Cache}`;
     }
-    if (cpuUptimeSub) {
-        const totalSecs = Number(stats.uptime) || 0;
-        const daysCount = Math.floor(totalSecs / 86400);
-        const hh = String(Math.floor((totalSecs % 86400) / 3600)).padStart(2, '0');
-        const mm = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
-        const ss = String(totalSecs % 60).padStart(2, '0');
-        cpuUptimeSub.textContent = `${daysCount > 0 ? daysCount + 'j ' : ''}${hh}:${mm}:${ss}`;
+    if (cpuTopProcSub) {
+        const top = (stats.topProcesses && stats.topProcesses.length > 0) ? stats.topProcesses[0] : null;
+        if (top && top.Name) {
+            const logical = Math.max(1, Number(stats.cpu.logical) || 1);
+            const pct = Math.min(99, Math.round((Number(top.PercentProcessorTime) || 0) / logical));
+            const shortName = top.Name.length > 14 ? top.Name.slice(0, 13) + "…" : top.Name;
+            cpuTopProcSub.textContent = `${shortName} ${pct}%`;
+        } else {
+            cpuTopProcSub.textContent = "--";
+        }
     }
 
     // 3. GPU Sub-metrics (NVML when available, otherwise real Windows counters fill the slots)
     const dgpuVramUsedGb = ((stats.vram.usedMb || 0) / 1024).toFixed(1);
-    const dgpuVramTotalGb = stats.vram.totalMb > 0 ? `${(stats.vram.totalMb / 1024).toFixed(0)} Go` : "--";
+    const dgpuVramTotalGb = stats.vram.totalMb > 0 ? (stats.vram.totalMb / 1024).toFixed(0) : "";
     if (stats.gpu.temp >= 0) {
         setSubMetric(gpuTempSub, "TEMPÉRATURE", `${stats.gpu.temp} °C`);
     } else {
-        setSubMetric(gpuTempSub, "VRAM UTILISÉE", `${dgpuVramUsedGb} Go`);
+        setSubMetric(gpuTempSub, "PILOTE", stats.gpu.driver || "--");
     }
-    const gpuFanPct = stats.fans ? stats.fans.gpuPct : -1;
-    if (gpuFanPct >= 0) {
-        setSubMetric(gpuFanSub, "VENTILATEUR", `${gpuFanPct} %`);
-    } else {
-        setSubMetric(gpuFanSub, "MAJ PILOTE", stats.gpu.driverDate || "--");
-    }
+    setSubMetric(gpuVramSub, "VRAM", dgpuVramTotalGb ? `${dgpuVramUsedGb} / ${dgpuVramTotalGb} Go` : `${dgpuVramUsedGb} Go`);
     if (stats.gpu.coreClock >= 0) {
         setSubMetric(gpuCoreSub, "CORE CLOCK", `${stats.gpu.coreClock} MHz`);
     } else {
-        setSubMetric(gpuCoreSub, "VRAM TOTALE", dgpuVramTotalGb);
+        setSubMetric(gpuCoreSub, "MAJ PILOTE", stats.gpu.driverDate || "--");
     }
-    if (gpuDriverSub) {
-        gpuDriverSub.textContent = stats.gpu.driver || "--";
+    if (stats.gpu.memoryClock >= 0) {
+        setSubMetric(gpuMemClockSub, "MÉMOIRE CLOCK", `${stats.gpu.memoryClock} MHz`);
+    } else if (stats.vram.totalMb > 0) {
+        setSubMetric(gpuMemClockSub, "VRAM LIBRE", `${((stats.vram.totalMb - stats.vram.usedMb) / 1024).toFixed(1)} Go`);
+    } else {
+        setSubMetric(gpuMemClockSub, "ACTIVITÉ 3D", `${stats.gpu.utilization} %`);
     }
     if (gpuVramBar) {
         const gpuVramPct = stats.vram.totalMb > 0 ? Math.round((stats.vram.usedMb / stats.vram.totalMb) * 100) : 0;
@@ -1162,8 +1164,9 @@ function updateDOM(stats) {
     if (vramTotalSub) {
         vramTotalSub.textContent = `${totalVramGb} Go`;
     }
-    if (igpuDriverSub) {
-        igpuDriverSub.textContent = stats.igpu.driver || "--";
+    if (igpuDecodeSub) {
+        const decodePct = Math.max(0, Math.min(100, Number(stats.igpu.decodeUtil) || 0));
+        igpuDecodeSub.textContent = `${decodePct} %`;
     }
     if (igpuVramBar) {
         const igpuVramPct = Math.round((stats.igpu.usedMb / stats.igpu.totalMb) * 100) || 0;
@@ -1594,21 +1597,21 @@ function dimGauges() {
     if (cpuFreqSub) cpuFreqSub.textContent = `0.00 GHz`;
     if (cpuProcThreadsSub) cpuProcThreadsSub.textContent = `0 / 0`;
     if (cpuCachesSub) cpuCachesSub.textContent = `0 Mo / 0 Mo`;
-    if (cpuUptimeSub) {
-        cpuUptimeSub.textContent = `00:00:00`;
+    if (cpuTopProcSub) {
+        cpuTopProcSub.textContent = `--`;
     }
     if (igpuVramBar) igpuVramBar.style.width = "0%";
     if (gpuVramBar) gpuVramBar.style.width = "0%";
     
     gpuTempSub.textContent = `-- °C`;
-    gpuFanSub.textContent = `-- %`;
+    if (gpuVramSub) gpuVramSub.textContent = `-- Go`;
     gpuCoreSub.textContent = `-- MHz`;
-    if (gpuDriverSub) gpuDriverSub.textContent = `--`;
+    if (gpuMemClockSub) gpuMemClockSub.textContent = `-- MHz`;
 
     vramUsedSub.textContent = `0.0 Go`;
     vramFreeSub.textContent = `0.0 Go`;
     if (vramTotalSub) vramTotalSub.textContent = `0 Go`;
-    if (igpuDriverSub) igpuDriverSub.textContent = `--`;
+    if (igpuDecodeSub) igpuDecodeSub.textContent = `-- %`;
     if (npuUsedSub) npuUsedSub.textContent = `0.0 Go`;
     if (npuSharedSub) npuSharedSub.textContent = `0.0 Go`;
     if (npuFreeSub) npuFreeSub.textContent = `0.0 Go`;

@@ -2,6 +2,10 @@
 
 ## 2026-06-11
 
+- Remplacement des infos pilote et de l'uptime par des mesures plus utiles : top processus CPU, decodage video iGPU, VRAM utilisee/totale et frequence memoire GPU.
+- Correction de la cadence CPU sur les processeurs hybrides (reference `ProcessorFrequency` du compteur au lieu de `MaxClockSpeed` WMI).
+- Retrait de la lecture du ventilateur GPU desormais non affichee.
+
 - Suppression de toutes les donnees simulees au profit de mesures reelles.
 - Temperature CPU lue depuis le capteur ACPI (`MSAcpi_ThermalZoneTemperature`), cadence CPU reelle via le compteur `PercentProcessorPerformance`.
 - Ventilateur GPU reel via NVML (`nvmlDeviceGetFanSpeed`), VRAM totale lue depuis le pilote (registre) et VRAM utilisee via le compteur Windows `DedicatedUsage` quand NVML est absent.
