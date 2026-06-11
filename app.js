@@ -27,11 +27,10 @@ const acceleratorRow = document.querySelector(".accelerator-row");
 const ramCard = document.getElementById("ram-card");
 const vramCard = document.getElementById("vram-card");
 const vramTotalSub = document.getElementById("vram-total-sub");
-const igpuTempSub = document.getElementById("igpu-temp-sub");
+const igpuDriverSub = document.getElementById("igpu-driver-sub");
 
 // Sub-metrics DOM bindings
 const cpuTempSub = document.getElementById("cpu-temp-sub");
-const cpuFanSub = document.getElementById("cpu-fan-sub");
 const cpuUptimeSub = document.getElementById("cpu-uptime-sub");
 const cpuFreqSub = document.getElementById("cpu-freq-sub");
 const cpuProcThreadsSub = document.getElementById("cpu-proc-threads-sub");
@@ -40,7 +39,7 @@ const cpuCachesSub = document.getElementById("cpu-caches-sub");
 const gpuTempSub = document.getElementById("gpu-temp-sub");
 const gpuFanSub = document.getElementById("gpu-fan-sub");
 const gpuCoreSub = document.getElementById("gpu-core-sub");
-const gpuTopsSub = document.getElementById("gpu-tops-sub");
+const gpuDriverSub = document.getElementById("gpu-driver-sub");
 
 // Right Column DOM Elements
 const ramVal = document.getElementById("ram-val");
@@ -129,7 +128,7 @@ function updateClock() {
     document.getElementById("clock-date").textContent = `${dayName} ${day} ${month} ${year}`;
 }
 updateClock();
-setInterval(updateClock, 1000); // 1-second interval to reduce CPU load // 1-second interval to reduce CPU load
+setInterval(updateClock, 1000); // 1-second interval to reduce CPU load
 
 // --- 🌌 SOTA CANVAS 2D PHYSICS ENGINE (HOLOGRAPHIC NEURAL TELEMETRY MAP) ---
 const canvas = document.getElementById("physics-canvas");
@@ -923,6 +922,18 @@ function setAttrIfChanged(element, name, value) {
     }
 }
 
+// Swaps a sub-metric slot (label + value) so a missing sensor can be replaced by another real metric.
+function setSubMetric(valEl, label, value) {
+    if (!valEl) return;
+    const lblEl = valEl.parentElement ? valEl.parentElement.querySelector(".lbl") : null;
+    if (lblEl && lblEl.textContent !== label) {
+        lblEl.textContent = label;
+    }
+    if (valEl.textContent !== value) {
+        valEl.textContent = value;
+    }
+}
+
 function setWidthIfChanged(element, value) {
     if (!element) return;
     const widthValue = `${value}%`;
@@ -978,7 +989,7 @@ function setNpuVisibility(hasNpu) {
 function updateDOM(stats) {
     const npuStats = stats.npu || {
         utilization: 0,
-        name: "Intel(R) AI Boost",
+        name: "",
         usedMb: 0,
         totalMb: 0,
         totalGb: 0,
@@ -1004,9 +1015,12 @@ function updateDOM(stats) {
     animateTextValue(gpuVal, stats.gpu.utilization, "%");
     setAttrIfChanged(gpuGaugeContainer, "aria-valuenow", stats.gpu.utilization);
 
-    // 2. CPU Sub-metrics
-    cpuTempSub.textContent = `${stats.cpu.temp} °C`;
-    cpuFanSub.textContent = `${stats.fans.fan1} RPM`;
+    // 2. CPU Sub-metrics (real sensor when present, otherwise another real metric fills the slot)
+    if (stats.cpu.temp >= 0) {
+        setSubMetric(cpuTempSub, "TEMPÉRATURE", `${stats.cpu.temp} °C`);
+    } else {
+        setSubMetric(cpuTempSub, "CACHE L2 / L3", `${stats.cpu.l2Cache} / ${stats.cpu.l3Cache}`);
+    }
     if (cpuFreqSub) {
         cpuFreqSub.textContent = `${stats.cpu.freqGhz} GHz`;
     }
@@ -1025,15 +1039,30 @@ function updateDOM(stats) {
         cpuUptimeSub.textContent = `${daysCount > 0 ? daysCount + 'j ' : ''}${hh}:${mm}:${ss}`;
     }
 
-    // 3. GPU Sub-metrics
-    gpuTempSub.textContent = `${stats.gpu.temp} °C`;
-    gpuFanSub.textContent = stats.fans.fan2 > 0 ? `${stats.fans.fan2} RPM` : "SILENT";
-    gpuCoreSub.textContent = `${stats.gpu.coreClock} MHz`;
-    if (gpuTopsSub) {
-        gpuTopsSub.textContent = `${stats.gpu.tops} TOPS`;
+    // 3. GPU Sub-metrics (NVML when available, otherwise real Windows counters fill the slots)
+    const dgpuVramUsedGb = ((stats.vram.usedMb || 0) / 1024).toFixed(1);
+    const dgpuVramTotalGb = stats.vram.totalMb > 0 ? `${(stats.vram.totalMb / 1024).toFixed(0)} Go` : "--";
+    if (stats.gpu.temp >= 0) {
+        setSubMetric(gpuTempSub, "TEMPÉRATURE", `${stats.gpu.temp} °C`);
+    } else {
+        setSubMetric(gpuTempSub, "VRAM UTILISÉE", `${dgpuVramUsedGb} Go`);
+    }
+    const gpuFanPct = stats.fans ? stats.fans.gpuPct : -1;
+    if (gpuFanPct >= 0) {
+        setSubMetric(gpuFanSub, "VENTILATEUR", `${gpuFanPct} %`);
+    } else {
+        setSubMetric(gpuFanSub, "MAJ PILOTE", stats.gpu.driverDate || "--");
+    }
+    if (stats.gpu.coreClock >= 0) {
+        setSubMetric(gpuCoreSub, "CORE CLOCK", `${stats.gpu.coreClock} MHz`);
+    } else {
+        setSubMetric(gpuCoreSub, "VRAM TOTALE", dgpuVramTotalGb);
+    }
+    if (gpuDriverSub) {
+        gpuDriverSub.textContent = stats.gpu.driver || "--";
     }
     if (gpuVramBar) {
-        const gpuVramPct = Math.round((stats.vram.usedMb / stats.vram.totalMb) * 100) || 0;
+        const gpuVramPct = stats.vram.totalMb > 0 ? Math.round((stats.vram.usedMb / stats.vram.totalMb) * 100) : 0;
         setWidthIfChanged(gpuVramBar, gpuVramPct);
     }
 
@@ -1133,8 +1162,8 @@ function updateDOM(stats) {
     if (vramTotalSub) {
         vramTotalSub.textContent = `${totalVramGb} Go`;
     }
-    if (igpuTempSub) {
-        igpuTempSub.textContent = `${stats.cpu.temp} °C`;
+    if (igpuDriverSub) {
+        igpuDriverSub.textContent = stats.igpu.driver || "--";
     }
     if (igpuVramBar) {
         const igpuVramPct = Math.round((stats.igpu.usedMb / stats.igpu.totalMb) * 100) || 0;
@@ -1173,7 +1202,9 @@ function updateDOM(stats) {
     }
     if (stats.ram.totalGb && specRamName) {
         const speed = stats.ram.speedMts ? ` @ ${stats.ram.speedMts} MT/s` : "";
-        specRamName.textContent = `RAM ${stats.ram.totalGb} Go DDR5 Dual-Channel${speed}`;
+        const ramType = stats.ram.type ? ` ${stats.ram.type}` : "";
+        const ramModules = stats.ram.modules > 1 ? ` (${stats.ram.modules} barrettes)` : "";
+        specRamName.textContent = `RAM ${stats.ram.totalGb} Go${ramType}${ramModules}${speed}`;
     }
     if (stats.network.name && specNetMode) {
         specNetMode.textContent = stats.network.name.startsWith("RÉSEAU") ? stats.network.name : "RÉSEAU " + stats.network.name;
@@ -1196,7 +1227,7 @@ function updateDOM(stats) {
         telemetryNodes.npu.subLabel = stats.totalProcesses ? `${stats.totalProcesses} PROCESSUS` : "CORE ACTIVE";
         
         telemetryNodes.cpu.value = stats.cpu.utilization;
-        telemetryNodes.cpu.subLabel = `${stats.cpu.temp} °C`;
+        telemetryNodes.cpu.subLabel = stats.cpu.temp >= 0 ? `${stats.cpu.temp} °C` : `${stats.cpu.freqGhz} GHz`;
         
         telemetryNodes.igpu.value = stats.igpu.utilization;
         telemetryNodes.igpu.subLabel = `${usedVramGb} Go`;
@@ -1237,7 +1268,7 @@ function updateDOM(stats) {
         telemetryNodes.ram.subLabel = `${usedRamGb} / ${totalRamGb} Go`;
         
         telemetryNodes.gpu.value = stats.gpu.utilization;
-        telemetryNodes.gpu.subLabel = `${stats.gpu.temp} °C`;
+        telemetryNodes.gpu.subLabel = stats.gpu.temp >= 0 ? `${stats.gpu.temp} °C` : `${dgpuVramUsedGb} Go`;
         
         telemetryNodes.ssd.value = stats.disk.utilization; // Dynamic active % inside the center node map!
         telemetryNodes.ssd.subLabel = `${stats.disk.freeGb} Go libre`;
@@ -1559,8 +1590,7 @@ function dimGauges() {
     
     systemIsOverloaded = false;
     
-    cpuTempSub.textContent = `0 °C`;
-    cpuFanSub.textContent = `0 RPM`;
+    cpuTempSub.textContent = `-- °C`;
     if (cpuFreqSub) cpuFreqSub.textContent = `0.00 GHz`;
     if (cpuProcThreadsSub) cpuProcThreadsSub.textContent = `0 / 0`;
     if (cpuCachesSub) cpuCachesSub.textContent = `0 Mo / 0 Mo`;
@@ -1570,15 +1600,15 @@ function dimGauges() {
     if (igpuVramBar) igpuVramBar.style.width = "0%";
     if (gpuVramBar) gpuVramBar.style.width = "0%";
     
-    gpuTempSub.textContent = `0 °C`;
-    gpuFanSub.textContent = `SILENT`;
-    gpuCoreSub.textContent = `0 MHz`;
-    if (gpuTopsSub) gpuTopsSub.textContent = `0 TOPS`;
+    gpuTempSub.textContent = `-- °C`;
+    gpuFanSub.textContent = `-- %`;
+    gpuCoreSub.textContent = `-- MHz`;
+    if (gpuDriverSub) gpuDriverSub.textContent = `--`;
 
     vramUsedSub.textContent = `0.0 Go`;
     vramFreeSub.textContent = `0.0 Go`;
     if (vramTotalSub) vramTotalSub.textContent = `0 Go`;
-    if (igpuTempSub) igpuTempSub.textContent = `0 °C`;
+    if (igpuDriverSub) igpuDriverSub.textContent = `--`;
     if (npuUsedSub) npuUsedSub.textContent = `0.0 Go`;
     if (npuSharedSub) npuSharedSub.textContent = `0.0 Go`;
     if (npuFreeSub) npuFreeSub.textContent = `0.0 Go`;
