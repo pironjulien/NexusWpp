@@ -1342,9 +1342,6 @@ namespace DesktopHtmlHost
         [DllImport(NvmlDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "nvmlDeviceGetMemoryInfo")]
         public static extern int nvmlDeviceGetMemoryInfo(IntPtr device, out nvmlMemory_t memory);
 
-        [DllImport(NvmlDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "nvmlDeviceGetFanSpeed")]
-        public static extern int nvmlDeviceGetFanSpeed(IntPtr device, out uint speed);
-
         [DllImport(NvmlDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "nvmlShutdown")]
         public static extern int nvmlShutdown();
     }
@@ -1432,6 +1429,7 @@ namespace DesktopHtmlHost
         private long cachedNpuMemBytes = 0;
         private int cachedDgpuUtil = 0;
         private long cachedDgpuMemBytes = 0;
+        private int cachedIgpuDecodeUtil = 0;
 
         // Real sensors state
         private long dgpuVramTotalBytes = 0;
@@ -2387,17 +2385,20 @@ namespace DesktopHtmlHost
                 }
                 catch {}
 
-                // Real average core frequency: base clock scaled by the processor performance counter.
+                // Real average core frequency. The performance percentage is relative to the
+                // counter's own ProcessorFrequency base (true base clock on hybrid CPUs), not
+                // to the WMI MaxClockSpeed value which can be a different reference.
                 try
                 {
-                    using (var searcher = new ManagementObjectSearcher("SELECT PercentProcessorPerformance FROM Win32_PerfFormattedData_Counters_ProcessorInformation WHERE Name LIKE '%_Total'"))
+                    using (var searcher = new ManagementObjectSearcher("SELECT PercentProcessorPerformance, ProcessorFrequency FROM Win32_PerfFormattedData_Counters_ProcessorInformation WHERE Name LIKE '%_Total'"))
                     {
                         foreach (ManagementObject obj in searcher.Get())
                         {
                             double perfPct = Convert.ToDouble(obj["PercentProcessorPerformance"] ?? 0.0);
-                            if (perfPct > 0)
+                            double counterBaseMhz = Convert.ToDouble(obj["ProcessorFrequency"] ?? 0.0);
+                            if (perfPct > 0 && counterBaseMhz > 0)
                             {
-                                cachedCpuFreqGhz = cpuBaseSpeedVal * perfPct / 100.0;
+                                cachedCpuFreqGhz = counterBaseMhz * perfPct / 100.0 / 1000.0;
                             }
                             break;
                         }
@@ -2437,6 +2438,7 @@ namespace DesktopHtmlHost
             // GPU stats
             int igpuUtil = cachedIgpuUtil;
             long igpuMemBytes = cachedIgpuMemBytes;
+            int igpuDecodeUtil = cachedIgpuDecodeUtil;
             int npuUtil = cachedNpuUtil;
             long npuMemBytes = cachedNpuMemBytes;
             int dgpuUtil = cachedDgpuUtil;
@@ -2444,6 +2446,7 @@ namespace DesktopHtmlHost
             {
                 int nextIgpuUtil = 0;
                 long nextIgpuMemBytes = igpuMemBytes;
+                int nextIgpuDecodeUtil = 0;
                 int nextNpuUtil = 0;
                 long nextNpuMemBytes = npuMemBytes;
                 int nextDgpuUtil = 0;
@@ -2463,6 +2466,15 @@ namespace DesktopHtmlHost
                             foreach (ManagementObject obj in searcher.Get())
                             {
                                 nextIgpuUtil += Convert.ToInt32(obj["UtilizationPercentage"] ?? 0);
+                            }
+                        }
+
+                        string decodeFilter = string.Format("Name LIKE '%{0}%engtype_videodecode%'", igpuLuid);
+                        using (var searcher = new ManagementObjectSearcher(@"root\cimv2", "SELECT UtilizationPercentage FROM Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine WHERE " + decodeFilter))
+                        {
+                            foreach (ManagementObject obj in searcher.Get())
+                            {
+                                nextIgpuDecodeUtil += Convert.ToInt32(obj["UtilizationPercentage"] ?? 0);
                             }
                         }
                     
@@ -2523,12 +2535,14 @@ namespace DesktopHtmlHost
 
                     cachedIgpuUtil = nextIgpuUtil;
                     cachedIgpuMemBytes = nextIgpuMemBytes;
+                    cachedIgpuDecodeUtil = Math.Min(100, nextIgpuDecodeUtil);
                     cachedNpuUtil = nextNpuUtil;
                     cachedNpuMemBytes = nextNpuMemBytes;
                     cachedDgpuUtil = nextDgpuUtil;
                     cachedDgpuMemBytes = nextDgpuMemBytes;
                     igpuUtil = cachedIgpuUtil;
                     igpuMemBytes = cachedIgpuMemBytes;
+                    igpuDecodeUtil = cachedIgpuDecodeUtil;
                     npuUtil = cachedNpuUtil;
                     npuMemBytes = cachedNpuMemBytes;
                     dgpuUtil = cachedDgpuUtil;
@@ -2542,7 +2556,6 @@ namespace DesktopHtmlHost
             int gpuTemp = -1;
             int gpuCoreClock = -1;
             int gpuMemClock = -1;
-            int gpuFanPct = -1;
             ulong vramTotal = 0;
             ulong vramUsed = 0;
             bool nvmlSuccess = false;
@@ -2576,12 +2589,6 @@ namespace DesktopHtmlHost
                         gpuMemClock = (int)memClock;
                     }
 
-                    uint fanSpeed;
-                    if (Nvml.nvmlDeviceGetFanSpeed(dev, out fanSpeed) == 0)
-                    {
-                        gpuFanPct = (int)fanSpeed;
-                    }
-                    
                     Nvml.nvmlMemory_t mem;
                     if (Nvml.nvmlDeviceGetMemoryInfo(dev, out mem) == 0)
                     {
@@ -2621,8 +2628,8 @@ namespace DesktopHtmlHost
                 cpuLoad, cpuTemp, JsonString(CpuInfo), cpuFreqGhzStr, CpuBaseSpeed, CpuCores, CpuLogical, threadsCount, JsonString(CpuL2Cache), JsonString(CpuL3Cache));
 
             // igpu
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"igpu\":{{\"utilization\":{0},\"usedMb\":{1},\"totalMb\":{2},\"totalGb\":{3},\"name\":{4},\"driver\":{5},\"driverDate\":{6}}},",
-                igpuUtil, igpuMemBytes / (1024 * 1024), ramTotalPhys / 1024 / 1024 / 2, ramTotalPhys / 1024 / 1024 / 1024 / 2, JsonString(IgpuInfo), JsonString(IgpuDriver), JsonString(IgpuDriverDate));
+            sb.AppendFormat(CultureInfo.InvariantCulture, "\"igpu\":{{\"utilization\":{0},\"decodeUtil\":{1},\"usedMb\":{2},\"totalMb\":{3},\"totalGb\":{4},\"name\":{5},\"driver\":{6},\"driverDate\":{7}}},",
+                igpuUtil, igpuDecodeUtil, igpuMemBytes / (1024 * 1024), ramTotalPhys / 1024 / 1024 / 2, ramTotalPhys / 1024 / 1024 / 1024 / 2, JsonString(IgpuInfo), JsonString(IgpuDriver), JsonString(IgpuDriverDate));
 
             // npu
             long npuTotalMb = (long)(ramTotalPhys / 1024 / 1024 / 2);
@@ -2652,9 +2659,6 @@ namespace DesktopHtmlHost
             string diskResponseMsStr = (diskResponse * 1000.0).ToString("F1", CultureInfo.InvariantCulture);
             sb.AppendFormat(CultureInfo.InvariantCulture, "\"disk\":{{\"freeGb\":{0},\"utilization\":{1},\"storagePercent\":{2},\"totalGb\":{3},\"readMb\":\"{4}\",\"writeMb\":\"{5}\",\"responseTimeMs\":{6},\"name\":{7}}},",
                 diskFreeGbStr, diskActiveTime, diskStoragePercent, (int)diskTotalGb, diskReadMbStr, diskWriteMbStr, diskResponseMsStr, JsonString(DiskName));
-
-            // fans (only the real NVML GPU fan reading exists; -1 means unavailable)
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"fans\":{{\"gpuPct\":{0}}},", gpuFanPct);
 
             // network
             sb.AppendFormat(CultureInfo.InvariantCulture, "\"network\":{{\"lan\":{0},\"wifi\":{1},\"ip\":{2},\"ipv6\":{3},\"name\":{4},\"type\":{5},\"linkSpeedMbps\":{6}}},",
