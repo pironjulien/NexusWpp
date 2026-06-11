@@ -2,6 +2,8 @@
 
 ## 2026-06-11
 
+- Reconnexion automatique du fond d'ecran au retour de veille, de deverrouillage de session ou de changement d'ecran.
+
 - Version MSIX montee a 1.0.6.0 pour la soumission Store.
 
 - Masquage automatique des cartes iGPU et GPU sur les machines qui n'ont pas le materiel, avec redistribution des noeuds de la carte radar.

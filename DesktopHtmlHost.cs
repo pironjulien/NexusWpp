@@ -382,6 +382,8 @@ namespace DesktopHtmlHost
 
             // Listen for system resolution or display setting changes
             SystemEvents.DisplaySettingsChanged += SystemEvents_DisplaySettingsChanged;
+            SystemEvents.PowerModeChanged += SystemEvents_PowerModeChanged;
+            SystemEvents.SessionSwitch += SystemEvents_SessionSwitch;
             SystemEvents.SessionEnding += SystemEvents_SessionEnding;
 
             // Create and configure the WebView2 UI component
@@ -512,6 +514,60 @@ namespace DesktopHtmlHost
             if (this.Handle != IntPtr.Zero)
             {
                 MoveWindow(this.Handle, this.Left, this.Top, this.Width, this.Height, true);
+            }
+            QueueDesktopReattach("display settings changed");
+        }
+
+        private void SystemEvents_PowerModeChanged(object sender, PowerModeChangedEventArgs e)
+        {
+            if (e.Mode == PowerModes.Resume)
+            {
+                QueueDesktopReattach("system resumed from sleep");
+            }
+        }
+
+        private void SystemEvents_SessionSwitch(object sender, SessionSwitchEventArgs e)
+        {
+            if (e.Reason == SessionSwitchReason.SessionUnlock ||
+                e.Reason == SessionSwitchReason.SessionLogon ||
+                e.Reason == SessionSwitchReason.RemoteConnect)
+            {
+                QueueDesktopReattach("session became active: " + e.Reason);
+            }
+        }
+
+        private void QueueDesktopReattach(string reason)
+        {
+            if (isClosing || IsDisposed) return;
+
+            TryBeginInvoke((MethodInvoker)delegate
+            {
+                if (isClosing || IsDisposed) return;
+                RestartDesktopSearch(reason);
+            });
+        }
+
+        private void RestartDesktopSearch(string reason)
+        {
+            Program.LogDebug("Restarting desktop attachment after " + reason + ".");
+
+            desktopAttached = false;
+            attachedToTemporaryParent = false;
+            currentDesktopParent = IntPtr.Zero;
+            retryCount = 0;
+            startupTime = DateTime.Now;
+
+            UpdateBoundsToVirtualScreen();
+            if (this.Handle != IntPtr.Zero)
+            {
+                MoveWindow(this.Handle, this.Left, this.Top, this.Width, this.Height, true);
+                ShowWindow(this.Handle, SW_SHOW);
+            }
+
+            if (searchTimer != null)
+            {
+                searchTimer.Stop();
+                searchTimer.Start();
             }
         }
 
@@ -972,6 +1028,8 @@ namespace DesktopHtmlHost
             if (disposing)
             {
                 SystemEvents.DisplaySettingsChanged -= SystemEvents_DisplaySettingsChanged;
+                SystemEvents.PowerModeChanged -= SystemEvents_PowerModeChanged;
+                SystemEvents.SessionSwitch -= SystemEvents_SessionSwitch;
                 SystemEvents.SessionEnding -= SystemEvents_SessionEnding;
                 if (hookId != IntPtr.Zero)
                 {
