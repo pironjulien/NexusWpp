@@ -2,6 +2,8 @@
 
 ## 2026-06-11
 
+- Version MSIX montee a 1.0.7.0 pour publier le correctif de reprise apres veille.
+
 - Reconnexion automatique du fond d'ecran au retour de veille, de deverrouillage de session ou de changement d'ecran.
 
 - Version MSIX montee a 1.0.6.0 pour la soumission Store.
