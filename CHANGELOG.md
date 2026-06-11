@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-06-11
+
+- Suppression de toutes les donnees simulees au profit de mesures reelles.
+- Temperature CPU lue depuis le capteur ACPI (`MSAcpi_ThermalZoneTemperature`), cadence CPU reelle via le compteur `PercentProcessorPerformance`.
+- Ventilateur GPU reel via NVML (`nvmlDeviceGetFanSpeed`), VRAM totale lue depuis le pilote (registre) et VRAM utilisee via le compteur Windows `DedicatedUsage` quand NVML est absent.
+- Remplacement des TOPS/TFLOPS codes en dur par la version reelle du pilote GPU, et de la fausse temperature iGPU par la version du pilote iGPU.
+- Type de RAM (DDR4/DDR5...) et nombre de barrettes lus depuis le SMBIOS au lieu du libelle fixe "DDR5 Dual-Channel".
+- Uptime systeme reel (`GetTickCount64`) au lieu du temps de vie du processus; le slot ventilateur CPU (non mesurable) affiche desormais l'uptime.
+- Quand un capteur est absent, le slot affiche une autre mesure reelle (cache CPU, VRAM, date du pilote) sans casser la grille.
+- Activation du nettoyage des processus WebView2 orphelins au demarrage.
+- Temperature CPU lue en priorite via le compteur `ThermalZoneInformation` (accessible sans droits administrateur), avec repli ACPI.
+- Prise en charge des GPU AMD/Radeon : classification APU integre / carte dediee pour la telemetrie, les pilotes et la VRAM.
+
 ## 2026-06-10
 
 - Bascule automatique du build MSIX signe vers Windows PowerShell quand PowerShell 7 ne peut pas charger le module PKI.

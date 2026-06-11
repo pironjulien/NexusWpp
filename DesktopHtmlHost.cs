@@ -39,6 +39,8 @@ namespace DesktopHtmlHost
                 // Force Process DPI Awareness to prevent Windows from virtualizing coordinates
                 SetProcessDPIAware();
 
+                CleanupStaleWebView2Processes();
+
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
 
@@ -1282,6 +1284,9 @@ namespace DesktopHtmlHost
 
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern IntPtr LocalFree(IntPtr hMem);
+
+        [DllImport("kernel32.dll")]
+        public static extern ulong GetTickCount64();
     }
 
     public static class Nvml
@@ -1337,6 +1342,9 @@ namespace DesktopHtmlHost
         [DllImport(NvmlDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "nvmlDeviceGetMemoryInfo")]
         public static extern int nvmlDeviceGetMemoryInfo(IntPtr device, out nvmlMemory_t memory);
 
+        [DllImport(NvmlDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "nvmlDeviceGetFanSpeed")]
+        public static extern int nvmlDeviceGetFanSpeed(IntPtr device, out uint speed);
+
         [DllImport(NvmlDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "nvmlShutdown")]
         public static extern int nvmlShutdown();
     }
@@ -1353,6 +1361,8 @@ namespace DesktopHtmlHost
         public string CpuBaseSpeed = "0.00";
         public int TotalRamGb = 0;
         public int RamSpeedMts = 0;
+        public string RamType = "";
+        public int RamModules = 0;
         public string NetworkName = "";
         public string IgpuInfo = "";
         public string IgpuDriver = "";
@@ -1421,6 +1431,15 @@ namespace DesktopHtmlHost
         private int cachedNpuUtil = 0;
         private long cachedNpuMemBytes = 0;
         private int cachedDgpuUtil = 0;
+        private long cachedDgpuMemBytes = 0;
+
+        // Real sensors state
+        private long dgpuVramTotalBytes = 0;
+        private bool cpuThermalPerfUnavailable = false;
+        private bool cpuThermalAcpiUnavailable = false;
+        private DateTime lastCpuTempTime = DateTime.MinValue;
+        private int cachedCpuTempC = -1;
+        private double cachedCpuFreqGhz = 0.0;
         public void Initialize()
         {
             // Read GPUs AdapterLuid and names from Registry
@@ -1450,13 +1469,25 @@ namespace DesktopHtmlHost
                                             directxAdapterLuids.Add(formattedLuid);
                                         }
                                         
-                                        if (desc.ToLower().Contains("nvidia"))
+                                        string descLower = desc.ToLowerInvariant();
+                                        if (descLower.Contains("nvidia"))
                                         {
                                             dgpuLuid = formattedLuid;
                                         }
-                                        else if (desc.ToLower().Contains("intel") || desc.ToLower().Contains("uhd") || desc.ToLower().Contains("arc"))
+                                        else if (descLower.Contains("intel") || descLower.Contains("uhd") || descLower.Contains("arc"))
                                         {
                                             igpuLuid = formattedLuid;
+                                        }
+                                        else if (descLower.Contains("radeon") || descLower.Contains("amd"))
+                                        {
+                                            if (IsIntegratedAmdGpuName(descLower))
+                                            {
+                                                if (string.IsNullOrEmpty(igpuLuid)) igpuLuid = formattedLuid;
+                                            }
+                                            else if (string.IsNullOrEmpty(dgpuLuid))
+                                            {
+                                                dgpuLuid = formattedLuid;
+                                            }
                                         }
                                     }
                                 }
@@ -1509,14 +1540,21 @@ namespace DesktopHtmlHost
                 double.TryParse(CpuBaseSpeed, NumberStyles.Any, CultureInfo.InvariantCulture, out cpuBaseSpeedVal);
 
                 // RAM
-                using (var searcher = new ManagementObjectSearcher("SELECT Capacity, Speed FROM Win32_PhysicalMemory"))
+                using (var searcher = new ManagementObjectSearcher("SELECT Capacity, Speed, SMBIOSMemoryType FROM Win32_PhysicalMemory"))
                 {
                     ulong totalCapacity = 0;
                     uint speed = 0;
+                    int modules = 0;
                     foreach (ManagementObject obj in searcher.Get())
                     {
                         totalCapacity += (ulong)(obj["Capacity"] ?? 0);
                         speed = (uint)(obj["Speed"] ?? speed);
+                        modules++;
+                        if (string.IsNullOrEmpty(RamType))
+                        {
+                            int smbiosType = Convert.ToInt32(obj["SMBIOSMemoryType"] ?? 0);
+                            RamType = MemoryTypeFromSmbios(smbiosType);
+                        }
                     }
                     if (totalCapacity > 0)
                     {
@@ -1526,6 +1564,7 @@ namespace DesktopHtmlHost
                     {
                         RamSpeedMts = (int)speed;
                     }
+                    RamModules = modules;
                 }
 
                 // GPUs
@@ -1552,17 +1591,36 @@ namespace DesktopHtmlHost
                             catch {}
                         }
 
-                        if (name.ToLower().Contains("nvidia"))
+                        string nameLower = name.ToLowerInvariant();
+                        if (nameLower.Contains("nvidia"))
                         {
                             GpuName = name;
                             DgpuDriver = driverVer;
                             DgpuDriverDate = driverDate;
                         }
-                        else if (name.ToLower().Contains("intel") || name.ToLower().Contains("arc") || name.ToLower().Contains("uhd"))
+                        else if (nameLower.Contains("intel") || nameLower.Contains("arc") || nameLower.Contains("uhd"))
                         {
                             IgpuInfo = name;
                             IgpuDriver = driverVer;
                             IgpuDriverDate = driverDate;
+                        }
+                        else if (nameLower.Contains("radeon") || nameLower.Contains("amd"))
+                        {
+                            if (IsIntegratedAmdGpuName(nameLower))
+                            {
+                                if (string.IsNullOrEmpty(IgpuInfo))
+                                {
+                                    IgpuInfo = name;
+                                    IgpuDriver = driverVer;
+                                    IgpuDriverDate = driverDate;
+                                }
+                            }
+                            else if (string.IsNullOrEmpty(GpuName))
+                            {
+                                GpuName = name;
+                                DgpuDriver = driverVer;
+                                DgpuDriverDate = driverDate;
+                            }
                         }
                     }
                 }
@@ -1677,6 +1735,8 @@ namespace DesktopHtmlHost
                 Program.LogDebug("Telemetry init error: " + ex.Message);
             }
 
+            ReadDgpuVramTotalFromRegistry();
+
             // Initialize NVML
             try
             {
@@ -1697,6 +1757,149 @@ namespace DesktopHtmlHost
 
             // Initialize power plans
             UpdatePowerPlansCache();
+        }
+
+        private static string MemoryTypeFromSmbios(int smbiosType)
+        {
+            switch (smbiosType)
+            {
+                case 20: return "DDR";
+                case 21: return "DDR2";
+                case 24: return "DDR3";
+                case 26: return "DDR4";
+                case 27: return "LPDDR";
+                case 28: return "LPDDR2";
+                case 29: return "LPDDR3";
+                case 30: return "LPDDR4";
+                case 34: return "DDR5";
+                case 35: return "LPDDR5";
+                default: return "";
+            }
+        }
+
+        // AMD APU iGPUs are reported as "AMD Radeon(TM) Graphics" or "Radeon Vega 8 Graphics";
+        // discrete boards carry a model number such as "AMD Radeon RX 7800 XT".
+        private static bool IsIntegratedAmdGpuName(string lowerName)
+        {
+            return lowerName.EndsWith("graphics") && !lowerName.Contains(" rx");
+        }
+
+        // Reads the dedicated VRAM size reported by the display driver (real hardware value).
+        private void ReadDgpuVramTotalFromRegistry()
+        {
+            if (string.IsNullOrEmpty(GpuName)) return;
+
+            try
+            {
+                using (var classKey = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"))
+                {
+                    if (classKey == null) return;
+
+                    foreach (var subkeyName in classKey.GetSubKeyNames())
+                    {
+                        using (var subkey = classKey.OpenSubKey(subkeyName))
+                        {
+                            if (subkey == null) continue;
+                            string desc = Convert.ToString(subkey.GetValue("DriverDesc") ?? "");
+                            if (string.IsNullOrEmpty(desc)) continue;
+                            if (!desc.Equals(GpuName, StringComparison.OrdinalIgnoreCase)) continue;
+
+                            object qw = subkey.GetValue("HardwareInformation.qwMemorySize");
+                            if (qw != null)
+                            {
+                                long bytes = Convert.ToInt64(qw);
+                                if (bytes > 0)
+                                {
+                                    dgpuVramTotalBytes = bytes;
+                                    return;
+                                }
+                            }
+
+                            object dw = subkey.GetValue("HardwareInformation.MemorySize");
+                            byte[] raw = dw as byte[];
+                            if (raw != null && raw.Length >= 4)
+                            {
+                                long bytes = BitConverter.ToUInt32(raw, 0);
+                                if (bytes > 0)
+                                {
+                                    dgpuVramTotalBytes = bytes;
+                                    return;
+                                }
+                            }
+                            else if (dw != null)
+                            {
+                                long bytes = Convert.ToInt64(dw);
+                                if (bytes > 0)
+                                {
+                                    dgpuVramTotalBytes = bytes;
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Program.LogDebug("VRAM registry read error: " + ex.Message);
+            }
+        }
+
+        // Real CPU temperature. Tries the thermal zone performance counter first because it is
+        // readable without administrator rights, then the ACPI WMI class. Returns -1 when no
+        // sensor is exposed so the UI can substitute another real metric.
+        private int GetCpuTemperature()
+        {
+            if (lastCpuTempTime != DateTime.MinValue && (DateTime.Now - lastCpuTempTime).TotalSeconds < 5.0)
+            {
+                return cachedCpuTempC;
+            }
+            lastCpuTempTime = DateTime.Now;
+
+            double maxCelsius = double.MinValue;
+
+            if (!cpuThermalPerfUnavailable)
+            {
+                try
+                {
+                    using (var searcher = new ManagementObjectSearcher("SELECT Temperature FROM Win32_PerfFormattedData_Counters_ThermalZoneInformation"))
+                    {
+                        foreach (ManagementObject obj in searcher.Get())
+                        {
+                            double celsius = Convert.ToDouble(obj["Temperature"] ?? 0.0) - 273.15;
+                            if (celsius > maxCelsius) maxCelsius = celsius;
+                        }
+                    }
+                }
+                catch
+                {
+                    cpuThermalPerfUnavailable = true;
+                }
+            }
+
+            if ((maxCelsius <= 5.0 || maxCelsius >= 120.0) && !cpuThermalAcpiUnavailable)
+            {
+                try
+                {
+                    using (var searcher = new ManagementObjectSearcher(@"root\WMI", "SELECT CurrentTemperature FROM MSAcpi_ThermalZoneTemperature"))
+                    {
+                        foreach (ManagementObject obj in searcher.Get())
+                        {
+                            double deciKelvin = Convert.ToDouble(obj["CurrentTemperature"] ?? 0.0);
+                            double celsius = (deciKelvin / 10.0) - 273.15;
+                            if (celsius > maxCelsius) maxCelsius = celsius;
+                        }
+                    }
+                }
+                catch
+                {
+                    // Usually access denied without elevation: stop querying this source.
+                    cpuThermalAcpiUnavailable = true;
+                }
+            }
+
+            cachedCpuTempC = (maxCelsius > 5.0 && maxCelsius < 120.0) ? (int)Math.Round(maxCelsius) : -1;
+            return cachedCpuTempC;
         }
 
         private static bool IsLikelyNpuDeviceName(string name)
@@ -2093,8 +2296,8 @@ namespace DesktopHtmlHost
                 prevSystemTime = system;
             }
 
-            double sinOffset = Math.Sin(DateTime.Now.Ticks / 120000000.0);
-            int cpuTemp = (int)Math.Round(38.0 + (cpuLoad * 0.35) + sinOffset * 1.5);
+            // Real ACPI sensor; -1 when the machine does not expose a thermal zone.
+            int cpuTemp = GetCpuTemperature();
 
             // RAM usage
             int ramLoad = 0;
@@ -2183,6 +2386,24 @@ namespace DesktopHtmlHost
                     }
                 }
                 catch {}
+
+                // Real average core frequency: base clock scaled by the processor performance counter.
+                try
+                {
+                    using (var searcher = new ManagementObjectSearcher("SELECT PercentProcessorPerformance FROM Win32_PerfFormattedData_Counters_ProcessorInformation WHERE Name LIKE '%_Total'"))
+                    {
+                        foreach (ManagementObject obj in searcher.Get())
+                        {
+                            double perfPct = Convert.ToDouble(obj["PercentProcessorPerformance"] ?? 0.0);
+                            if (perfPct > 0)
+                            {
+                                cachedCpuFreqGhz = cpuBaseSpeedVal * perfPct / 100.0;
+                            }
+                            break;
+                        }
+                    }
+                }
+                catch {}
             }
 
             long diskReadSec = 0;
@@ -2226,6 +2447,7 @@ namespace DesktopHtmlHost
                 int nextNpuUtil = 0;
                 long nextNpuMemBytes = npuMemBytes;
                 int nextDgpuUtil = 0;
+                long nextDgpuMemBytes = cachedDgpuMemBytes;
                 try
                 {
                     if (NpuDetected && string.IsNullOrEmpty(npuLuid))
@@ -2265,6 +2487,16 @@ namespace DesktopHtmlHost
                                 nextDgpuUtil += Convert.ToInt32(obj["UtilizationPercentage"] ?? 0);
                             }
                         }
+
+                        string memFilter = string.Format("Name LIKE '%{0}%'", dgpuLuid);
+                        using (var searcher = new ManagementObjectSearcher(@"root\cimv2", "SELECT DedicatedUsage FROM Win32_PerfFormattedData_GPUPerformanceCounters_GPUAdapterMemory WHERE " + memFilter))
+                        {
+                            foreach (ManagementObject obj in searcher.Get())
+                            {
+                                nextDgpuMemBytes = Convert.ToInt64(obj["DedicatedUsage"] ?? 0L);
+                                break;
+                            }
+                        }
                     }
 
                     if (!string.IsNullOrEmpty(npuLuid))
@@ -2294,6 +2526,7 @@ namespace DesktopHtmlHost
                     cachedNpuUtil = nextNpuUtil;
                     cachedNpuMemBytes = nextNpuMemBytes;
                     cachedDgpuUtil = nextDgpuUtil;
+                    cachedDgpuMemBytes = nextDgpuMemBytes;
                     igpuUtil = cachedIgpuUtil;
                     igpuMemBytes = cachedIgpuMemBytes;
                     npuUtil = cachedNpuUtil;
@@ -2304,12 +2537,13 @@ namespace DesktopHtmlHost
                 catch {}
             }
 
-            // nvidia GPU stats via NVML
+            // nvidia GPU stats via NVML (-1 / 0 when the sensor is not available; the UI swaps in another real metric)
             int gpuUtil = dgpuUtil;
-            int gpuTemp = 35;
-            int gpuCoreClock = 210;
-            int gpuMemClock = 405;
-            ulong vramTotal = 16376 * 1024 * 1024L;
+            int gpuTemp = -1;
+            int gpuCoreClock = -1;
+            int gpuMemClock = -1;
+            int gpuFanPct = -1;
+            ulong vramTotal = 0;
             ulong vramUsed = 0;
             bool nvmlSuccess = false;
 
@@ -2341,6 +2575,12 @@ namespace DesktopHtmlHost
                     {
                         gpuMemClock = (int)memClock;
                     }
+
+                    uint fanSpeed;
+                    if (Nvml.nvmlDeviceGetFanSpeed(dev, out fanSpeed) == 0)
+                    {
+                        gpuFanPct = (int)fanSpeed;
+                    }
                     
                     Nvml.nvmlMemory_t mem;
                     if (Nvml.nvmlDeviceGetMemoryInfo(dev, out mem) == 0)
@@ -2356,16 +2596,13 @@ namespace DesktopHtmlHost
 
             if (!nvmlSuccess)
             {
-                vramTotal = 16376 * 1024 * 1024L;
-                vramUsed = (ulong)(gpuUtil / 100.0 * vramTotal);
+                // Real fallback: driver-reported VRAM size and the Windows dedicated-memory counter.
+                vramTotal = (ulong)Math.Max(0, dgpuVramTotalBytes);
+                vramUsed = (ulong)Math.Max(0, cachedDgpuMemBytes);
             }
 
             UpdatePing();
             UpdateTopProcesses();
-
-            // Fan speeds
-            int fan1 = cpuTemp > 45 ? (int)Math.Round(1000 + (cpuLoad * 8.0) + (cpuTemp - 45) * 20.0) : (int)Math.Round(800 + cpuLoad * 4.0);
-            int fan2 = (gpuUtil > 5 || gpuTemp > 45) ? (int)Math.Round(900 + (gpuUtil * 6.0) + (gpuTemp - 40) * 15.0) : 0;
 
             string activePlanGuidStr = GetActivePowerPlanGuid();
 
@@ -2378,8 +2615,8 @@ namespace DesktopHtmlHost
             StringBuilder sb = new StringBuilder();
             sb.Append("{");
             
-            // CPU
-            string cpuFreqGhzStr = (cpuBaseSpeedVal * (1.0 + cpuLoad * 0.002)).ToString("F2", CultureInfo.InvariantCulture);
+            // CPU (real frequency from the performance counter; base clock until the first sample arrives)
+            string cpuFreqGhzStr = (cachedCpuFreqGhz > 0 ? cachedCpuFreqGhz : cpuBaseSpeedVal).ToString("F2", CultureInfo.InvariantCulture);
             sb.AppendFormat(CultureInfo.InvariantCulture, "\"cpu\":{{\"utilization\":{0},\"temp\":{1},\"name\":{2},\"freqGhz\":\"{3}\",\"baseSpeedGhz\":\"{4}\",\"cores\":{5},\"logical\":{6},\"threads\":{7},\"handles\":0,\"l2Cache\":{8},\"l3Cache\":{9}}},",
                 cpuLoad, cpuTemp, JsonString(CpuInfo), cpuFreqGhzStr, CpuBaseSpeed, CpuCores, CpuLogical, threadsCount, JsonString(CpuL2Cache), JsonString(CpuL3Cache));
 
@@ -2393,21 +2630,20 @@ namespace DesktopHtmlHost
                 NpuDetected ? "true" : "false", npuUtil, npuMemBytes / (1024 * 1024), npuTotalMb, npuTotalMb / 1024, JsonString(NpuName));
 
             // vram
+            int vramPct = vramTotal > 0 ? (int)Math.Round((double)vramUsed / vramTotal * 100) : 0;
             sb.AppendFormat(CultureInfo.InvariantCulture, "\"vram\":{{\"utilization\":{0},\"usedMb\":{1},\"totalMb\":{2},\"totalGb\":{3}}},",
-                (int)Math.Round((double)vramUsed / vramTotal * 100), vramUsed / (1024 * 1024), vramTotal / (1024 * 1024), vramTotal / 1024 / 1024 / 1024);
+                vramPct, vramUsed / (1024 * 1024), vramTotal / (1024 * 1024), vramTotal / 1024 / 1024 / 1024);
 
             // gpu
-            int tops = GpuName.Contains("4070") ? 321 : (GpuName.Contains("4080") ? 486 : 321);
-            int tflops = GpuName.Contains("4070") ? 39 : (GpuName.Contains("4080") ? 52 : 39);
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"gpu\":{{\"utilization\":{0},\"temp\":{1},\"coreClock\":{2},\"memoryClock\":{3},\"name\":{4},\"tops\":{5},\"tflops\":{6},\"driver\":{7},\"driverDate\":{8}}},",
-                gpuUtil, gpuTemp, gpuCoreClock, gpuMemClock, JsonString(GpuName), tops, tflops, JsonString(DgpuDriver), JsonString(DgpuDriverDate));
+            sb.AppendFormat(CultureInfo.InvariantCulture, "\"gpu\":{{\"utilization\":{0},\"temp\":{1},\"coreClock\":{2},\"memoryClock\":{3},\"name\":{4},\"driver\":{5},\"driverDate\":{6}}},",
+                gpuUtil, gpuTemp, gpuCoreClock, gpuMemClock, JsonString(GpuName), JsonString(DgpuDriver), JsonString(DgpuDriverDate));
 
             // ram
             string commitUsedGbStr = (commitUsedBytes / (1024.0 * 1024.0 * 1024.0)).ToString("F1", CultureInfo.InvariantCulture);
             string commitLimitGbStr = (commitLimitBytes / (1024.0 * 1024.0 * 1024.0)).ToString("F1", CultureInfo.InvariantCulture);
             string cachedGbStr = (ramCachedBytes / (1024.0 * 1024.0 * 1024.0)).ToString("F1", CultureInfo.InvariantCulture);
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"ram\":{{\"utilization\":{0},\"totalGb\":{1},\"commitUsedGb\":\"{2}\",\"commitLimitGb\":\"{3}\",\"cachedGb\":\"{4}\",\"poolPagedMb\":{5},\"poolNonPagedMb\":{6},\"speedMts\":{7},\"activity\":{8}}},",
-                ramLoad, TotalRamGb, commitUsedGbStr, commitLimitGbStr, cachedGbStr, ramPoolPagedBytes / (1024 * 1024), ramPoolNonPagedBytes / (1024 * 1024), RamSpeedMts, ramActivityVal);
+            sb.AppendFormat(CultureInfo.InvariantCulture, "\"ram\":{{\"utilization\":{0},\"totalGb\":{1},\"commitUsedGb\":\"{2}\",\"commitLimitGb\":\"{3}\",\"cachedGb\":\"{4}\",\"poolPagedMb\":{5},\"poolNonPagedMb\":{6},\"speedMts\":{7},\"activity\":{8},\"type\":{9},\"modules\":{10}}},",
+                ramLoad, TotalRamGb, commitUsedGbStr, commitLimitGbStr, cachedGbStr, ramPoolPagedBytes / (1024 * 1024), ramPoolNonPagedBytes / (1024 * 1024), RamSpeedMts, ramActivityVal, JsonString(RamType), RamModules);
 
             // disk
             string diskFreeGbStr = diskFreeGb.ToString("F1", CultureInfo.InvariantCulture);
@@ -2417,16 +2653,16 @@ namespace DesktopHtmlHost
             sb.AppendFormat(CultureInfo.InvariantCulture, "\"disk\":{{\"freeGb\":{0},\"utilization\":{1},\"storagePercent\":{2},\"totalGb\":{3},\"readMb\":\"{4}\",\"writeMb\":\"{5}\",\"responseTimeMs\":{6},\"name\":{7}}},",
                 diskFreeGbStr, diskActiveTime, diskStoragePercent, (int)diskTotalGb, diskReadMbStr, diskWriteMbStr, diskResponseMsStr, JsonString(DiskName));
 
-            // fans
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"fans\":{{\"fan1\":{0},\"fan2\":{1}}},", fan1, fan2);
+            // fans (only the real NVML GPU fan reading exists; -1 means unavailable)
+            sb.AppendFormat(CultureInfo.InvariantCulture, "\"fans\":{{\"gpuPct\":{0}}},", gpuFanPct);
 
             // network
             sb.AppendFormat(CultureInfo.InvariantCulture, "\"network\":{{\"lan\":{0},\"wifi\":{1},\"ip\":{2},\"ipv6\":{3},\"name\":{4},\"type\":{5},\"linkSpeedMbps\":{6}}},",
                 cachedNetTxRate, cachedNetRxRate, JsonString(cachedActiveIp), JsonString(cachedActiveIpv6), JsonString(cachedActiveNetName), JsonString(cachedNetType), cachedNetLinkSpeedMbps);
 
-            // global/uptime/ping
+            // global/uptime/ping (real Windows uptime, not the process lifetime)
             sb.AppendFormat(CultureInfo.InvariantCulture, "\"uptime\":{0},\"ping\":{1},\"totalProcesses\":{2},\"motherboard\":{3},",
-                (int)Math.Round((DateTime.Now - Process.GetCurrentProcess().StartTime).TotalSeconds), pingTime, processesCount, JsonString(MotherboardInfo));
+                Win32.GetTickCount64() / 1000, pingTime, processesCount, JsonString(MotherboardInfo));
 
             // topProcesses
             string topProcessesStr;

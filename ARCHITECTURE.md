@@ -32,11 +32,14 @@ graph TD
 Telemetry is collected inside `DesktopHtmlHost.cs`.
 
 - CPU load: `GetSystemTimes`
-- RAM: `GlobalMemoryStatusEx` plus WMI memory counters
+- CPU temperature: ACPI thermal zone (`MSAcpi_ThermalZoneTemperature`), hidden behind a real fallback metric when the sensor is absent
+- CPU frequency: `PercentProcessorPerformance` counter scaled by the base clock
+- RAM: `GlobalMemoryStatusEx` plus WMI memory counters; type and module count from SMBIOS
 - Disk: WMI logical disk counters
 - Network: `NetworkInterface` byte counters plus async ping to `1.1.1.1`
 - GPU/iGPU: DirectX LUID registry mapping plus GPU performance counters
-- NVIDIA details: NVML when available
+- NVIDIA details: NVML when available (temperature, clocks, fan, VRAM); otherwise driver-reported VRAM size and the Windows `DedicatedUsage` counter
+- System uptime: `GetTickCount64`
 - Power plans: `powercfg /list`, `PowerGetActiveScheme`, and `PowerSetActiveScheme`
 
 The frontend receives telemetry only through WebView2 messages. There is no HTTP server in the current native architecture.
