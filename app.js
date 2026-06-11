@@ -48,7 +48,7 @@ const ramGaugeContainer = document.getElementById("ram-gauge-container");
 const ramFreeSub = document.getElementById("ram-free-sub");
 const ramCachedSub = document.getElementById("ram-cached-sub");
 const ramPoolPagedSub = document.getElementById("ram-pool-paged-sub");
-const ramPoolNonPagedSub = document.getElementById("ram-pool-nonpaged-sub");
+const ramTopProcSub = document.getElementById("ram-top-proc-sub");
 const ramStatusSub = document.getElementById("ram-status-sub");
 const ramSpeedSub = document.getElementById("ram-speed-sub");
 
@@ -90,6 +90,7 @@ const npuUtilBar = document.getElementById("npu-util-bar");
 const gpuVramBar = document.getElementById("gpu-vram-bar");
 const ssdTotalSub = document.getElementById("ssd-total-sub");
 const clockMb = document.getElementById("clock-mb");
+const clockBattery = document.getElementById("clock-battery");
 
 // Remote Control Container
 const powerPlansContainer = document.getElementById("power-plans-container");
@@ -143,15 +144,10 @@ const TELEMETRY_ORBIT_SCALE = 0.38;
 const TELEMETRY_ORBIT_MAX = 320;
 const TELEMETRY_ORBIT_RING_INDEX = 3;
 const TELEMETRY_RADAR_RING_COUNT = 5;
-const TELEMETRY_NODE_ANGLES = {
-    cpu: -150,
-    net: -90,
-    ram: -30,
-    ssd: 30,
-    gpu: 90,
-    igpu: 150,
-    npuAccel: 180
-};
+// Display order around the orbit; hidden nodes are skipped and the
+// remaining ones are redistributed evenly.
+const TELEMETRY_ORBIT_ORDER = ["cpu", "net", "ram", "ssd", "gpu", "igpu", "npuAccel"];
+const TELEMETRY_ORBIT_START_ANGLE = -150;
 
 function resizeCanvas() {
     const rect = canvas.parentElement.getBoundingClientRect();
@@ -389,24 +385,20 @@ function getTelemetryLayout() {
 // Position targets setup
 function updateNodeTargets() {
     const layout = getTelemetryLayout();
-    const placeOnOrbit = (node, angleDeg) => {
-        const angle = angleDeg * Math.PI / 180;
-        node.targetX = layout.cx + Math.cos(angle) * layout.orbitRadius;
-        node.targetY = layout.cy + Math.sin(angle) * layout.orbitRadius;
-    };
     
     // Core at Center
     telemetryNodes.npu.targetX = layout.cx;
     telemetryNodes.npu.targetY = layout.cy;
     
-    // Surround nodes: one shared radius, exact 60-degree spacing for the six visible nodes.
-    placeOnOrbit(telemetryNodes.cpu, TELEMETRY_NODE_ANGLES.cpu);
-    placeOnOrbit(telemetryNodes.net, TELEMETRY_NODE_ANGLES.net);
-    placeOnOrbit(telemetryNodes.ram, TELEMETRY_NODE_ANGLES.ram);
-    placeOnOrbit(telemetryNodes.ssd, TELEMETRY_NODE_ANGLES.ssd);
-    placeOnOrbit(telemetryNodes.gpu, TELEMETRY_NODE_ANGLES.gpu);
-    placeOnOrbit(telemetryNodes.igpu, TELEMETRY_NODE_ANGLES.igpu);
-    placeOnOrbit(telemetryNodes.npuAccel, TELEMETRY_NODE_ANGLES.npuAccel);
+    // Surround nodes: one shared radius, visible nodes evenly distributed.
+    const visibleKeys = TELEMETRY_ORBIT_ORDER.filter(key => telemetryNodes[key].visible !== false);
+    const step = 360 / Math.max(1, visibleKeys.length);
+    visibleKeys.forEach((key, index) => {
+        const node = telemetryNodes[key];
+        const angle = (TELEMETRY_ORBIT_START_ANGLE + index * step) * Math.PI / 180;
+        node.targetX = layout.cx + Math.cos(angle) * layout.orbitRadius;
+        node.targetY = layout.cy + Math.sin(angle) * layout.orbitRadius;
+    });
 }
 
 // Initialize nodes at targets
@@ -986,6 +978,35 @@ function setNpuVisibility(hasNpu) {
     }
 }
 
+// Hides the iGPU / dGPU cards and orbit nodes on machines that lack the hardware.
+function setGpuVisibility(hasIgpu, hasDgpu) {
+    if (vramCard) {
+        vramCard.classList.toggle("card-hidden", !hasIgpu);
+        vramCard.setAttribute("aria-hidden", hasIgpu ? "false" : "true");
+    }
+    if (gpuCard) {
+        gpuCard.classList.toggle("card-hidden", !hasDgpu);
+        gpuCard.setAttribute("aria-hidden", hasDgpu ? "false" : "true");
+    }
+    if (acceleratorRow) {
+        acceleratorRow.classList.toggle("no-igpu", !hasIgpu);
+    }
+
+    let changed = false;
+    if (telemetryNodes.igpu.visible !== hasIgpu) {
+        telemetryNodes.igpu.visible = hasIgpu;
+        changed = true;
+    }
+    if (telemetryNodes.gpu.visible !== hasDgpu) {
+        telemetryNodes.gpu.visible = hasDgpu;
+        changed = true;
+    }
+    if (changed) {
+        syncTelemetryLayoutAfterResize(true);
+        needsRender = true;
+    }
+}
+
 function updateDOM(stats) {
     const npuStats = stats.npu || {
         utilization: 0,
@@ -997,6 +1018,8 @@ function updateDOM(stats) {
     };
     const hasNpu = npuStats.detected === true;
     setNpuVisibility(hasNpu);
+    // Older payloads do not carry the detected flags: keep everything visible then.
+    setGpuVisibility(stats.igpu.detected !== false, stats.gpu.detected !== false);
 
     // 1. Update circular telemetry gauges (Left Column)
     setCircularProgress(cpuRing, stats.cpu.utilization);
@@ -1051,7 +1074,10 @@ function updateDOM(stats) {
         setSubMetric(gpuTempSub, "PILOTE", stats.gpu.driver || "--");
     }
     setSubMetric(gpuVramSub, "VRAM", dgpuVramTotalGb ? `${dgpuVramUsedGb} / ${dgpuVramTotalGb} Go` : `${dgpuVramUsedGb} Go`);
-    if (stats.gpu.coreClock >= 0) {
+    const gpuPowerW = Number(stats.gpu.powerW);
+    if (gpuPowerW >= 0) {
+        setSubMetric(gpuCoreSub, "CONSOMMATION", `${gpuPowerW} W`);
+    } else if (stats.gpu.coreClock >= 0) {
         setSubMetric(gpuCoreSub, "CORE CLOCK", `${stats.gpu.coreClock} MHz`);
     } else {
         setSubMetric(gpuCoreSub, "MAJ PILOTE", stats.gpu.driverDate || "--");
@@ -1084,8 +1110,16 @@ function updateDOM(stats) {
     if (ramPoolPagedSub) {
         ramPoolPagedSub.textContent = `${stats.ram.poolPagedMb} Mo`;
     }
-    if (ramPoolNonPagedSub) {
-        ramPoolNonPagedSub.textContent = `${stats.ram.poolNonPagedMb} Mo`;
+    if (ramTopProcSub) {
+        const topRam = stats.topRamProcess;
+        if (topRam && topRam.name) {
+            const ramMb = Number(topRam.ramMb) || 0;
+            const ramText = ramMb >= 1024 ? `${(ramMb / 1024).toFixed(1)} Go` : `${ramMb} Mo`;
+            const shortRamName = topRam.name.length > 12 ? topRam.name.slice(0, 11) + "…" : topRam.name;
+            ramTopProcSub.textContent = `${shortRamName} ${ramText}`;
+        } else {
+            ramTopProcSub.textContent = "--";
+        }
     }
     ramStatusSub.textContent = `${stats.ram.commitUsedGb} Go / ${stats.ram.commitLimitGb} Go`;
     ramStatusSub.className = "val text-blue";
@@ -1149,7 +1183,12 @@ function updateDOM(stats) {
         netIpv6Sub.title = cleanIpv6;
     }
     if (netTypeSub) {
-        netTypeSub.textContent = stats.network.type.toUpperCase();
+        const wifiSignal = Number(stats.network.signal);
+        if (stats.network.type === "Wi-Fi" && wifiSignal >= 0) {
+            setSubMetric(netTypeSub, "SIGNAL WI-FI", `${wifiSignal} %`);
+        } else {
+            setSubMetric(netTypeSub, "TYPE DE CONNEXION", stats.network.type.toUpperCase());
+        }
     }
     if (netPingSub) {
         netPingSub.textContent = stats.ping > 0 ? `${stats.ping} ms` : "-- ms";
@@ -1223,6 +1262,18 @@ function updateDOM(stats) {
     }
     if (stats.motherboard && clockMb) {
         clockMb.textContent = stats.motherboard.startsWith("CARTE MÈRE") ? stats.motherboard : "CARTE MÈRE " + stats.motherboard;
+    }
+    if (clockBattery) {
+        const battery = stats.battery;
+        if (battery && battery.present && battery.percent >= 0) {
+            const batteryText = `BATTERIE ${battery.percent} % · ${battery.ac ? "SECTEUR" : "SUR BATTERIE"}`;
+            if (clockBattery.textContent !== batteryText) {
+                clockBattery.textContent = batteryText;
+            }
+            clockBattery.style.display = "";
+        } else {
+            clockBattery.style.display = "none";
+        }
     }
     // 7. Update Holographic Neural Telemetry Map live parameters
     if (telemetryNodes.npu) {
@@ -1621,7 +1672,7 @@ function dimGauges() {
     ramFreeSub.textContent = `0.0 Go`;
     if (ramCachedSub) ramCachedSub.textContent = `0.0 Go`;
     if (ramPoolPagedSub) ramPoolPagedSub.textContent = `0 Mo`;
-    if (ramPoolNonPagedSub) ramPoolNonPagedSub.textContent = `0 Mo`;
+    if (ramTopProcSub) ramTopProcSub.textContent = `--`;
     ramStatusSub.textContent = `0.0 Go / 0.0 Go`;
     ramStatusSub.className = "val";
     if (ramSpeedSub) ramSpeedSub.textContent = `0 MT/s`;
@@ -1644,6 +1695,9 @@ function dimGauges() {
     
     if (clockMb) {
         clockMb.textContent = "--";
+    }
+    if (clockBattery) {
+        clockBattery.style.display = "none";
     }
 
     if (vramCard) vramCard.classList.remove("overload");

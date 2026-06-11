@@ -1287,6 +1287,39 @@ namespace DesktopHtmlHost
 
         [DllImport("kernel32.dll")]
         public static extern ulong GetTickCount64();
+
+        [DllImport("kernel32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetSystemPowerStatus([In, Out] SYSTEM_POWER_STATUS lpSystemPowerStatus);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public class SYSTEM_POWER_STATUS
+    {
+        public byte ACLineStatus;
+        public byte BatteryFlag;
+        public byte BatteryLifePercent;
+        public byte SystemStatusFlag;
+        public int BatteryLifeTime;
+        public int BatteryFullLifeTime;
+    }
+
+    public static class WlanApi
+    {
+        [DllImport("wlanapi.dll")]
+        public static extern int WlanOpenHandle(uint dwClientVersion, IntPtr pReserved, out uint pdwNegotiatedVersion, out IntPtr phClientHandle);
+
+        [DllImport("wlanapi.dll")]
+        public static extern int WlanCloseHandle(IntPtr hClientHandle, IntPtr pReserved);
+
+        [DllImport("wlanapi.dll")]
+        public static extern int WlanEnumInterfaces(IntPtr hClientHandle, IntPtr pReserved, out IntPtr ppInterfaceList);
+
+        [DllImport("wlanapi.dll")]
+        public static extern int WlanQueryInterface(IntPtr hClientHandle, ref Guid pInterfaceGuid, int OpCode, IntPtr pReserved, out uint pdwDataSize, out IntPtr ppData, IntPtr pWlanOpcodeValueType);
+
+        [DllImport("wlanapi.dll")]
+        public static extern void WlanFreeMemory(IntPtr pMemory);
     }
 
     public static class Nvml
@@ -1341,6 +1374,9 @@ namespace DesktopHtmlHost
 
         [DllImport(NvmlDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "nvmlDeviceGetMemoryInfo")]
         public static extern int nvmlDeviceGetMemoryInfo(IntPtr device, out nvmlMemory_t memory);
+
+        [DllImport(NvmlDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "nvmlDeviceGetPowerUsage")]
+        public static extern int nvmlDeviceGetPowerUsage(IntPtr device, out uint milliwatts);
 
         [DllImport(NvmlDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "nvmlShutdown")]
         public static extern int nvmlShutdown();
@@ -1400,6 +1436,7 @@ namespace DesktopHtmlHost
 
         // Process lists and cached top processes
         private string cachedTopProcessesJson = "[]";
+        private string cachedTopRamProcessJson = "{}";
         private int topProcessCounter = 0;
         private bool topProcessUpdatePending = false;
 
@@ -1430,6 +1467,11 @@ namespace DesktopHtmlHost
         private int cachedDgpuUtil = 0;
         private long cachedDgpuMemBytes = 0;
         private int cachedIgpuDecodeUtil = 0;
+
+        // Wi-Fi signal cache
+        private bool wlanUnavailable = false;
+        private DateTime lastWifiSignalTime = DateTime.MinValue;
+        private int cachedWifiSignal = -1;
 
         // Real sensors state
         private long dgpuVramTotalBytes = 0;
@@ -1472,7 +1514,8 @@ namespace DesktopHtmlHost
                                         {
                                             dgpuLuid = formattedLuid;
                                         }
-                                        else if (descLower.Contains("intel") || descLower.Contains("uhd") || descLower.Contains("arc"))
+                                        else if (descLower.Contains("intel") || descLower.Contains("uhd") || descLower.Contains("arc") ||
+                                                 descLower.Contains("qualcomm") || descLower.Contains("adreno"))
                                         {
                                             igpuLuid = formattedLuid;
                                         }
@@ -1596,7 +1639,8 @@ namespace DesktopHtmlHost
                             DgpuDriver = driverVer;
                             DgpuDriverDate = driverDate;
                         }
-                        else if (nameLower.Contains("intel") || nameLower.Contains("arc") || nameLower.Contains("uhd"))
+                        else if (nameLower.Contains("intel") || nameLower.Contains("arc") || nameLower.Contains("uhd") ||
+                                 nameLower.Contains("qualcomm") || nameLower.Contains("adreno"))
                         {
                             IgpuInfo = name;
                             IgpuDriver = driverVer;
@@ -2075,6 +2119,18 @@ namespace DesktopHtmlHost
             return success;
         }
 
+        // Virtual switches, VM adapters and VPN tunnels must not pollute the displayed identity
+        // or double-count traffic that also flows through the physical adapter.
+        private static bool IsVirtualOrTunnelAdapter(NetworkInterface ni)
+        {
+            string text = (ni.Description + " " + ni.Name).ToLowerInvariant();
+            return text.Contains("virtual") || text.Contains("vmware") || text.Contains("virtualbox") ||
+                   text.Contains("vbox") || text.Contains("hyper-v") || text.Contains("vethernet") ||
+                   text.Contains("tap-") || text.Contains("wintun") || text.Contains("wireguard") ||
+                   text.Contains("openvpn") || text.Contains("tailscale") || text.Contains("zerotier") ||
+                   text.Contains("loopback") || text.Contains("bluetooth");
+        }
+
         private void UpdateNetworkStats()
         {
             try
@@ -2086,19 +2142,29 @@ namespace DesktopHtmlHost
                 string activeNetName = "Ethernet";
                 string netType = "Ethernet";
                 long linkSpeedMbps = cachedNetLinkSpeedMbps;
+                bool identityPinnedToGateway = false;
 
                 NetworkInterface[] interfaces = NetworkInterface.GetAllNetworkInterfaces();
                 foreach (var ni in interfaces)
                 {
                     if (ni.OperationalStatus == OperationalStatus.Up && 
                         ni.NetworkInterfaceType != NetworkInterfaceType.Loopback && 
-                        ni.NetworkInterfaceType != NetworkInterfaceType.Tunnel)
+                        ni.NetworkInterfaceType != NetworkInterfaceType.Tunnel &&
+                        !IsVirtualOrTunnelAdapter(ni))
                     {
                         var ipProps = ni.GetIPProperties();
                         var stats = ni.GetIPv4Statistics();
                         currentRx += stats.BytesReceived;
                         currentTx += stats.BytesSent;
-                        
+
+                        // The interface holding the default gateway is the real internet-facing one.
+                        bool hasGateway = ipProps.GatewayAddresses.Count > 0;
+                        if (identityPinnedToGateway && !hasGateway)
+                        {
+                            continue;
+                        }
+
+                        bool gotIpv4 = false;
                         foreach (var addr in ipProps.UnicastAddresses)
                         {
                             if (addr.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
@@ -2110,11 +2176,17 @@ namespace DesktopHtmlHost
                                 {
                                     linkSpeedMbps = Math.Max(1, ni.Speed / 1000000L);
                                 }
+                                gotIpv4 = true;
                             }
                             else if (addr.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
                             {
                                 activeIpv6 = addr.Address.ToString();
                             }
+                        }
+
+                        if (hasGateway && gotIpv4)
+                        {
+                            identityPinnedToGateway = true;
                         }
                     }
                 }
@@ -2173,6 +2245,92 @@ namespace DesktopHtmlHost
             }
         }
 
+        // Real Wi-Fi signal quality (0-100) of the connected interface through the native WLAN
+        // API, which is locale independent. Returns -1 when not connected or unsupported.
+        private int GetWifiSignal()
+        {
+            if (wlanUnavailable) return -1;
+            if (lastWifiSignalTime != DateTime.MinValue && (DateTime.Now - lastWifiSignalTime).TotalSeconds < 5.0)
+            {
+                return cachedWifiSignal;
+            }
+            lastWifiSignalTime = DateTime.Now;
+
+            IntPtr handle = IntPtr.Zero;
+            IntPtr listPtr = IntPtr.Zero;
+            try
+            {
+                uint negotiatedVersion;
+                if (WlanApi.WlanOpenHandle(2, IntPtr.Zero, out negotiatedVersion, out handle) != 0)
+                {
+                    cachedWifiSignal = -1;
+                    return -1;
+                }
+                if (WlanApi.WlanEnumInterfaces(handle, IntPtr.Zero, out listPtr) != 0)
+                {
+                    cachedWifiSignal = -1;
+                    return -1;
+                }
+
+                // WLAN_INTERFACE_INFO_LIST layout: dwNumberOfItems(4) + dwIndex(4) + items.
+                // WLAN_INTERFACE_INFO layout: GUID(16) + description WCHAR[256](512) + state(4) = 532 bytes.
+                int count = Marshal.ReadInt32(listPtr, 0);
+                int best = -1;
+                for (int i = 0; i < count; i++)
+                {
+                    IntPtr infoPtr = new IntPtr(listPtr.ToInt64() + 8 + ((long)i * 532));
+                    int state = Marshal.ReadInt32(infoPtr, 528);
+                    if (state != 1) continue; // wlan_interface_state_connected
+
+                    Guid ifaceGuid = (Guid)Marshal.PtrToStructure(infoPtr, typeof(Guid));
+                    uint dataSize;
+                    IntPtr dataPtr;
+                    // 7 = wlan_intf_opcode_current_connection
+                    if (WlanApi.WlanQueryInterface(handle, ref ifaceGuid, 7, IntPtr.Zero, out dataSize, out dataPtr, IntPtr.Zero) == 0)
+                    {
+                        try
+                        {
+                            // wlanSignalQuality offset in WLAN_CONNECTION_ATTRIBUTES:
+                            // isState(4) + mode(4) + profile(512) + ssid(36) + bssType(4) + bssid(6+2) + phyType(4) + phyIndex(4) = 576
+                            if (dataSize >= 580)
+                            {
+                                int signal = Marshal.ReadInt32(dataPtr, 576);
+                                if (signal >= 0 && signal <= 100 && signal > best)
+                                {
+                                    best = signal;
+                                }
+                            }
+                        }
+                        finally
+                        {
+                            WlanApi.WlanFreeMemory(dataPtr);
+                        }
+                    }
+                }
+
+                cachedWifiSignal = best;
+                return best;
+            }
+            catch
+            {
+                // wlanapi.dll missing (Server Core) or WLAN service stopped: stop querying.
+                wlanUnavailable = true;
+                cachedWifiSignal = -1;
+                return -1;
+            }
+            finally
+            {
+                if (listPtr != IntPtr.Zero)
+                {
+                    try { WlanApi.WlanFreeMemory(listPtr); } catch {}
+                }
+                if (handle != IntPtr.Zero)
+                {
+                    try { WlanApi.WlanCloseHandle(handle, IntPtr.Zero); } catch {}
+                }
+            }
+        }
+
         private void UpdateTopProcesses()
         {
             topProcessCounter++;
@@ -2218,10 +2376,16 @@ namespace DesktopHtmlHost
                             JsonString(topList[i].Item1), topList[i].Item2 * cpuCount, topList[i].Item3 * (long)1024 * 1024);
                     }
                     sb.Append("]");
+
+                    var topRam = processes.OrderByDescending(p => p.Item3).FirstOrDefault();
+                    string topRamJson = topRam != null
+                        ? string.Format(CultureInfo.InvariantCulture, "{{\"name\":{0},\"ramMb\":{1}}}", JsonString(topRam.Item1), topRam.Item3)
+                        : "{}";
                     
                     lock (this)
                     {
                         cachedTopProcessesJson = sb.ToString();
+                        cachedTopRamProcessJson = topRamJson;
                     }
                 }
                 catch (Exception ex)
@@ -2556,6 +2720,7 @@ namespace DesktopHtmlHost
             int gpuTemp = -1;
             int gpuCoreClock = -1;
             int gpuMemClock = -1;
+            int gpuPowerW = -1;
             ulong vramTotal = 0;
             ulong vramUsed = 0;
             bool nvmlSuccess = false;
@@ -2589,6 +2754,12 @@ namespace DesktopHtmlHost
                         gpuMemClock = (int)memClock;
                     }
 
+                    uint milliwatts;
+                    if (Nvml.nvmlDeviceGetPowerUsage(dev, out milliwatts) == 0)
+                    {
+                        gpuPowerW = (int)Math.Round(milliwatts / 1000.0);
+                    }
+
                     Nvml.nvmlMemory_t mem;
                     if (Nvml.nvmlDeviceGetMemoryInfo(dev, out mem) == 0)
                     {
@@ -2611,6 +2782,31 @@ namespace DesktopHtmlHost
             UpdatePing();
             UpdateTopProcesses();
 
+            bool igpuDetected = !string.IsNullOrEmpty(igpuLuid) || !string.IsNullOrEmpty(IgpuInfo);
+            bool dgpuDetected = nvmlSuccess || !string.IsNullOrEmpty(dgpuLuid) || !string.IsNullOrEmpty(GpuName);
+
+            int wifiSignal = cachedNetType == "Wi-Fi" ? GetWifiSignal() : -1;
+
+            // Real battery state (laptops); flag 128 means no system battery.
+            bool batteryPresent = false;
+            int batteryPercent = -1;
+            bool acLine = true;
+            try
+            {
+                SYSTEM_POWER_STATUS sps = new SYSTEM_POWER_STATUS();
+                if (Win32.GetSystemPowerStatus(sps))
+                {
+                    batteryPresent = (sps.BatteryFlag & 128) == 0 && sps.BatteryFlag != 255;
+                    acLine = sps.ACLineStatus == 1;
+                    batteryPercent = sps.BatteryLifePercent <= 100 ? sps.BatteryLifePercent : -1;
+                    if (batteryPercent < 0)
+                    {
+                        batteryPresent = false;
+                    }
+                }
+            }
+            catch {}
+
             string activePlanGuidStr = GetActivePowerPlanGuid();
 
             foreach (var plan in PowerPlans)
@@ -2628,8 +2824,8 @@ namespace DesktopHtmlHost
                 cpuLoad, cpuTemp, JsonString(CpuInfo), cpuFreqGhzStr, CpuBaseSpeed, CpuCores, CpuLogical, threadsCount, JsonString(CpuL2Cache), JsonString(CpuL3Cache));
 
             // igpu
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"igpu\":{{\"utilization\":{0},\"decodeUtil\":{1},\"usedMb\":{2},\"totalMb\":{3},\"totalGb\":{4},\"name\":{5},\"driver\":{6},\"driverDate\":{7}}},",
-                igpuUtil, igpuDecodeUtil, igpuMemBytes / (1024 * 1024), ramTotalPhys / 1024 / 1024 / 2, ramTotalPhys / 1024 / 1024 / 1024 / 2, JsonString(IgpuInfo), JsonString(IgpuDriver), JsonString(IgpuDriverDate));
+            sb.AppendFormat(CultureInfo.InvariantCulture, "\"igpu\":{{\"detected\":{0},\"utilization\":{1},\"decodeUtil\":{2},\"usedMb\":{3},\"totalMb\":{4},\"totalGb\":{5},\"name\":{6},\"driver\":{7},\"driverDate\":{8}}},",
+                igpuDetected ? "true" : "false", igpuUtil, igpuDecodeUtil, igpuMemBytes / (1024 * 1024), ramTotalPhys / 1024 / 1024 / 2, ramTotalPhys / 1024 / 1024 / 1024 / 2, JsonString(IgpuInfo), JsonString(IgpuDriver), JsonString(IgpuDriverDate));
 
             // npu
             long npuTotalMb = (long)(ramTotalPhys / 1024 / 1024 / 2);
@@ -2642,8 +2838,8 @@ namespace DesktopHtmlHost
                 vramPct, vramUsed / (1024 * 1024), vramTotal / (1024 * 1024), vramTotal / 1024 / 1024 / 1024);
 
             // gpu
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"gpu\":{{\"utilization\":{0},\"temp\":{1},\"coreClock\":{2},\"memoryClock\":{3},\"name\":{4},\"driver\":{5},\"driverDate\":{6}}},",
-                gpuUtil, gpuTemp, gpuCoreClock, gpuMemClock, JsonString(GpuName), JsonString(DgpuDriver), JsonString(DgpuDriverDate));
+            sb.AppendFormat(CultureInfo.InvariantCulture, "\"gpu\":{{\"detected\":{0},\"utilization\":{1},\"temp\":{2},\"coreClock\":{3},\"memoryClock\":{4},\"powerW\":{5},\"name\":{6},\"driver\":{7},\"driverDate\":{8}}},",
+                dgpuDetected ? "true" : "false", gpuUtil, gpuTemp, gpuCoreClock, gpuMemClock, gpuPowerW, JsonString(GpuName), JsonString(DgpuDriver), JsonString(DgpuDriverDate));
 
             // ram
             string commitUsedGbStr = (commitUsedBytes / (1024.0 * 1024.0 * 1024.0)).ToString("F1", CultureInfo.InvariantCulture);
@@ -2661,8 +2857,12 @@ namespace DesktopHtmlHost
                 diskFreeGbStr, diskActiveTime, diskStoragePercent, (int)diskTotalGb, diskReadMbStr, diskWriteMbStr, diskResponseMsStr, JsonString(DiskName));
 
             // network
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"network\":{{\"lan\":{0},\"wifi\":{1},\"ip\":{2},\"ipv6\":{3},\"name\":{4},\"type\":{5},\"linkSpeedMbps\":{6}}},",
-                cachedNetTxRate, cachedNetRxRate, JsonString(cachedActiveIp), JsonString(cachedActiveIpv6), JsonString(cachedActiveNetName), JsonString(cachedNetType), cachedNetLinkSpeedMbps);
+            sb.AppendFormat(CultureInfo.InvariantCulture, "\"network\":{{\"lan\":{0},\"wifi\":{1},\"ip\":{2},\"ipv6\":{3},\"name\":{4},\"type\":{5},\"linkSpeedMbps\":{6},\"signal\":{7}}},",
+                cachedNetTxRate, cachedNetRxRate, JsonString(cachedActiveIp), JsonString(cachedActiveIpv6), JsonString(cachedActiveNetName), JsonString(cachedNetType), cachedNetLinkSpeedMbps, wifiSignal);
+
+            // battery
+            sb.AppendFormat(CultureInfo.InvariantCulture, "\"battery\":{{\"present\":{0},\"percent\":{1},\"ac\":{2}}},",
+                batteryPresent ? "true" : "false", batteryPercent, acLine ? "true" : "false");
 
             // global/uptime/ping (real Windows uptime, not the process lifetime)
             sb.AppendFormat(CultureInfo.InvariantCulture, "\"uptime\":{0},\"ping\":{1},\"totalProcesses\":{2},\"motherboard\":{3},",
@@ -2670,11 +2870,14 @@ namespace DesktopHtmlHost
 
             // topProcesses
             string topProcessesStr;
+            string topRamProcessStr;
             lock (this)
             {
                 topProcessesStr = cachedTopProcessesJson;
+                topRamProcessStr = cachedTopRamProcessJson;
             }
             sb.AppendFormat(System.Globalization.CultureInfo.InvariantCulture, "\"topProcesses\":{0},", topProcessesStr);
+            sb.AppendFormat(System.Globalization.CultureInfo.InvariantCulture, "\"topRamProcess\":{0},", topRamProcessStr);
 
             // powerPlans
             sb.Append("\"powerPlans\":[");

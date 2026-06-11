@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JULIENPIRON.FR - Control Cockpit</title>
-    <link rel="stylesheet" href="style.css?v=18">
+    <link rel="stylesheet" href="style.css?v=19">
 </head>
 <body>
     <!-- Vibrant Saturated Cosmic Background (Booster for Apple Glass) -->
@@ -200,6 +200,7 @@
                     </div>
                     <div class="clock-date" id="clock-date">-- -- ----</div>
                     <div class="clock-mb" id="clock-mb">--</div>
+                    <div class="clock-battery" id="clock-battery" style="display:none">--</div>
                 </div>
 
                 <!-- SOTA Holographic Neural Telemetry Map Canvas -->
@@ -244,8 +245,8 @@
                             <span class="val" id="ram-cached-sub">-- Go</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl">POOL NON PAGINÉ</span>
-                            <span class="val" id="ram-pool-nonpaged-sub">-- Mo</span>
+                            <span class="lbl">TOP PROCESSUS</span>
+                            <span class="val" id="ram-top-proc-sub">--</span>
                         </div>
                         <div class="sub-metric">
                             <span class="lbl">MÉMOIRE VIRTUELLE</span>
@@ -336,6 +337,6 @@
         </section>
     </main>
 
-    <script src="app.js?v=20" charset="UTF-8"></script>
+    <script src="app.js?v=21" charset="UTF-8"></script>
 </body>
 </html>
