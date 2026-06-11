@@ -2,6 +2,14 @@
 
 ## 2026-06-11
 
+- Masquage automatique des cartes iGPU et GPU sur les machines qui n'ont pas le materiel, avec redistribution des noeuds de la carte radar.
+- Prise en charge des GPU Qualcomm/Adreno (PC ARM Copilot+).
+- Filtrage des adaptateurs reseau virtuels (VMware, Hyper-V, VPN) et identite reseau basee sur l'interface portant la passerelle par defaut.
+- Affichage de la batterie (pourcentage et secteur) sur les portables, masque sur les tours.
+- Consommation GPU en watts via NVML a la place du core clock.
+- Top processus RAM sur la carte memoire a la place du pool non pagine.
+- Force du signal Wi-Fi via l'API WLAN native quand la connexion est sans fil.
+
 - Remplacement des infos pilote et de l'uptime par des mesures plus utiles : top processus CPU, decodage video iGPU, VRAM utilisee/totale et frequence memoire GPU.
 - Correction de la cadence CPU sur les processeurs hybrides (reference `ProcessorFrequency` du compteur au lieu de `MaxClockSpeed` WMI).
 - Retrait de la lecture du ventilateur GPU desormais non affichee.

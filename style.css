@@ -307,6 +307,18 @@ body {
     display: none;
 }
 
+.accelerator-row.no-igpu {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.accelerator-row.no-npu.no-igpu {
+    display: none;
+}
+
+.gauge-card.card-hidden {
+    display: none !important;
+}
+
 .gauge-card {
     flex: 1;
     padding: 20px 24px;
@@ -705,6 +717,17 @@ body {
     text-transform: uppercase;
     margin-top: 6px;
     opacity: 0.9;
+}
+
+.clock-battery {
+    font-family: var(--font-heading);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: rgba(255, 255, 255, 0.55);
+    text-transform: uppercase;
+    margin-top: 4px;
+    opacity: 0.85;
 }
 
 .clock-mb {
