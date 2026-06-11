@@ -2,6 +2,8 @@
 
 ## 2026-06-11
 
+- Version MSIX montee a 1.0.6.0 pour la soumission Store.
+
 - Masquage automatique des cartes iGPU et GPU sur les machines qui n'ont pas le materiel, avec redistribution des noeuds de la carte radar.
 - Prise en charge des GPU Qualcomm/Adreno (PC ARM Copilot+).
 - Filtrage des adaptateurs reseau virtuels (VMware, Hyper-V, VPN) et identite reseau basee sur l'interface portant la passerelle par defaut.
