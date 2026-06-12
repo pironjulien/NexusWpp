@@ -18,7 +18,7 @@ $projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $distDir = Join-Path $projectRoot "dist\msix"
 $packageDir = Join-Path $distDir "package"
 $assetsDir = Join-Path $packageDir "Assets"
-$version = "1.0.8.0"
+$version = "1.0.9.0"
 $identityName = "julienpiron.fr.NexusWpp"
 $msixPath = Join-Path $distDir ($identityName + "_" + $version + "_x64.msix")
 $publisher = "CN=C3E3A6F0-11D2-4EE1-B3F2-34EED4CAE7FA"
@@ -77,11 +77,14 @@ function New-LogoPng {
         $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
         try {
             $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
-            $graphics.Clear([System.Drawing.Color]::FromArgb(11, 15, 20))
+            $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+            $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+            $graphics.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
+            $graphics.Clear([System.Drawing.Color]::Transparent)
 
             $logo = [System.Drawing.Image]::FromFile((Join-Path $projectRoot "julienpiron.png"))
             try {
-                $size = [Math]::Min($Width, $Height) - 12
+                $size = [Math]::Min($Width, $Height)
                 $x = [Math]::Round(($Width - $size) / 2)
                 $y = [Math]::Round(($Height - $size) / 2)
                 $graphics.DrawImage($logo, $x, $y, $size, $size)
@@ -133,7 +136,7 @@ $manifest = @"
       <uap:VisualElements
         DisplayName="NexusWpp"
         Description="Fond d'ecran telemetry cockpit"
-        BackgroundColor="#0B0F14"
+        BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png" />
       <Extensions>
