@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-12
+
+- Version MSIX montee a 1.0.8.0 pour publier le correctif de demarrage Windows.
+- Ajout d'une tache de demarrage MSIX `windows.startupTask` activee pour relancer NexusWpp a l'ouverture de session.
+
 ## 2026-06-11
 
 - Version MSIX montee a 1.0.7.0 pour publier le correctif de reprise apres veille.
