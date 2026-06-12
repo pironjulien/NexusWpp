@@ -18,7 +18,7 @@ $projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $distDir = Join-Path $projectRoot "dist\msix"
 $packageDir = Join-Path $distDir "package"
 $assetsDir = Join-Path $packageDir "Assets"
-$version = "1.0.7.0"
+$version = "1.0.8.0"
 $identityName = "julienpiron.fr.NexusWpp"
 $msixPath = Join-Path $distDir ($identityName + "_" + $version + "_x64.msix")
 $publisher = "CN=C3E3A6F0-11D2-4EE1-B3F2-34EED4CAE7FA"
@@ -108,8 +108,9 @@ $manifest = @"
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap uap10 rescap">
+  IgnorableNamespaces="uap uap10 desktop rescap">
   <Identity Name="$identityName" Publisher="$publisher" Version="$version" ProcessorArchitecture="x64" />
   <Properties>
     <DisplayName>NexusWpp</DisplayName>
@@ -135,6 +136,17 @@ $manifest = @"
         BackgroundColor="#0B0F14"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png" />
+      <Extensions>
+        <desktop:Extension
+          Category="windows.startupTask"
+          Executable="nexuswpp.exe"
+          EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask
+            TaskId="NexusWppStartup"
+            Enabled="true"
+            DisplayName="NexusWpp" />
+        </desktop:Extension>
+      </Extensions>
     </Application>
   </Applications>
   <Capabilities>

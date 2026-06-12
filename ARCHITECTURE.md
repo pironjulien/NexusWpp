@@ -20,7 +20,7 @@ graph TD
 
 ## Startup Path
 
-1. Windows starts `nexuswpp.exe` through the Startup shortcut or the backup scheduled task.
+1. Windows starts `nexuswpp.exe` through `HKLM\...\Run` for the EXE installer, or through the packaged `windows.startupTask` for MSIX.
 2. A named mutex keeps only one instance alive.
 3. WebView2 starts immediately off screen and loads `http://nexuswpp.local/index.html` through a virtual host folder mapping.
 4. A 100 ms timer asks Explorer to create the wallpaper layer and searches for `WorkerW`.

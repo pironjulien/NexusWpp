@@ -66,6 +66,8 @@ L'installeur configure:
 - un raccourci `NexusWpp.lnk` dans le menu Démarrer commun;
 - une entrée de désinstallation dans Applications installées.
 
+Le package MSIX configure le lancement Windows via une tache de démarrage packagée `windows.startupTask`, car les entrées `HKLM\...\Run` de l'installeur EXE ne s'appliquent pas au mode Store/MSIX.
+
 L'application contient un verrou single-instance, donc relancer `NexusWpp` depuis le menu Démarrer ne crée pas deux fonds d'écran.
 
 ## Portabilité
