@@ -2,6 +2,8 @@
 
 ## 2026-06-12
 
+- Version MSIX montee a 1.0.9.0 pour publier le correctif d'icone Store.
+- Regeneration des icones NexusWpp en haute definition avec transparence native, sans fond noir dans le MSIX.
 - Version MSIX montee a 1.0.8.0 pour publier le correctif de demarrage Windows.
 - Ajout d'une tache de demarrage MSIX `windows.startupTask` activee pour relancer NexusWpp a l'ouverture de session.
 
