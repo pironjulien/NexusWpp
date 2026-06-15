@@ -1729,7 +1729,8 @@ function sendRemoteBounds(force = false) {
     if (el) {
         const rect = el.getBoundingClientRect();
         try {
-            const msg = "BOUNDS:" + Math.round(rect.left) + "," + Math.round(rect.top) + "," + Math.round(rect.right) + "," + Math.round(rect.bottom);
+            const dpr = window.devicePixelRatio || 1;
+            const msg = "BOUNDS:" + Math.round(rect.left) + "," + Math.round(rect.top) + "," + Math.round(rect.right) + "," + Math.round(rect.bottom) + "," + dpr.toFixed(4);
             if (force || msg !== lastRemoteBoundsMsg) {
                 lastRemoteBoundsMsg = msg;
                 window.chrome.webview.postMessage(msg);
