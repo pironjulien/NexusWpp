@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-15
+
+- Correction du transfert des clics du selecteur de modes d'alimentation depuis le fond d'ecran Windows vers WebView2, avec prise en compte du DPI reel du WebView.
+
 ## 2026-06-12
 
 - Version MSIX montee a 1.0.9.0 pour publier le correctif d'icone Store.

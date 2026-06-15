@@ -238,6 +238,10 @@ namespace DesktopHtmlHost
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool IsWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool IsIconic(IntPtr hWnd);
 
         [DllImport("user32.dll")]
@@ -665,13 +669,20 @@ namespace DesktopHtmlHost
                             if (msg.StartsWith("BOUNDS:"))
                             {
                                 string[] parts = msg.Substring(7).Split(',');
-                                if (parts.Length == 4)
+                                if (parts.Length >= 4)
                                 {
                                     double scale = activeInstance.GetDpiScale();
-                                    int left = (int)Math.Round(int.Parse(parts[0], CultureInfo.InvariantCulture) * scale);
-                                    int top = (int)Math.Round(int.Parse(parts[1], CultureInfo.InvariantCulture) * scale);
-                                    int right = (int)Math.Round(int.Parse(parts[2], CultureInfo.InvariantCulture) * scale);
-                                    int bottom = (int)Math.Round(int.Parse(parts[3], CultureInfo.InvariantCulture) * scale);
+                                    double webViewScale;
+                                    if (parts.Length >= 5 &&
+                                        double.TryParse(parts[4], NumberStyles.Float, CultureInfo.InvariantCulture, out webViewScale) &&
+                                        webViewScale > 0.0)
+                                    {
+                                        scale = webViewScale;
+                                    }
+                                    int left = (int)Math.Round(double.Parse(parts[0], CultureInfo.InvariantCulture) * scale);
+                                    int top = (int)Math.Round(double.Parse(parts[1], CultureInfo.InvariantCulture) * scale);
+                                    int right = (int)Math.Round(double.Parse(parts[2], CultureInfo.InvariantCulture) * scale);
+                                    int bottom = (int)Math.Round(double.Parse(parts[3], CultureInfo.InvariantCulture) * scale);
                                     remotePanelBounds = new System.Drawing.Rectangle(left, top, right - left, bottom - top);
                                     
                                     FindRenderWindow();
@@ -1182,6 +1193,11 @@ namespace DesktopHtmlHost
 
                         if (remotePanelBounds.Contains(clientPt))
                         {
+                            if (renderWindow == IntPtr.Zero || !IsWindow(renderWindow))
+                            {
+                                activeInstance.FindRenderWindow();
+                            }
+
                             if (!activeInstance.ShouldForwardDesktopClick(screenPt))
                             {
                                 return CallNextHookEx(hookId, nCode, wParam, lParam);
@@ -1222,6 +1238,13 @@ namespace DesktopHtmlHost
 
                 string cls = GetWindowClassName(current);
                 if (cls == "Progman" || cls == "WorkerW" || cls == "SHELLDLL_DefView" || cls == "SysListView32")
+                {
+                    return true;
+                }
+
+                uint pid;
+                GetWindowThreadProcessId(current, out pid);
+                if (pid == (uint)Process.GetCurrentProcess().Id)
                 {
                     return true;
                 }
