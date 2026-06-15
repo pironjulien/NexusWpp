@@ -2,6 +2,7 @@
 
 ## 2026-06-15
 
+- Audit du projet, nettoyage des liaisons JS/CSS mortes, alignement de la version de l'installeur EXE sur 1.0.10 et detection robuste des outils Windows SDK pour le build MSIX.
 - Version MSIX montee a 1.0.10.0 pour publier le correctif des clics d'alimentation.
 - Correction du transfert des clics du selecteur de modes d'alimentation depuis le fond d'ecran Windows vers WebView2, avec prise en compte du DPI reel du WebView.
 

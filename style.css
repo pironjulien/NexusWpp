@@ -683,12 +683,6 @@ body {
     position: relative;
 }
 
-.cyber-clock-card .ping-badge {
-    margin-bottom: 10px;
-    font-size: 11px;
-    padding: 3px 10px;
-}
-
 .clock-time {
     font-family: var(--font-heading);
     font-size: 40px;
@@ -742,245 +736,14 @@ body {
     text-shadow: 0 0 8px rgba(48, 209, 88, 0.45);
 }
 
-/* Linear metrics (RAM & SSD) */
-.linear-metrics {
-    padding: 22px 26px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 22px;
-}
-
-.linear-card {
-    display: flex;
-    flex-direction: column;
-}
-
-.linear-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 8px;
-}
-
-.linear-card h2 {
-    font-family: var(--font-body);
-    font-size: 19px;
-    font-weight: 700;
-    text-transform: uppercase;
-    color: var(--text-secondary);
-}
-
-.linear-value {
-    font-family: var(--font-heading);
-    font-size: 28px;
-    font-weight: 800;
-    color: var(--text-primary);
-}
-
-.progress-bar-container {
-    width: 100%;
-    height: 11px;
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: 6px;
-    overflow: hidden;
-    border: 1px solid rgba(255,255,255,0.06);
-}
-
-.progress-bar-fill {
-    height: 100%;
-    width: 0%;
-    border-radius: 6px;
-    transition: width 0.55s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.ram-bar {
-    background: linear-gradient(90deg, #0a84ff, #bf5aff);
-    box-shadow: 0 0 8px rgba(10, 132, 255, 0.4);
-}
-
-.disk-bar {
-    background: linear-gradient(90deg, #30d158, #00c7be);
-    box-shadow: 0 0 8px rgba(48, 209, 88, 0.4);
-}
-
-/* Top Processes Panel & Latency */
-.top-processes-card {
-    padding: 22px 26px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    flex: 1.1;
-}
-
-.top-processes-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
-    padding-bottom: 8px;
-}
-
-.top-processes-header .lbl-proc {
-    font-family: var(--font-heading);
-    font-size: 15px;
-    font-weight: 800;
-    letter-spacing: 2px;
-    color: var(--text-primary);
-}
-
-.ping-badge {
-    font-family: var(--font-heading);
-    font-size: 12px;
-    font-weight: 800;
-    padding: 2px 8px;
-    border-radius: 4px;
-    background: rgba(48, 209, 88, 0.12);
-    color: var(--npu-glow);
-    border: 1px solid rgba(48, 209, 88, 0.3);
-    text-shadow: 0 0 6px rgba(48, 209, 88, 0.35);
-    letter-spacing: 0.5px;
-    transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease, text-shadow 0.25s ease;
-}
-
-.ping-badge.medium {
-    background: rgba(255, 159, 10, 0.12);
-    color: #ff9f0a;
-    border-color: rgba(255, 159, 10, 0.3);
-    text-shadow: 0 0 6px rgba(255, 159, 10, 0.35);
-}
-
-.ping-badge.critical {
-    background: rgba(255, 55, 95, 0.12);
-    color: #ff375f;
-    border-color: rgba(255, 55, 95, 0.3);
-    text-shadow: 0 0 6px rgba(255, 55, 95, 0.35);
-}
-
-.process-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.process-row {
-    display: grid;
-    grid-template-columns: 1.6fr 1fr 1fr;
-    align-items: center;
-    font-family: var(--font-body);
-    font-size: 17px;
-}
-
-.process-row .p-name {
-    font-weight: 700;
-    color: var(--text-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.process-row .p-cpu {
-    font-family: var(--font-heading);
-    font-weight: 700;
-    color: var(--gpu-glow);
-    text-align: right;
-}
-
-.process-row .p-ram {
-    font-family: var(--font-heading);
-    font-weight: 700;
-    color: var(--ram-color);
-    text-align: right;
-}
-
-.process-row-placeholder {
-    font-family: var(--font-body);
-    font-size: 15px;
-    color: var(--text-dark);
-    text-align: center;
-    padding: 10px 0;
-}
-
-/* WMI Specs Sidebar Table (motherboard / general specs) */
-.specs-sidebar {
-    padding: 20px 26px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    overflow-y: auto;
-}
-
-.specs-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.specs-table tr {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-}
-
-.specs-table tr:last-child {
-    border-bottom: none;
-}
-
-.specs-table td {
-    padding: 7px 0;
-    vertical-align: middle;
-}
-
-.spec-label {
-    font-family: var(--font-body);
-    font-size: 17px;
-    font-weight: 700;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    width: 50%;
-}
-
-.spec-value {
-    font-family: var(--font-heading);
-    font-size: 17px;
-    font-weight: 700;
-    color: var(--text-primary);
-    text-align: right;
-    letter-spacing: 0.1px;
-}
-
-.separator-row {
-    border-bottom: 2px solid rgba(255, 255, 255, 0.1) !important;
-}
-
-.spec-temp {
-    font-size: 19px;
-    font-weight: 800;
-    color: #ff9f0a;
-}
-
-.highlight-pink {
-    color: var(--gpu-glow);
-    text-shadow: 0 0 6px rgba(255, 55, 95, 0.35);
-}
-
 .highlight-green {
     color: var(--vram-glow);
     text-shadow: 0 0 6px rgba(48, 209, 88, 0.35);
 }
 
-.highlight-blue {
-    color: var(--ram-color);
-    text-shadow: 0 0 6px rgba(10, 132, 255, 0.35);
-}
-
 .text-cyan {
     color: var(--npu-glow);
     text-shadow: 0 0 6px rgba(0, 199, 190, 0.35);
-}
-
-.highlight-orange {
-    color: #ff9f0a;
-    font-weight: 800;
-    text-transform: uppercase;
 }
 
 
@@ -1168,8 +931,7 @@ body {
 }
 
 /* When active, blink alert badge */
-.gauge-card.overload .critical-alert,
-.linear-metrics.overload .critical-alert {
+.gauge-card.overload .critical-alert {
     opacity: 1;
     animation: alert-blink 1s steps(2, start) infinite;
 }
@@ -1179,8 +941,7 @@ body {
 }
 
 /* Red glow and hardware cockpit vibrations shake */
-.gauge-card.overload,
-.linear-metrics.overload {
+.gauge-card.overload {
     border-color: rgba(255, 55, 95, 0.45) !important;
     box-shadow: 0 16px 48px 0 rgba(0, 0, 0, 0.45), 
                 inset 0 1px 1px rgba(255, 55, 95, 0.18),
@@ -1310,47 +1071,6 @@ body.system-critical .nebula {
     
     .chip-name {
         display: none !important;
-    }
-    
-    /* Linear metrics */
-    .linear-metrics {
-        padding: 12px 18px !important;
-        gap: 10px !important;
-    }
-    
-    .linear-card h2 {
-        font-size: 14px !important;
-    }
-    
-    .linear-value {
-        font-size: 18px !important;
-    }
-    
-    .progress-bar-container {
-        height: 8px !important;
-    }
-    
-    /* Top Processes */
-    .top-processes-card {
-        padding: 12px 18px !important;
-        gap: 8px !important;
-    }
-    
-    .process-row {
-        font-size: 14px !important;
-    }
-    
-    /* Specs table */
-    .specs-sidebar {
-        padding: 10px 18px !important;
-    }
-    
-    .specs-table td {
-        padding: 4px 0 !important;
-    }
-    
-    .spec-label, .spec-value {
-        font-size: 13px !important;
     }
     
     /* Clock */

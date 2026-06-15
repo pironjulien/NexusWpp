@@ -34,7 +34,6 @@ const cpuTempSub = document.getElementById("cpu-temp-sub");
 const cpuTopProcSub = document.getElementById("cpu-top-proc-sub");
 const cpuFreqSub = document.getElementById("cpu-freq-sub");
 const cpuProcThreadsSub = document.getElementById("cpu-proc-threads-sub");
-const cpuCachesSub = document.getElementById("cpu-caches-sub");
 
 const gpuTempSub = document.getElementById("gpu-temp-sub");
 const gpuVramSub = document.getElementById("gpu-vram-sub");
@@ -47,19 +46,15 @@ const ramRing = document.getElementById("ram-ring");
 const ramGaugeContainer = document.getElementById("ram-gauge-container");
 const ramFreeSub = document.getElementById("ram-free-sub");
 const ramCachedSub = document.getElementById("ram-cached-sub");
-const ramPoolPagedSub = document.getElementById("ram-pool-paged-sub");
 const ramTopProcSub = document.getElementById("ram-top-proc-sub");
 const ramStatusSub = document.getElementById("ram-status-sub");
-const ramSpeedSub = document.getElementById("ram-speed-sub");
 
 const ssdVal = document.getElementById("ssd-val");
 const ssdRing = document.getElementById("ssd-ring");
 const ssdGaugeContainer = document.getElementById("ssd-gauge-container");
 const ssdFreeSub = document.getElementById("ssd-free-sub");
-const ssdUsedPctSub = document.getElementById("ssd-used-pct-sub");
 const ssdReadSub = document.getElementById("ssd-read-sub");
 const ssdWriteSub = document.getElementById("ssd-write-sub");
-const ssdActiveSub = document.getElementById("ssd-active-sub");
 const ssdResponseSub = document.getElementById("ssd-response-sub");
 
 const netVal = document.getElementById("net-val");
@@ -67,8 +62,6 @@ const netRing = document.getElementById("net-ring");
 const netGaugeContainer = document.getElementById("net-gauge-container");
 const netWifiSub = document.getElementById("net-wifi-sub");
 const netLanSub = document.getElementById("net-lan-sub");
-const netIpSub = document.getElementById("net-ip-sub");
-const netIpv6Sub = document.getElementById("net-ipv6-sub");
 const netTypeSub = document.getElementById("net-type-sub");
 const netPingSub = document.getElementById("net-ping-sub");
 
@@ -88,7 +81,6 @@ const npuFreeSub = document.getElementById("npu-free-sub");
 const npuTotalSub = document.getElementById("npu-total-sub");
 const npuUtilBar = document.getElementById("npu-util-bar");
 const gpuVramBar = document.getElementById("gpu-vram-bar");
-const ssdTotalSub = document.getElementById("ssd-total-sub");
 const clockMb = document.getElementById("clock-mb");
 const clockBattery = document.getElementById("clock-battery");
 
@@ -1050,9 +1042,6 @@ function updateDOM(stats) {
     if (cpuProcThreadsSub) {
         cpuProcThreadsSub.textContent = `${stats.totalProcesses} / ${stats.cpu.threads}`;
     }
-    if (cpuCachesSub) {
-        cpuCachesSub.textContent = `${stats.cpu.l2Cache} / ${stats.cpu.l3Cache}`;
-    }
     if (cpuTopProcSub) {
         const top = (stats.topProcesses && stats.topProcesses.length > 0) ? stats.topProcesses[0] : null;
         if (top && top.Name) {
@@ -1107,9 +1096,6 @@ function updateDOM(stats) {
     if (ramCachedSub) {
         ramCachedSub.textContent = `${stats.ram.cachedGb} Go`;
     }
-    if (ramPoolPagedSub) {
-        ramPoolPagedSub.textContent = `${stats.ram.poolPagedMb} Mo`;
-    }
     if (ramTopProcSub) {
         const topRam = stats.topRamProcess;
         if (topRam && topRam.name) {
@@ -1123,18 +1109,12 @@ function updateDOM(stats) {
     }
     ramStatusSub.textContent = `${stats.ram.commitUsedGb} Go / ${stats.ram.commitLimitGb} Go`;
     ramStatusSub.className = "val text-blue";
-    if (ramSpeedSub) {
-        ramSpeedSub.textContent = `${stats.ram.speedMts} MT/s`;
-    }
 
     // SSD card gauge: disk capacity occupation. The center map node shows live disk activity.
     setCircularProgress(ssdRing, stats.disk.storagePercent);
     animateTextValue(ssdVal, stats.disk.storagePercent, "%");
     setAttrIfChanged(ssdGaugeContainer, "aria-valuenow", stats.disk.storagePercent);
     ssdFreeSub.textContent = `${stats.disk.freeGb} Go / ${stats.disk.totalGb} Go`;
-    if (ssdUsedPctSub) {
-        ssdUsedPctSub.textContent = `${stats.disk.storagePercent} %`;
-    }
     if (ssdReadSub && ssdWriteSub) {
         // Formatter with dynamic unit support
         const formatSpeed = (mbStr) => {
@@ -1144,9 +1124,6 @@ function updateDOM(stats) {
         };
         ssdReadSub.textContent = formatSpeed(stats.disk.readMb);
         ssdWriteSub.textContent = formatSpeed(stats.disk.writeMb);
-    }
-    if (ssdActiveSub) {
-        ssdActiveSub.textContent = `${stats.disk.utilization} %`;
     }
     if (ssdResponseSub) {
         ssdResponseSub.textContent = `${stats.disk.responseTimeMs.toFixed(1)} ms`;
@@ -1174,14 +1151,6 @@ function updateDOM(stats) {
 
     netWifiSub.textContent = formatNetSpeed(stats.network.wifi); // RECEVOIR
     netLanSub.textContent = formatNetSpeed(stats.network.lan);   // ENVOYER
-    if (netIpSub) {
-        netIpSub.textContent = stats.network.ip || "127.0.0.1";
-    }
-    if (netIpv6Sub) {
-        const cleanIpv6 = stats.network.ipv6.split('%')[0];
-        netIpv6Sub.textContent = cleanIpv6 || "fe80::";
-        netIpv6Sub.title = cleanIpv6;
-    }
     if (netTypeSub) {
         const wifiSignal = Number(stats.network.signal);
         if (stats.network.type === "Wi-Fi" && wifiSignal >= 0) {
@@ -1647,7 +1616,6 @@ function dimGauges() {
     cpuTempSub.textContent = `-- °C`;
     if (cpuFreqSub) cpuFreqSub.textContent = `0.00 GHz`;
     if (cpuProcThreadsSub) cpuProcThreadsSub.textContent = `0 / 0`;
-    if (cpuCachesSub) cpuCachesSub.textContent = `0 Mo / 0 Mo`;
     if (cpuTopProcSub) {
         cpuTopProcSub.textContent = `--`;
     }
@@ -1671,25 +1639,19 @@ function dimGauges() {
 
     ramFreeSub.textContent = `0.0 Go`;
     if (ramCachedSub) ramCachedSub.textContent = `0.0 Go`;
-    if (ramPoolPagedSub) ramPoolPagedSub.textContent = `0 Mo`;
     if (ramTopProcSub) ramTopProcSub.textContent = `--`;
     ramStatusSub.textContent = `0.0 Go / 0.0 Go`;
     ramStatusSub.className = "val";
-    if (ramSpeedSub) ramSpeedSub.textContent = `0 MT/s`;
     
     ssdFreeSub.textContent = `0 Go`;
-    if (ssdUsedPctSub) ssdUsedPctSub.textContent = `0 %`;
     if (ssdReadSub && ssdWriteSub) {
         ssdReadSub.textContent = `0.0 Mo/s`;
         ssdWriteSub.textContent = `0.0 Mo/s`;
     }
-    if (ssdActiveSub) ssdActiveSub.textContent = `0 %`;
     if (ssdResponseSub) ssdResponseSub.textContent = `0.0 ms`;
     
     netWifiSub.textContent = `0.0 Ko/s`;
     netLanSub.textContent = `0.0 Ko/s`;
-    if (netIpSub) netIpSub.textContent = `--`;
-    if (netIpv6Sub) netIpv6Sub.textContent = `--`;
     if (netTypeSub) netTypeSub.textContent = `--`;
     if (netPingSub) netPingSub.textContent = `0 ms`;
     
