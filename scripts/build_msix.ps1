@@ -18,7 +18,7 @@ $projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $distDir = Join-Path $projectRoot "dist\msix"
 $packageDir = Join-Path $distDir "package"
 $assetsDir = Join-Path $packageDir "Assets"
-$version = "1.0.10.0"
+$version = "1.0.11.0"
 $identityName = "julienpiron.fr.NexusWpp"
 $msixPath = Join-Path $distDir ($identityName + "_" + $version + "_x64.msix")
 $publisher = "CN=C3E3A6F0-11D2-4EE1-B3F2-34EED4CAE7FA"
@@ -49,10 +49,14 @@ function Get-WindowsSdkToolPath {
 }
 
 $makeAppx = Get-WindowsSdkToolPath "makeappx.exe"
+$makePri = Get-WindowsSdkToolPath "makepri.exe"
 $signTool = Get-WindowsSdkToolPath "signtool.exe"
 
 if (!(Test-Path -LiteralPath $makeAppx)) {
     throw "makeappx.exe not found. Install the Windows SDK or add makeappx.exe to PATH."
+}
+if (!(Test-Path -LiteralPath $makePri)) {
+    throw "makepri.exe not found. Install the Windows SDK or add makepri.exe to PATH."
 }
 if (!(Test-Path -LiteralPath $signTool)) {
     throw "signtool.exe not found. Install the Windows SDK or add signtool.exe to PATH."
@@ -94,7 +98,8 @@ function New-LogoPng {
     param(
         [string]$Path,
         [int]$Width,
-        [int]$Height
+        [int]$Height,
+        [int]$Padding = 0
     )
 
     $bitmap = New-Object System.Drawing.Bitmap $Width, $Height, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
@@ -109,7 +114,8 @@ function New-LogoPng {
 
             $logo = [System.Drawing.Image]::FromFile((Join-Path $projectRoot "julienpiron.png"))
             try {
-                $size = [Math]::Min($Width, $Height)
+                $size = [Math]::Min($Width - (2 * $Padding), $Height - (2 * $Padding))
+                if ($size -le 0) { throw "Invalid logo padding for ${Width}x${Height}." }
                 $x = [Math]::Round(($Width - $size) / 2)
                 $y = [Math]::Round(($Height - $size) / 2)
                 $graphics.DrawImage($logo, $x, $y, $size, $size)
@@ -126,9 +132,33 @@ function New-LogoPng {
     }
 }
 
-New-LogoPng -Path (Join-Path $assetsDir "StoreLogo.png") -Width 50 -Height 50
-New-LogoPng -Path (Join-Path $assetsDir "Square44x44Logo.png") -Width 44 -Height 44
-New-LogoPng -Path (Join-Path $assetsDir "Square150x150Logo.png") -Width 150 -Height 150
+function New-ScaledLogoSet {
+    param(
+        [string]$Name,
+        [int]$BaseWidth,
+        [int]$BaseHeight
+    )
+
+    New-LogoPng -Path (Join-Path $assetsDir ($Name + ".png")) -Width $BaseWidth -Height $BaseHeight
+
+    foreach ($scale in @(100, 125, 150, 200, 400)) {
+        $width = [int][Math]::Round($BaseWidth * $scale / 100)
+        $height = [int][Math]::Round($BaseHeight * $scale / 100)
+        New-LogoPng -Path (Join-Path $assetsDir ($Name + ".scale-" + $scale + ".png")) -Width $width -Height $height
+    }
+}
+
+function New-AppIconTargetAssets {
+    foreach ($size in @(16, 20, 24, 30, 32, 36, 40, 44, 48, 60, 64, 72, 80, 96, 256)) {
+        New-LogoPng -Path (Join-Path $assetsDir ("Square44x44Logo.targetsize-" + $size + ".png")) -Width $size -Height $size
+        New-LogoPng -Path (Join-Path $assetsDir ("Square44x44Logo.targetsize-" + $size + "_altform-unplated.png")) -Width $size -Height $size
+    }
+}
+
+New-ScaledLogoSet -Name "StoreLogo" -BaseWidth 50 -BaseHeight 50
+New-ScaledLogoSet -Name "Square44x44Logo" -BaseWidth 44 -BaseHeight 44
+New-ScaledLogoSet -Name "Square150x150Logo" -BaseWidth 150 -BaseHeight 150
+New-AppIconTargetAssets
 
 $manifest = @"
 <?xml version="1.0" encoding="utf-8"?>
@@ -184,6 +214,20 @@ $manifest = @"
 "@
 
 Set-Content -LiteralPath (Join-Path $packageDir "AppxManifest.xml") -Value $manifest -Encoding UTF8
+
+$priConfigPath = Join-Path $packageDir "priconfig.xml"
+& $makePri createconfig /cf $priConfigPath /dq fr-FR /o
+if ($LASTEXITCODE -ne 0) {
+    throw "makepri createconfig failed with exit code $LASTEXITCODE"
+}
+
+$priPath = Join-Path $packageDir "resources.pri"
+& $makePri new /pr $packageDir /cf $priConfigPath /mn (Join-Path $packageDir "AppxManifest.xml") /of $priPath /o
+if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath (Join-Path $packageDir "resources.pri"))) {
+    throw "makepri new failed with exit code $LASTEXITCODE"
+}
+
+Remove-Item -LiteralPath $priConfigPath -Force
 
 & $makeAppx pack /d $packageDir /p $msixPath /o
 if ($LASTEXITCODE -ne 0) {
