@@ -23,14 +23,39 @@ $identityName = "julienpiron.fr.NexusWpp"
 $msixPath = Join-Path $distDir ($identityName + "_" + $version + "_x64.msix")
 $publisher = "CN=C3E3A6F0-11D2-4EE1-B3F2-34EED4CAE7FA"
 $publisherDisplayName = "JULIENPIRON.FR"
-$makeAppx = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\makeappx.exe"
-$signTool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
+
+function Get-WindowsSdkToolPath {
+    param([string]$ToolName)
+
+    $command = Get-Command $ToolName -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source
+    if ($command) { return $command }
+
+    $sdkRoots = @(
+        "C:\Program Files (x86)\Windows Kits\10\bin",
+        "C:\Program Files\Windows Kits\10\bin"
+    )
+
+    foreach ($root in $sdkRoots) {
+        if (!(Test-Path -LiteralPath $root)) { continue }
+        $candidate = Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue |
+            Sort-Object Name -Descending |
+            ForEach-Object { Join-Path $_.FullName ("x64\" + $ToolName) } |
+            Where-Object { Test-Path -LiteralPath $_ } |
+            Select-Object -First 1
+        if ($candidate) { return $candidate }
+    }
+
+    return $null
+}
+
+$makeAppx = Get-WindowsSdkToolPath "makeappx.exe"
+$signTool = Get-WindowsSdkToolPath "signtool.exe"
 
 if (!(Test-Path -LiteralPath $makeAppx)) {
-    throw "makeappx.exe not found at $makeAppx"
+    throw "makeappx.exe not found. Install the Windows SDK or add makeappx.exe to PATH."
 }
 if (!(Test-Path -LiteralPath $signTool)) {
-    throw "signtool.exe not found at $signTool"
+    throw "signtool.exe not found. Install the Windows SDK or add signtool.exe to PATH."
 }
 
 & (Join-Path $projectRoot "compile.ps1")
