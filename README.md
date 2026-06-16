@@ -66,7 +66,7 @@ L'installeur configure:
 - un raccourci `NexusWpp.lnk` dans le menu Démarrer commun;
 - une entrée de désinstallation dans Applications installées.
 
-Le package MSIX configure le lancement Windows via une tache de démarrage packagée `windows.startupTask`, car les entrées `HKLM\...\Run` de l'installeur EXE ne s'appliquent pas au mode Store/MSIX.
+Le package MSIX configure le lancement Windows via une tache de démarrage packagée `windows.startupTask`, car les entrées `HKLM\...\Run` de l'installeur EXE ne s'appliquent pas au mode Store/MSIX. L'hote natif s'enregistre aussi aupres du Restart Manager Windows pour que le Store puisse relancer NexusWpp automatiquement apres une mise a jour qui ferme l'instance active.
 
 L'application contient un verrou single-instance, donc relancer `NexusWpp` depuis le menu Démarrer ne crée pas deux fonds d'écran.
 

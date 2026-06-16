@@ -24,6 +24,9 @@ namespace DesktopHtmlHost
         [DllImport("user32.dll")]
         private static extern bool SetProcessDPIAware();
 
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern int RegisterApplicationRestart(string commandLineArgs, int flags);
+
         [STAThread]
         static void Main(string[] args)
         {
@@ -39,6 +42,7 @@ namespace DesktopHtmlHost
                 // Force Process DPI Awareness to prevent Windows from virtualizing coordinates
                 SetProcessDPIAware();
 
+                RegisterForUpdateRestart(args);
                 CleanupStaleWebView2Processes();
 
                 Application.EnableVisualStyles();
@@ -53,6 +57,75 @@ namespace DesktopHtmlHost
             {
                 WriteCrashLog(ex);
             }
+        }
+
+        private static void RegisterForUpdateRestart(string[] args)
+        {
+            try
+            {
+                string restartArgs = BuildRestartCommandLine(args);
+                int result = RegisterApplicationRestart(restartArgs, 0);
+                if (result != 0)
+                {
+                    LogDebug("Application restart registration returned 0x" + result.ToString("X8", CultureInfo.InvariantCulture));
+                }
+            }
+            catch (Exception ex)
+            {
+                LogDebug("Application restart registration failed: " + ex.Message);
+            }
+        }
+
+        private static string BuildRestartCommandLine(string[] args)
+        {
+            if (args == null || args.Length == 0)
+            {
+                return null;
+            }
+
+            return string.Join(" ", args.Select(QuoteCommandLineArgument).ToArray());
+        }
+
+        private static string QuoteCommandLineArgument(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return "\"\"";
+            }
+
+            if (value.IndexOfAny(new[] { ' ', '\t', '"' }) < 0)
+            {
+                return value;
+            }
+
+            StringBuilder escaped = new StringBuilder();
+            escaped.Append('"');
+
+            int backslashCount = 0;
+            foreach (char current in value)
+            {
+                if (current == '\\')
+                {
+                    backslashCount++;
+                    continue;
+                }
+
+                if (current == '"')
+                {
+                    escaped.Append('\\', (backslashCount * 2) + 1);
+                    escaped.Append('"');
+                    backslashCount = 0;
+                    continue;
+                }
+
+                escaped.Append('\\', backslashCount);
+                escaped.Append(current);
+                backslashCount = 0;
+            }
+
+            escaped.Append('\\', backslashCount * 2);
+            escaped.Append('"');
+            return escaped.ToString();
         }
 
         internal static string GetAppDataFolder()
