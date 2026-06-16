@@ -2,6 +2,8 @@
 
 ## 2026-06-15
 
+- Version MSIX montee a 1.0.12.0 pour publier le redemarrage automatique apres mise a jour Store.
+- Enregistrement de l'hote natif aupres du Restart Manager Windows afin que le fond d'ecran soit relance quand une mise a jour MSIX ferme l'application.
 - Version MSIX montee a 1.0.11.0 pour publier le correctif de plaque noire derriere l'icone Windows.
 - Generation des assets d'icone MSIX `targetsize` et `altform-unplated`, avec index `resources.pri`, pour conserver la transparence dans le shell Windows.
 - Audit du projet, nettoyage des liaisons JS/CSS mortes, alignement de la version de l'installeur EXE sur 1.0.10 et detection robuste des outils Windows SDK pour le build MSIX.
