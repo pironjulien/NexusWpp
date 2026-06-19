@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-19
+
+- Audit de proprete du depot et documentation de release actualisee apres verification de la compilation, de l'installeur EXE et du package MSIX.
+
 ## 2026-06-15
 
 - Version MSIX montee a 1.0.12.0 pour publier le redemarrage automatique apres mise a jour Store.
