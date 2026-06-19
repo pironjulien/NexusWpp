@@ -2,6 +2,7 @@
 
 ## 2026-06-19
 
+- Ajout d'une CI GitHub Actions Windows pour compiler NexusWpp a chaque push.
 - Ajout d'une politique de securite, de Dependabot et d'un scan GitHub Actions Gitleaks/TruffleHog hebdomadaire.
 - Audit de proprete du depot et documentation de release actualisee apres verification de la compilation, de l'installeur EXE et du package MSIX.
 
