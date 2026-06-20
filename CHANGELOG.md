@@ -3,6 +3,7 @@
 ## 2026-06-20
 
 - Correction du crash WebView2 a la fermeture quand le controle recree son handle Windows apres avoir ete detruit.
+- Ajout d'une recuperation automatique quand WebView2 est detruit sans fermeture complete de NexusWpp.
 
 ## 2026-06-19
 
