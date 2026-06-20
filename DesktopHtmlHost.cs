@@ -684,6 +684,12 @@ namespace DesktopHtmlHost
             {
                 try
                 {
+                    ResilientWebView2 resilientWebView = webView as ResilientWebView2;
+                    if (resilientWebView != null)
+                    {
+                        resilientWebView.BeginShutdown();
+                    }
+
                     webView.Dock = DockStyle.None;
                     webView.Visible = false;
                     Controls.Remove(webView);
@@ -1134,8 +1140,33 @@ namespace DesktopHtmlHost
                 }
                 if (webView != null)
                 {
-                    webView.Dispose();
-                    webView = null;
+                    ResilientWebView2 resilientWebView = webView as ResilientWebView2;
+                    if (resilientWebView != null)
+                    {
+                        resilientWebView.BeginShutdown();
+                    }
+
+                    try
+                    {
+                        webView.Dispose();
+                    }
+                    catch (ObjectDisposedException ex)
+                    {
+                        Program.LogDebug("Suppressed WebView2 disposal after shutdown: " + ex.Message);
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        if (!ResilientWebView2.IsDisposedLifecycleException(ex))
+                        {
+                            throw;
+                        }
+
+                        Program.LogDebug("Suppressed WebView2 disposal after shutdown: " + ex.Message);
+                    }
+                    finally
+                    {
+                        webView = null;
+                    }
                 }
             }
             base.Dispose(disposing);
@@ -1216,19 +1247,117 @@ namespace DesktopHtmlHost
 
         private sealed class ResilientWebView2 : WebView2
         {
+            private bool shutdownStarted = false;
+
+            internal void BeginShutdown()
+            {
+                shutdownStarted = true;
+            }
+
+            protected override void OnHandleCreated(EventArgs e)
+            {
+                try
+                {
+                    base.OnHandleCreated(e);
+                }
+                catch (ObjectDisposedException ex)
+                {
+                    if (!CanSuppressLifecycleException(ex))
+                    {
+                        throw;
+                    }
+
+                    LogSuppressedLifecycleException("handle creation", ex);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    if (!CanSuppressLifecycleException(ex))
+                    {
+                        throw;
+                    }
+
+                    LogSuppressedLifecycleException("handle creation", ex);
+                }
+            }
+
+            protected override void WndProc(ref Message m)
+            {
+                try
+                {
+                    base.WndProc(ref m);
+                }
+                catch (ObjectDisposedException ex)
+                {
+                    if (!CanSuppressLifecycleException(ex))
+                    {
+                        throw;
+                    }
+
+                    LogSuppressedLifecycleException("window message " + m.Msg.ToString(CultureInfo.InvariantCulture), ex);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    if (!CanSuppressLifecycleException(ex))
+                    {
+                        throw;
+                    }
+
+                    LogSuppressedLifecycleException("window message " + m.Msg.ToString(CultureInfo.InvariantCulture), ex);
+                }
+            }
+
             protected override void OnSizeChanged(EventArgs e)
             {
                 try
                 {
                     base.OnSizeChanged(e);
                 }
-                catch (ObjectDisposedException)
+                catch (ObjectDisposedException ex)
                 {
+                    if (!CanSuppressLifecycleException(ex))
+                    {
+                        throw;
+                    }
+
+                    LogSuppressedLifecycleException("resize", ex);
                 }
                 catch (InvalidOperationException ex)
                 {
-                    Program.LogDebug("Suppressed WebView2 resize after disposal: " + ex.Message);
+                    if (!CanSuppressLifecycleException(ex))
+                    {
+                        throw;
+                    }
+
+                    LogSuppressedLifecycleException("resize", ex);
                 }
+            }
+
+            private bool CanSuppressLifecycleException(Exception ex)
+            {
+                if (ex is ObjectDisposedException)
+                {
+                    return shutdownStarted || IsDisposed || Disposing;
+                }
+
+                return IsDisposedLifecycleException(ex);
+            }
+
+            internal static bool IsDisposedLifecycleException(Exception ex)
+            {
+                InvalidOperationException invalid = ex as InvalidOperationException;
+                if (invalid == null || string.IsNullOrEmpty(invalid.Message))
+                {
+                    return false;
+                }
+
+                return invalid.Message.IndexOf(
+                    "CoreWebView2 members cannot be accessed after the WebView2 control is disposed",
+                    StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+
+            private static void LogSuppressedLifecycleException(string context, Exception ex)
+            {
+                Program.LogDebug("Suppressed WebView2 " + context + " after disposal: " + ex.Message);
             }
         }
 

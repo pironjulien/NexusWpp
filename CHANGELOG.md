@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-20
+
+- Correction du crash WebView2 a la fermeture quand le controle recree son handle Windows apres avoir ete detruit.
+
 ## 2026-06-19
 
 - Ajout d'une CI GitHub Actions Windows pour compiler NexusWpp a chaque push.
