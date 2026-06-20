@@ -250,6 +250,8 @@ namespace DesktopHtmlHost
         private const int maxRetries = 300;
         private const int progmanFallbackRetries = 8;
         private bool webViewInitialized = false;
+        private bool webViewRecoveryPending = false;
+        private CoreWebView2Environment webViewEnvironment;
         private bool desktopAttached = false;
         private bool attachedToTemporaryParent = false;
         private IntPtr currentDesktopParent = IntPtr.Zero;
@@ -464,9 +466,7 @@ namespace DesktopHtmlHost
             SystemEvents.SessionEnding += SystemEvents_SessionEnding;
 
             // Create and configure the WebView2 UI component
-            webView = new ResilientWebView2();
-            webView.Dock = DockStyle.Fill;
-            this.Controls.Add(webView);
+            CreateWebViewControl();
 
             // Warm WebView2 immediately while Explorer is still preparing the desktop layer.
             InitializeWebViewAsync();
@@ -476,6 +476,25 @@ namespace DesktopHtmlHost
             searchTimer.Interval = 100;
             searchTimer.Tick += SearchTimer_Tick;
             searchTimer.Start();
+        }
+
+        private void CreateWebViewControl()
+        {
+            ResilientWebView2 newWebView = new ResilientWebView2();
+            newWebView.Dock = DockStyle.Fill;
+            newWebView.Disposed += WebView_Disposed;
+            webView = newWebView;
+            this.Controls.Add(webView);
+        }
+
+        private void WebView_Disposed(object sender, EventArgs e)
+        {
+            if (isClosing || IsDisposed)
+            {
+                return;
+            }
+
+            QueueWebViewRecovery("unexpected WebView2 disposal");
         }
 
         private void SearchTimer_Tick(object sender, EventArgs e)
@@ -690,6 +709,7 @@ namespace DesktopHtmlHost
                         resilientWebView.BeginShutdown();
                     }
 
+                    webView.Disposed -= WebView_Disposed;
                     webView.Dock = DockStyle.None;
                     webView.Visible = false;
                     Controls.Remove(webView);
@@ -711,13 +731,21 @@ namespace DesktopHtmlHost
                 string userDataFolder = Program.GetWebViewUserDataFolder();
                 Directory.CreateDirectory(userDataFolder);
 
-                var options = new CoreWebView2EnvironmentOptions();
-                options.AdditionalBrowserArguments = "--disable-features=EdgeSidebar,EdgeTranslate";
+                if (webView == null || webView.IsDisposed)
+                {
+                    CreateWebViewControl();
+                }
 
-                var environment = await CoreWebView2Environment.CreateAsync(null, userDataFolder, options);
+                if (webViewEnvironment == null)
+                {
+                    var options = new CoreWebView2EnvironmentOptions();
+                    options.AdditionalBrowserArguments = "--disable-features=EdgeSidebar,EdgeTranslate";
+                    webViewEnvironment = await CoreWebView2Environment.CreateAsync(null, userDataFolder, options);
+                }
+
                 if (isClosing || IsDisposed || webView == null || webView.IsDisposed) return;
 
-                await webView.EnsureCoreWebView2Async(environment);
+                await webView.EnsureCoreWebView2Async(webViewEnvironment);
                 if (isClosing || IsDisposed || webView == null || webView.IsDisposed) return;
 
                 webView.DefaultBackgroundColor = System.Drawing.Color.Transparent;
@@ -802,49 +830,155 @@ namespace DesktopHtmlHost
                 // Load via virtual host
                 webView.Source = new Uri("http://nexuswpp.local/index.html");
 
-                // Install low-level mouse hook
-                mouseProc = HookCallback;
-                hookId = SetHook(mouseProc);
+                StartRuntimeServices();
+                webViewRecoveryPending = false;
 
-                telemetryTimer = new System.Windows.Forms.Timer();
-                telemetryTimer.Interval = 1000;
-                telemetryTimer.Tick += TelemetryTimer_Tick;
-                telemetryTimer.Start();
-
-                fullscreenTimer = new System.Windows.Forms.Timer();
-                fullscreenTimer.Interval = 500;
-                fullscreenTimer.Tick += FullscreenTimer_Tick;
-                fullscreenTimer.Start();
-
-                System.Threading.ThreadPool.QueueUserWorkItem((state) =>
+                if (!telemetryReady || telemetryCollector == null)
                 {
-                    try
+                    System.Threading.ThreadPool.QueueUserWorkItem((state) =>
                     {
-                        var collector = new TelemetryCollector();
-                        collector.Initialize();
-                        TryBeginInvoke((MethodInvoker)delegate
+                        try
                         {
-                            telemetryCollector = collector;
-                            telemetryReady = true;
-                            if (!runtimeSuspended)
+                            var collector = new TelemetryCollector();
+                            collector.Initialize();
+                            TryBeginInvoke((MethodInvoker)delegate
                             {
-                                TelemetryTimer_Tick(null, null);
-                            }
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        Program.LogDebug("Telemetry initialization error: " + ex.Message);
-                    }
-                });
+                                telemetryCollector = collector;
+                                telemetryReady = true;
+                                if (!runtimeSuspended)
+                                {
+                                    TelemetryTimer_Tick(null, null);
+                                }
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            Program.LogDebug("Telemetry initialization error: " + ex.Message);
+                        }
+                    });
+                }
+                else if (!runtimeSuspended)
+                {
+                    TelemetryTimer_Tick(null, null);
+                }
             }
             catch (Exception ex)
             {
+                webViewRecoveryPending = false;
                 if (isClosing || IsDisposed) return;
 
                 Program.LogDebug("WebView2 Runtime failed to initialize: " + ex.ToString());
                 BeginCleanShutdown();
             }
+        }
+
+        private void StartRuntimeServices()
+        {
+            if (hookId == IntPtr.Zero)
+            {
+                mouseProc = HookCallback;
+                hookId = SetHook(mouseProc);
+            }
+
+            if (telemetryTimer == null)
+            {
+                telemetryTimer = new System.Windows.Forms.Timer();
+                telemetryTimer.Interval = 1000;
+                telemetryTimer.Tick += TelemetryTimer_Tick;
+            }
+
+            if (!runtimeSuspended)
+            {
+                telemetryTimer.Start();
+            }
+
+            if (fullscreenTimer == null)
+            {
+                fullscreenTimer = new System.Windows.Forms.Timer();
+                fullscreenTimer.Interval = 500;
+                fullscreenTimer.Tick += FullscreenTimer_Tick;
+            }
+
+            fullscreenTimer.Start();
+        }
+
+        private void QueueWebViewRecovery(string reason)
+        {
+            if (isClosing || IsDisposed || webViewRecoveryPending)
+            {
+                return;
+            }
+
+            webViewRecoveryPending = true;
+            Program.LogDebug("Scheduling WebView2 recovery after " + reason + ".");
+
+            if (!TryBeginInvoke((MethodInvoker)delegate
+            {
+                RecoverWebView(reason);
+            }))
+            {
+                webViewRecoveryPending = false;
+            }
+        }
+
+        private void RecoverWebView(string reason)
+        {
+            if (isClosing || IsDisposed)
+            {
+                webViewRecoveryPending = false;
+                return;
+            }
+
+            Program.LogDebug("Recovering WebView2 after " + reason + ".");
+            telemetryCollectPending = false;
+            renderWindow = IntPtr.Zero;
+
+            if (telemetryTimer != null) telemetryTimer.Stop();
+
+            WebView2 oldWebView = webView;
+            webView = null;
+            webViewInitialized = false;
+
+            if (oldWebView != null)
+            {
+                try
+                {
+                    oldWebView.Disposed -= WebView_Disposed;
+                    Controls.Remove(oldWebView);
+                }
+                catch (Exception ex)
+                {
+                    if (!ResilientWebView2.IsDisposedLifecycleException(ex))
+                    {
+                        Program.LogDebug("WebView2 recovery detach skipped: " + ex.Message);
+                    }
+                }
+
+                try
+                {
+                    ResilientWebView2 resilientWebView = oldWebView as ResilientWebView2;
+                    if (resilientWebView != null)
+                    {
+                        resilientWebView.BeginShutdown();
+                    }
+
+                    if (!oldWebView.IsDisposed)
+                    {
+                        oldWebView.Dispose();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    if (!ResilientWebView2.IsDisposedLifecycleException(ex))
+                    {
+                        Program.LogDebug("WebView2 recovery disposal skipped: " + ex.Message);
+                    }
+                }
+            }
+
+            CreateWebViewControl();
+            InitializeWebViewAsync();
+            RestartDesktopSearch("WebView2 recovery");
         }
 
         private void FullscreenTimer_Tick(object sender, EventArgs e)
@@ -1146,6 +1280,7 @@ namespace DesktopHtmlHost
                         resilientWebView.BeginShutdown();
                     }
 
+                    webView.Disposed -= WebView_Disposed;
                     try
                     {
                         webView.Dispose();
@@ -1199,20 +1334,38 @@ namespace DesktopHtmlHost
             coreWebView = null;
             if (isClosing || IsDisposed || webView == null || webView.IsDisposed)
             {
+                if (!isClosing && !IsDisposed)
+                {
+                    QueueWebViewRecovery("CoreWebView2 unavailable");
+                }
+
                 return false;
             }
 
             try
             {
                 coreWebView = webView.CoreWebView2;
+                if (coreWebView == null)
+                {
+                    QueueWebViewRecovery("CoreWebView2 missing");
+                    return false;
+                }
+
                 return coreWebView != null;
             }
             catch (ObjectDisposedException)
             {
+                QueueWebViewRecovery("disposed CoreWebView2 access");
                 return false;
             }
             catch (InvalidOperationException ex)
             {
+                if (ResilientWebView2.IsDisposedLifecycleException(ex))
+                {
+                    QueueWebViewRecovery("disposed CoreWebView2 lifecycle");
+                    return false;
+                }
+
                 if (!isClosing)
                 {
                     Program.LogDebug("WebView unavailable: " + ex.Message);
