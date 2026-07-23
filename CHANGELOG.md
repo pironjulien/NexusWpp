@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-23
+
+- Passage des mises à jour GitHub Actions de Dependabot à un rythme mensuel,
+  regroupées dans une seule PR au maximum.
+
 ## 2026-06-20
 
 - Correction du crash WebView2 a la fermeture quand le controle recree son handle Windows apres avoir ete detruit.
