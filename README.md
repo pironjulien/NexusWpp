@@ -98,7 +98,7 @@ Le premier test exécute la page réelle dans WebView2 et vérifie notamment les
 
 À partir de la version `1.0.18.0`, la grille respecte les deux dimensions du viewport WebView2 et préserve les marges pour une rangée d'icônes en haut et un espace au-dessus de la barre des tâches. Les cartes adaptent la place de leurs jauges et de leurs mesures à leur taille réelle ; les écrans portrait utilisent deux colonnes sous l'horloge et les commandes. Le radar ajuste uniformément son dessin et ses coordonnées de souris. Les mesures et les boutons restent présents, sans défilement des cartes du bureau.
 
-La version `1.0.19.0` répartit cette même réserve verticale avec davantage d'espace en haut pour les libellés des icônes, ce qui décale légèrement le cockpit vers le bas sans redimensionner les cartes.
+La version `1.0.20.0` affine la répartition de cette même réserve verticale : davantage d'espace en haut pour les libellés des icônes qu'en `1.0.18.0`, avec une remontée de 10 pixels à 125 % par rapport à `1.0.19.0`, sans redimensionner les cartes. Une marge haute minimale de 96 pixels CSS conserve la rangée d'icônes sur les petits formats.
 
 ```powershell
 .\scripts\test_responsive_layout.ps1 -Label current

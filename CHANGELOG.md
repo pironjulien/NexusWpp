@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-25 — 1.0.20.0
+
+- Ajustement fin du placement : cockpit remonté de 10 pixels sur un écran à 125 %, avec une rangée d'icônes préservée sur les petits formats et des cartes de taille identique.
+
 ## 2026-09-25 — 1.0.19.0
 
 - Léger décalage du cockpit vers le bas en rééquilibrant les marges existantes : davantage d'espace pour les libellés des icônes en haut, moins de vide au-dessus de la barre des tâches, sans changer la taille des cartes.
