@@ -37,7 +37,8 @@ window.inspectLayout = function () {
     const inside = (a, b, tolerance = 1.5) => a.left >= b.left - tolerance && a.top >= b.top - tolerance && a.right <= b.right + tolerance && a.bottom <= b.bottom + tolerance;
     const viewport = { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
     const dashboard = rect(document.querySelector('.dashboard'));
-    if (dashboard.top < 80 - 1 || innerHeight - dashboard.bottom < 80 - 1) issues.push('missing desktop icon/taskbar safe area');
+    // Room for desktop icon labels above and a 48 CSS px taskbar plus clearance below.
+    if (dashboard.top < 96 - 1 || innerHeight - dashboard.bottom < 60 - 1) issues.push('missing desktop icon/taskbar safe area');
     const cards = [...document.querySelectorAll('.gauge-card, .column-center')].filter(visible);
     if (cards.length !== window.layoutExpectedCards + 1) issues.push('missing hardware cards');
     for (const element of cards) {
@@ -85,6 +86,7 @@ window.inspectLayout = function () {
     if (innerWidth !== screen.width || Math.abs(devicePixelRatio - window.layoutExpectedDpr) > .01) issues.push('unexpected emulation metrics');
     if (!runtimeSuspended || canvasFrameTimer || canvasAnimationFrame) issues.push('resize restarted paused animation');
     return { issues: [...new Set(issues)], viewport: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio },
+        desktopInsets: { top: dashboard.top, bottom: innerHeight - dashboard.bottom },
         cards: cards.map(element => ({ id: name(element), bounds: rect(element).toJSON() })),
         remoteBounds: rect(document.querySelector('.remote-sub-panel')).toJSON(),
         overflowDetails: issues.length ? [...document.querySelectorAll('#gpu-card, #ssd-card, #gpu-card > *, #ssd-card > *, #gpu-card .sub-progress-container, #ssd-card .sub-metric')].filter(visible).map(element => ({

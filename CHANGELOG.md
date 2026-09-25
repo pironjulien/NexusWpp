@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-25 — 1.0.19.0
+
+- Léger décalage du cockpit vers le bas en rééquilibrant les marges existantes : davantage d'espace pour les libellés des icônes en haut, moins de vide au-dessus de la barre des tâches, sans changer la taille des cartes.
+
 ## 2026-09-25 — 1.0.18.0
 
 - Correction du bas du cockpit coupé sur les écrans fortement mis à l'échelle, notamment en 4K à 225 % : pistes de grille bornées et cartes adaptées à la place réellement disponible.
