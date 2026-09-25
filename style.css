@@ -69,10 +69,11 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    /* Keep a complete desktop icon row above the cockpit, and breathing room
-       above the taskbar. Cards must fit the remaining area, not consume it. */
-    --desktop-safe-top: clamp(80px, 7.9vh, 144px);
-    --desktop-safe-bottom: clamp(80px, 7.9vh, 144px);
+    /* Share the existing safe space in a golden ratio: more room for icon
+       labels above, with taskbar clearance below and unchanged card sizes. */
+    --desktop-safe-total: clamp(160px, 15.8vh, 288px);
+    --desktop-safe-bottom: calc(var(--desktop-safe-total) / 2.618);
+    --desktop-safe-top: calc(var(--desktop-safe-total) - var(--desktop-safe-bottom));
     padding: var(--desktop-safe-top) clamp(12px, 2.5vw, 96px) var(--desktop-safe-bottom);
 }
 
