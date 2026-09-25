@@ -69,11 +69,11 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    /* Share the existing safe space in a golden ratio: more room for icon
-       labels above, with taskbar clearance below and unchanged card sizes. */
+    /* Raise the golden-ratio layout by 8 CSS px (10 screen px at 125% DPI),
+       keeping room for icon labels on short screens and unchanged card sizes. */
     --desktop-safe-total: clamp(160px, 15.8vh, 288px);
-    --desktop-safe-bottom: calc(var(--desktop-safe-total) / 2.618);
-    --desktop-safe-top: calc(var(--desktop-safe-total) - var(--desktop-safe-bottom));
+    --desktop-safe-top: max(96px, calc(var(--desktop-safe-total) - var(--desktop-safe-total) / 2.618 - 8px));
+    --desktop-safe-bottom: calc(var(--desktop-safe-total) - var(--desktop-safe-top));
     padding: var(--desktop-safe-top) clamp(12px, 2.5vw, 96px) var(--desktop-safe-bottom);
 }
 
