@@ -18,7 +18,7 @@ NexusWpp affiche un cockpit matériel dynamique directement dans le bureau Windo
 - `deploy_local.ps1` : copie l'app dans `C:\nexuswpp` et configure le lancement Windows via `HKLM\...\Run`.
 - `run.bat` : menu local pour démarrer, compiler, déployer ou arrêter l'app.
 - `scripts/benchmark_nexuswpp.ps1` : benchmark multi-run CPU/RAM/startup.
-- `scripts/benchmark_fullscreen_suspend.ps1` : mesure actif vs suspension plein écran.
+- `scripts/benchmark_fullscreen_suspend.ps1` : ancien benchmark des versions qui utilisaient le motif de journal « fullscreen foreground detected » ; pour la politique actuelle, utiliser `measure_desktop_suspension.ps1`.
 - `scripts/measure_desktop_suspension.ps1` : mesure CPU/GPU avec bureau visible, fenêtres juxtaposées, plein écran et fenêtres transparentes, puis restaure les fenêtres précédentes.
 - `scripts/test_desktop_coverage.cs` : dix scénarios géométriques indépendants du bureau réel.
 
@@ -29,14 +29,14 @@ Prérequis:
 - Windows 10/11.
 - Microsoft .NET Framework 4.x avec `csc.exe`.
 - Microsoft Edge WebView2 Runtime.
-- NVIDIA/NVML est optionnel; l'application garde des valeurs de secours si NVML n'est pas disponible.
+- NVIDIA est optionnel; les mesures détaillées utilisent le processus isolé `nvidia-smi`, avec les compteurs Windows lorsque cette source est indisponible.
 
 ```powershell
 .\compile.ps1
 .\deploy_local.ps1
 ```
 
-Pour produire un installeur `.exe` autonome:
+Le fichier `VERSION` est la source unique du numéro de l'EXE, de l'installeur et du MSIX. Pour produire un installeur `.exe` autonome:
 
 ```powershell
 .\scripts\build_installer.ps1
@@ -75,18 +75,27 @@ L'application contient un verrou single-instance, donc relancer `NexusWpp` depui
 
 Une installation Store/MSIX se met à jour avec le package de même identité et un numéro de version supérieur. Ne pas lui ajouter le déploiement EXE, qui utilise un autre emplacement et un autre mécanisme de démarrage.
 
-## Suspension du rendu
+## Pause et retour au bureau
 
-À partir de la version 1.0.15.0, un bureau entièrement couvert par des fenêtres opaques suspend la télémétrie, le Canvas, les animations CSS et WebView2 lui-même. Le calcul prend en compte les zones utiles de tous les écrans, sans compter deux fois les fenêtres qui se chevauchent. Une fenêtre transparente ou masquée sur un autre bureau virtuel ne déclenche pas cette suspension.
+La version `1.0.16.0` fige les animations Canvas/CSS, les transitions en cours et l'horloge quand toutes les zones utiles des écrans sont recouvertes par des fenêtres opaques. La télémétrie cesse ses nouvelles collectes. Le DOM, les particules, les valeurs et la surface WebView2 restent en place : aucune dissimulation du contrôle, suspension Chromium, navigation ni reconstruction n'est nécessaire pour revoir le bureau.
 
-La politique de pause lorsqu'une application couvre un écran entier est conservée. Le verrouillage ou la déconnexion de session suspend aussi le rendu. Quand le bureau redevient visible, WebView2 reprend et la télémétrie est rafraîchie.
+La détection s'effectue toutes les 500 ms. Ce délai concerne la reprise des animations et des mesures ; la scène déjà affichée reste disponible au compositeur Windows. Une collecte terminant après une pause est ignorée. La reprise demande de nouvelles mesures et actualise l'horloge. Un véritable redimensionnement redessine une fois la scène figée.
 
-Validation du 25 septembre 2026 sur PCSALON : dix tests géométriques passants; mesure réelle à 0 % d'activité GPU du groupe de processus lorsque le bureau est couvert, reprise entre 9 et 12 % lorsqu'il est visible. Ces valeurs désignent le moteur GPU le plus actif pendant les intervalles mesurés, pas un pourcentage de capacité totale. La comparaison CPU/RAM avant/après sous couverture a obtenu le verdict `KEEP`, avec une somme des working sets passant de 599 à 374 Mio. Les fenêtres transparentes conservent le rendu et les journaux confirment la reprise de la télémétrie.
+La couverture est calculée sur l'ensemble des écrans sans double comptage des chevauchements. Les fenêtres transparentes, masquées sur un autre bureau virtuel et les surfaces du shell sont exclues. Un jeu plein écran sur un seul moniteur laisse fonctionner le bureau encore visible sur un autre. Le verrouillage ou la déconnexion de session met également le travail en pause.
+
+La version locale `1.0.15.0` masquait et suspendait WebView2. Ses mesures de consommation ne validaient pas le retour visuel ; ce comportement est remplacé en `1.0.16.0`.
+
+```powershell
+.\scripts\test_runtime_pause.ps1
+.\scripts\test_desktop_visual_resume.ps1 -Label installed
+```
+
+Le premier test exécute la page réelle dans WebView2 et vérifie notamment les pixels Canvas, les particules, la première scène et les transitions rapides. Le second capture le bureau composé pendant le retrait de fenêtres maximisées, juxtaposées, plein écran, partielles et transparentes. Il vérifie le chemin du processus packagé, restaure les fenêtres et conserve captures, temps mesurés et limites sous `work\resume-20260925`. Les mesures CPU/GPU se font séparément avec `measure_desktop_suspension.ps1` : une baisse de consommation ou des journaux de reprise seuls ne prouvent pas l'absence de disparition visuelle.
 
 ## Portabilité
 
-- Le matériel est détecté automatiquement via WMI, Win32, interfaces réseau Windows et NVML quand disponible.
-- Le dossier de production reste `C:\nexuswpp` pour accélérer le démarrage et éviter OneDrive.
+- Le matériel est détecté automatiquement via WMI, Win32, interfaces réseau Windows et `nvidia-smi` quand disponible.
+- Le MSIX est installé par Windows dans `WindowsApps`; seul le mode EXE autonome utilise `C:\nexuswpp`. Les données et le profil WebView2 restent dans le dossier utilisateur local.
 - Le raccourci du menu Démarrer est créé dans le dossier commun Windows, pas dans un chemin utilisateur codé en dur.
 - Le fond d'écran fonctionne sans serveur Node et sans dépendance npm.
 - Le sélecteur d'alimentation confirme le GUID actif Windows et ignore les clics quand une autre application recouvre le panneau.
@@ -100,7 +109,7 @@ L'ancienne version attendait de trouver `WorkerW` avant d'initialiser WebView2. 
 
 - `server.js`, `get-stats.ps1`, `get-startup.ps1` et le flux SSE ne font plus partie de cette architecture.
 - Le mode navigateur simple affiche l'interface, mais sans télémétrie ni changement de profil.
-- Le chemin de production est `C:\nexuswpp\nexuswpp.exe`.
+- Pour connaître le chemin MSIX réel : `(Get-AppxPackage julienpiron.fr.NexusWpp).InstallLocation`.
 - Le rond réseau est calibré sur la vitesse réelle du lien Windows, par exemple `2.5 Gb/s` pour l'Intel I226-V.
 
 ## Mesures utiles
@@ -108,7 +117,8 @@ L'ancienne version attendait de trouver `WorkerW` avant d'initialiser WebView2. 
 ```powershell
 .\scripts\benchmark_nexuswpp.ps1 -DurationSeconds 18 -Runs 3 -Label current -OutputPath .\scripts\last-benchmark.json
 .\scripts\compare_benchmark_result.ps1 -BeforePath .\scripts\last-benchmark-before.json -AfterPath .\scripts\last-benchmark-after.json
-.\scripts\benchmark_fullscreen_suspend.ps1 -ActiveSeconds 10 -FullscreenSeconds 10 -OutputPath .\scripts\last-benchmark-fullscreen.json
+$package = Get-AppxPackage julienpiron.fr.NexusWpp
+.\scripts\measure_desktop_suspension.ps1 -AppPath (Join-Path $package.InstallLocation nexuswpp.exe) -LogPath "$env:LOCALAPPDATA\Packages\julienpiron.fr.NexusWpp_yq2nr3sn86fpg\LocalCache\Local\NexusWpp\webview_debug.log" -OutputPath .\work\desktop-performance.json
 ```
 
 ## Garde-fou benchmark
@@ -125,4 +135,4 @@ Le verdict est:
 - `REJECT` si les erreurs augmentent, si le CPU/RAM regressent au-dela des tolerances, ou si l'attache au bureau ralentit trop.
 - `NEUTRAL` si rien ne regresse, mais que le gain n'est pas significatif.
 
-Le benchmark plein ecran verifie aussi `SuspendLatencyMs`, `ResumeLatencyMs`, `TelemetryAfterResumeMs` et `ProbeSuspendMatched` pour eviter qu'une autre application plein ecran fausse la mesure.
+Les champs historiques `SuspendLatencyMs`, `ResumeLatencyMs` et `TelemetryAfterResumeMs` mesuraient la réception des journaux, pas le retour visuel. Les captures du harnais `test_desktop_visual_resume.ps1` constituent la vérification du retour au bureau, complétée par la mesure CPU/GPU séparée.

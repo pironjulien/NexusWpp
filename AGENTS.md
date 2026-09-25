@@ -5,7 +5,7 @@
 - Application Windows native de fond d'ecran dynamique.
 - L'hote principal est `DesktopHtmlHost.cs`.
 - L'interface est dans `index.html`, `style.css` et `app.js`.
-- Le dossier d'installation local est `C:\nexuswpp`.
+- Le mode EXE autonome utilise `C:\nexuswpp`. Le mode Store/MSIX utilise WindowsApps et conserve ses données dans le profil utilisateur packagé ; ne pas lui ajouter deploy_local.ps1.
 
 ## Commandes utiles
 
@@ -18,8 +18,10 @@
 ## Verification
 
 - Verifier que `.\compile.ps1` compile `bin\nexuswpp.exe`.
+- Verifier le transfert des clics et le cycle de vie du hook avec `.\scripts\test_mouse_hook.ps1` apres une modification de la gestion souris.
 - Verifier que `.\scripts\build_installer.ps1` cree `dist\NexusWppSetup.exe`.
-- Verifier que `.\scripts\build_msix.ps1` cree le package Store `dist\msix\julienpiron.fr.NexusWpp_1.0.15.0_x64.msix`.
+- Verifier que `.\scripts\build_msix.ps1` cree le package Store `dist\msix\julienpiron.fr.NexusWpp_<VERSION>_x64.msix`, avec le numero du fichier `VERSION` (actuellement `1.0.16.0`).
+- Verifier la pause et la conservation de scene avec `.\scripts\test_runtime_pause.ps1`, puis mesurer le retour physique avec `.\scripts\test_desktop_visual_resume.ps1`.
 - Ne pas versionner `bin/`, `dist/`, les logs, les fichiers temporaires ou les resultats de benchmark.
 
 ## Habitudes projet

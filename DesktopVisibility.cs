@@ -91,18 +91,22 @@ namespace DesktopHtmlHost
                 Rectangle window = Rectangle.FromLTRB(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom);
                 if (window.Width <= 0 || window.Height <= 0) return true;
 
-                // Preserve the existing pause policy for fullscreen apps, including games.
-                foreach (Screen screen in screens)
+                // Shell/input surfaces can span the screen without opaque pixels.
+                // Keep Explorer file windows eligible; desktop windows are excluded by class.
+                try
                 {
-                    if (window.Contains(screen.Bounds))
+                    using (Process process = Process.GetProcessById((int)processId))
                     {
-                        string processName = "pid=" + processId;
-                        try { using (Process process = Process.GetProcessById((int)processId)) { processName = process.ProcessName.ToLowerInvariant(); } }
-                        catch (ArgumentException) { }
-                        foundReason = "fullscreen foreground detected (" + processName + "/" + cls + ")";
-                        return false;
+                        string name = process.ProcessName.ToLowerInvariant();
+                        if (name == "textinputhost" || name == "tabtip" ||
+                            name == "shellexperiencehost" || name == "searchhost" ||
+                            name == "startmenuexperiencehost") return true;
                     }
                 }
+                catch (ArgumentException) { return true; }
+                catch (InvalidOperationException) { return true; }
+                catch (System.ComponentModel.Win32Exception) { return true; }
+                // A fullscreen window on one monitor must not pause a visible second monitor.
                 coverage.Cover(window);
                 if (coverage.IsCovered)
                 {

@@ -265,7 +265,7 @@ namespace DesktopHtmlHost
         private System.Windows.Forms.Timer fullscreenTimer;
         private bool runtimeSuspended = false;
         private bool sessionInactive = false;
-        private int webViewRuntimeGeneration = 0;
+        private int telemetryGeneration = 0;
         private string fullscreenReason = "";
         private bool isClosing = false;
 
@@ -273,8 +273,30 @@ namespace DesktopHtmlHost
         private static DesktopForm activeInstance;
         private static IntPtr hookId = IntPtr.Zero;
         private static LowLevelMouseProc mouseProc;
+        private static Thread mouseHookThread;
+        private static int mouseHookThreadId;
+        private static int mouseHookStopRequested;
+        private static Exception mouseHookError;
         private static System.Drawing.Rectangle remotePanelBounds = System.Drawing.Rectangle.Empty;
         private static IntPtr renderWindow = IntPtr.Zero;
+        private static MouseRoutingSnapshot mouseRouting;
+        private static readonly uint currentProcessId = (uint)Process.GetCurrentProcess().Id;
+
+        // Published by the UI thread as one immutable snapshot. The mouse thread must
+        // never invoke a WinForms control or wait for WebView2/the display driver.
+        private sealed class MouseRoutingSnapshot
+        {
+            internal readonly System.Drawing.Rectangle ScreenBounds;
+            internal readonly IntPtr HostWindow;
+            internal readonly IntPtr RenderWindow;
+
+            internal MouseRoutingSnapshot(System.Drawing.Rectangle bounds, IntPtr host, IntPtr render)
+            {
+                ScreenBounds = bounds;
+                HostWindow = host;
+                RenderWindow = render;
+            }
+        }
 
         // --- Win32 P/Invoke API Definitions ---
 
@@ -290,6 +312,20 @@ namespace DesktopHtmlHost
 
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern IntPtr GetModuleHandle(string lpModuleName);
+
+        [DllImport("kernel32.dll")]
+        private static extern uint GetCurrentThreadId();
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern int GetMessage(out NativeMessage message, IntPtr window, uint min, uint max);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool PeekMessage(out NativeMessage message, IntPtr window, uint min, uint max, uint remove);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool PostThreadMessage(uint threadId, uint message, IntPtr wParam, IntPtr lParam);
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
@@ -340,6 +376,18 @@ namespace DesktopHtmlHost
         {
             public int x;
             public int y;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativeMessage
+        {
+            public IntPtr hwnd;
+            public uint message;
+            public IntPtr wParam;
+            public IntPtr lParam;
+            public uint time;
+            public POINT point;
+            public uint privateData;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -474,7 +522,7 @@ namespace DesktopHtmlHost
 
         private void WebView_Disposed(object sender, EventArgs e)
         {
-            if (isClosing || IsDisposed)
+            if (isClosing || IsDisposed || !ReferenceEquals(sender, webView))
             {
                 return;
             }
@@ -586,6 +634,7 @@ namespace DesktopHtmlHost
             this.Top = SystemInformation.VirtualScreen.Top;
             this.Width = SystemInformation.VirtualScreen.Width;
             this.Height = SystemInformation.VirtualScreen.Height;
+            PublishMouseRouting();
         }
 
         private void SystemEvents_DisplaySettingsChanged(object sender, EventArgs e)
@@ -692,11 +741,7 @@ namespace DesktopHtmlHost
             if (searchTimer != null) searchTimer.Stop();
             if (telemetryTimer != null) telemetryTimer.Stop();
             if (fullscreenTimer != null) fullscreenTimer.Stop();
-            if (hookId != IntPtr.Zero)
-            {
-                UnhookWindowsHookEx(hookId);
-                hookId = IntPtr.Zero;
-            }
+            StopMouseHook();
 
             if (webView != null)
             {
@@ -748,6 +793,7 @@ namespace DesktopHtmlHost
                 if (isClosing || IsDisposed || webView == null || webView.IsDisposed) return;
 
                 webView.DefaultBackgroundColor = System.Drawing.Color.Transparent;
+                webView.CoreWebView2.ProcessFailed += CoreWebView2_ProcessFailed;
 
                 // Configure virtual host mapping to serve files from local directory without HTTP server
                 string directory = Path.GetDirectoryName(htmlPath);
@@ -798,6 +844,13 @@ namespace DesktopHtmlHost
                             {
                                 string guidStr = msg.Substring(10);
                                 SetPowerPlanFromUi(guidStr);
+                            }
+                            else if (msg == "REQUEST_RUNTIME_STATE")
+                            {
+                                // The page installs its listener before requesting state.
+                                // Also covers navigation/recovery while the desktop is covered.
+                                FullscreenTimer_Tick(null, null);
+                                ApplyWebViewRuntimeState();
                             }
                             else if (msg == "REQUEST_TELEMETRY")
                             {
@@ -871,13 +924,16 @@ namespace DesktopHtmlHost
             }
         }
 
+        private void CoreWebView2_ProcessFailed(object sender, CoreWebView2ProcessFailedEventArgs e)
+        {
+            string kind = e != null ? e.ProcessFailedKind.ToString() : "unknown failure";
+            Program.LogDebug("WebView2 process failed: " + kind + ".");
+            QueueWebViewRecovery("process failure (" + kind + ")");
+        }
+
         private void StartRuntimeServices()
         {
-            if (hookId == IntPtr.Zero)
-            {
-                mouseProc = HookCallback;
-                hookId = SetHook(mouseProc);
-            }
+            StartMouseHook();
 
             if (telemetryTimer == null)
             {
@@ -932,6 +988,7 @@ namespace DesktopHtmlHost
             Program.LogDebug("Recovering WebView2 after " + reason + ".");
             telemetryCollectPending = false;
             renderWindow = IntPtr.Zero;
+            Volatile.Write(ref mouseRouting, null);
 
             if (telemetryTimer != null) telemetryTimer.Stop();
 
@@ -985,6 +1042,10 @@ namespace DesktopHtmlHost
         {
             try
             {
+                Exception hookError = Interlocked.Exchange(ref mouseHookError, null);
+                if (hookError != null) Program.LogDebug("Mouse hook error: " + hookError);
+                if (renderWindow == IntPtr.Zero || !IsWindow(renderWindow)) FindRenderWindow();
+                else PublishMouseRouting();
                 string reason;
                 bool fullscreen = DesktopVisibility.ShouldSuspend(this.Handle, out reason);
                 if (sessionInactive) { fullscreen = true; reason = "session inactive"; }
@@ -1001,6 +1062,7 @@ namespace DesktopHtmlHost
         {
             if (runtimeSuspended == suspended) return;
             runtimeSuspended = suspended;
+            telemetryGeneration++;
 
             if (telemetryTimer != null)
             {
@@ -1012,39 +1074,20 @@ namespace DesktopHtmlHost
             Program.LogDebug(suspended ? "Runtime suspended: " + fullscreenReason + "." : "Runtime resumed: desktop visible.");
         }
 
-        private async void ApplyWebViewRuntimeState()
+        private void ApplyWebViewRuntimeState()
         {
             CoreWebView2 core;
             if (!TryGetCoreWebView2(out core)) return;
             WebView2 currentView = webView;
-            int generation = ++webViewRuntimeGeneration;
             try
             {
-                if (runtimeSuspended)
-                {
-                    core.PostWebMessageAsJson("{\"control\":\"SUSPEND\"}");
-                    currentView.Visible = false;
-                    bool didSuspend = await core.TrySuspendAsync();
-                    if (isClosing || IsDisposed || currentView != webView || currentView.IsDisposed) return;
-                    // A resume/navigation can overtake the asynchronous suspension.
-                    if (!runtimeSuspended)
-                    {
-                        core.Resume();
-                        currentView.Visible = true;
-                        core.PostWebMessageAsJson("{\"control\":\"RESUME\"}");
-                    }
-                    else if (generation == webViewRuntimeGeneration)
-                    {
-                        Program.LogDebug("WebView2 suspension completed: " + didSuspend + ".");
-                    }
-                }
-                else
-                {
-                    core.Resume();
-                    currentView.Visible = true;
-                    core.PostWebMessageAsJson("{\"control\":\"RESUME\"}");
-                    TelemetryTimer_Tick(null, null);
-                }
+                // Keep the real DOM and compositor surface attached and visible.
+                // Hiding/suspending WebView2 discards the desktop surface and makes
+                // its return depend on a later visibility poll and renderer wake-up.
+                core.PostWebMessageAsJson(runtimeSuspended
+                    ? "{\"control\":\"SUSPEND\"}"
+                    : "{\"control\":\"RESUME\"}");
+                if (!runtimeSuspended) TelemetryTimer_Tick(null, null);
             }
             catch (Exception ex)
             {
@@ -1130,6 +1173,7 @@ namespace DesktopHtmlHost
             if (runtimeSuspended) return;
             if (!telemetryReady || telemetryCollector == null || telemetryCollectPending) return;
             telemetryCollectPending = true;
+            int generation = telemetryGeneration;
 
             try
             {
@@ -1138,7 +1182,7 @@ namespace DesktopHtmlHost
                     string statsJson = "";
                     try
                     {
-                        if (isClosing || IsDisposed)
+                        if (isClosing || IsDisposed || runtimeSuspended)
                         {
                             telemetryCollectPending = false;
                             return;
@@ -1148,7 +1192,8 @@ namespace DesktopHtmlHost
                         {
                             try
                             {
-                                PostWebMessageAsJsonSafe(statsJson, "Telemetry post");
+                                if (!runtimeSuspended && generation == telemetryGeneration)
+                                    PostWebMessageAsJsonSafe(statsJson, "Telemetry post");
                             }
                             catch (Exception ex)
                             {
@@ -1157,6 +1202,8 @@ namespace DesktopHtmlHost
                             finally
                             {
                                 telemetryCollectPending = false;
+                                if (!runtimeSuspended && generation != telemetryGeneration)
+                                    TelemetryTimer_Tick(null, null);
                             }
                         }))
                         {
@@ -1193,11 +1240,6 @@ namespace DesktopHtmlHost
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             BeginCleanShutdown();
-            try
-            {
-                Nvml.nvmlShutdown();
-            }
-            catch {}
             base.OnFormClosing(e);
         }
 
@@ -1209,11 +1251,7 @@ namespace DesktopHtmlHost
                 SystemEvents.PowerModeChanged -= SystemEvents_PowerModeChanged;
                 SystemEvents.SessionSwitch -= SystemEvents_SessionSwitch;
                 SystemEvents.SessionEnding -= SystemEvents_SessionEnding;
-                if (hookId != IntPtr.Zero)
-                {
-                    UnhookWindowsHookEx(hookId);
-                    hookId = IntPtr.Zero;
-                }
+                StopMouseHook();
                 if (searchTimer != null)
                 {
                     searchTimer.Dispose();
@@ -1468,82 +1506,99 @@ namespace DesktopHtmlHost
             }
         }
 
-        private static IntPtr SetHook(LowLevelMouseProc proc)
+        private static void StartMouseHook()
+        {
+            if (mouseHookThread != null && mouseHookThread.IsAlive) return;
+            Volatile.Write(ref mouseHookStopRequested, 0);
+            mouseProc = HookCallback;
+            mouseHookThread = new Thread(RunMouseHook);
+            mouseHookThread.IsBackground = true;
+            mouseHookThread.Name = "NexusWpp mouse input";
+            mouseHookThread.Start();
+        }
+
+        private static void RunMouseHook()
         {
             try
             {
-                using (Process curProcess = Process.GetCurrentProcess())
-                using (ProcessModule curModule = curProcess.MainModule)
+                // Create the queue before publishing the ID, so shutdown can always
+                // wake GetMessage, including a shutdown racing with startup.
+                NativeMessage message;
+                PeekMessage(out message, IntPtr.Zero, 0, 0, 0);
+                Volatile.Write(ref mouseHookThreadId, unchecked((int)GetCurrentThreadId()));
+                if (Volatile.Read(ref mouseHookStopRequested) != 0) return;
+
+                hookId = SetWindowsHookEx(WH_MOUSE_LL, mouseProc, GetModuleHandle(null), 0);
+                if (hookId == IntPtr.Zero) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+
+                // Windows delivers WH_MOUSE_LL callbacks to the installing thread.
+                // Keep this message pump separate from rendering and fullscreen scans.
+                while (Volatile.Read(ref mouseHookStopRequested) == 0)
                 {
-                    IntPtr hMod = GetModuleHandle(curModule.ModuleName);
-                    IntPtr result = SetWindowsHookEx(WH_MOUSE_LL, proc, hMod, 0);
-                    return result;
+                    int result = GetMessage(out message, IntPtr.Zero, 0, 0);
+                    if (result == 0) break;
+                    if (result < 0) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
                 }
             }
             catch (Exception ex)
             {
-                Program.LogDebug(string.Format("SetHook Exception: {0}", ex.ToString()));
-                return IntPtr.Zero;
+                Interlocked.Exchange(ref mouseHookError, ex);
             }
+            finally
+            {
+                IntPtr installedHook = Interlocked.Exchange(ref hookId, IntPtr.Zero);
+                if (installedHook != IntPtr.Zero) UnhookWindowsHookEx(installedHook);
+                Volatile.Write(ref mouseHookThreadId, 0);
+            }
+        }
+
+        private static void StopMouseHook()
+        {
+            Volatile.Write(ref mouseRouting, null);
+            Volatile.Write(ref mouseHookStopRequested, 1);
+            int threadId = Volatile.Read(ref mouseHookThreadId);
+            if (threadId != 0) PostThreadMessage(unchecked((uint)threadId), 0x0012 /* WM_QUIT */, IntPtr.Zero, IntPtr.Zero);
         }
 
         private static IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
         {
+            // Motion, wheel and other buttons pass through without allocations or UI work.
+            if (nCode < 0 || (wParam != (IntPtr)WM_LBUTTONDOWN && wParam != (IntPtr)WM_LBUTTONUP))
+                return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
+
             try
             {
-                if (nCode >= 0 && (wParam == (IntPtr)WM_LBUTTONDOWN || wParam == (IntPtr)WM_LBUTTONUP))
+                MouseRoutingSnapshot routing = Volatile.Read(ref mouseRouting);
+                if (routing != null)
                 {
                     MSLLHOOKSTRUCT hookStruct = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
-
-                    if (activeInstance != null && !remotePanelBounds.IsEmpty)
+                    if (routing.ScreenBounds.Contains(hookStruct.pt.x, hookStruct.pt.y) &&
+                        IsWindow(routing.RenderWindow) &&
+                        ShouldForwardDesktopClick(hookStruct.pt, routing) &&
+                        ForwardMouseClick(routing.RenderWindow, hookStruct.pt.x, hookStruct.pt.y, (uint)wParam.ToInt32()))
                     {
-                        System.Drawing.Point screenPt = new System.Drawing.Point(hookStruct.pt.x, hookStruct.pt.y);
-                        System.Drawing.Point clientPt = activeInstance.PointToClient(screenPt);
-
-                        if (remotePanelBounds.Contains(clientPt))
-                        {
-                            if (renderWindow == IntPtr.Zero || !IsWindow(renderWindow))
-                            {
-                                activeInstance.FindRenderWindow();
-                            }
-
-                            if (!activeInstance.ShouldForwardDesktopClick(screenPt))
-                            {
-                                return CallNextHookEx(hookId, nCode, wParam, lParam);
-                            }
-
-                            if (renderWindow == IntPtr.Zero)
-                            {
-                                activeInstance.FindRenderWindow();
-                            }
-
-                            if (renderWindow != IntPtr.Zero)
-                            {
-                                uint msg = (uint)wParam.ToInt32();
-                                ForwardMouseClick(renderWindow, hookStruct.pt.x, hookStruct.pt.y, msg);
-                                return (IntPtr)1; // Swallow click to prevent desktop listview selection box/focus loss
-                            }
-                        }
+                        return (IntPtr)1; // Suppress desktop selection only after successful forwarding.
                     }
                 }
             }
             catch (Exception ex)
             {
-                Program.LogDebug(string.Format("HookCallback Exception: {0}", ex.ToString()));
+                // File I/O here would stall mouse input for the whole desktop.
+                Interlocked.Exchange(ref mouseHookError, ex);
             }
-            return CallNextHookEx(hookId, nCode, wParam, lParam);
+            return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
         }
 
-        private bool ShouldForwardDesktopClick(System.Drawing.Point screenPt)
+        private static bool ShouldForwardDesktopClick(POINT screenPt, MouseRoutingSnapshot routing)
         {
-            IntPtr hit = WindowFromPoint(new POINT { x = screenPt.X, y = screenPt.Y });
+            IntPtr hit = WindowFromPoint(screenPt);
             if (hit == IntPtr.Zero) return false;
-            if (hit == this.Handle || hit == renderWindow) return true;
+            if (hit == routing.HostWindow || hit == routing.RenderWindow) return true;
 
             IntPtr current = hit;
             for (int i = 0; i < 8 && current != IntPtr.Zero; i++)
             {
-                if (current == this.Handle || current == renderWindow) return true;
+                if (current == routing.HostWindow || current == routing.RenderWindow) return true;
 
                 string cls = GetWindowClassName(current);
                 if (cls == "Progman" || cls == "WorkerW" || cls == "SHELLDLL_DefView" || cls == "SysListView32")
@@ -1553,7 +1608,7 @@ namespace DesktopHtmlHost
 
                 uint pid;
                 GetWindowThreadProcessId(current, out pid);
-                if (pid == (uint)Process.GetCurrentProcess().Id)
+                if (pid == currentProcessId)
                 {
                     return true;
                 }
@@ -1576,9 +1631,23 @@ namespace DesktopHtmlHost
         {
             try
             {
+                renderWindow = IntPtr.Zero;
                 EnumChildWindows(this.Handle, FindRenderWindowCallback, IntPtr.Zero);
             }
             catch { }
+            PublishMouseRouting();
+        }
+
+        private void PublishMouseRouting()
+        {
+            if (isClosing || !IsHandleCreated || renderWindow == IntPtr.Zero || remotePanelBounds.IsEmpty)
+            {
+                Volatile.Write(ref mouseRouting, null);
+                return;
+            }
+            System.Drawing.Point origin = PointToScreen(remotePanelBounds.Location);
+            Volatile.Write(ref mouseRouting, new MouseRoutingSnapshot(
+                new System.Drawing.Rectangle(origin, remotePanelBounds.Size), Handle, renderWindow));
         }
 
         private static bool FindRenderWindowCallback(IntPtr hwnd, IntPtr lParam)
@@ -1593,13 +1662,13 @@ namespace DesktopHtmlHost
             return true;
         }
 
-        private static void ForwardMouseClick(IntPtr renderWin, int x, int y, uint msg)
+        private static bool ForwardMouseClick(IntPtr renderWin, int x, int y, uint msg)
         {
             POINT pt = new POINT { x = x, y = y };
-            ScreenToClient(renderWin, ref pt);
+            if (!ScreenToClient(renderWin, ref pt)) return false;
             IntPtr lParam = (IntPtr)((pt.y << 16) | (pt.x & 0xFFFF));
             IntPtr wParam = (IntPtr)(msg == WM_LBUTTONDOWN ? 1 : 0);
-            PostMessage(renderWin, msg, wParam, lParam);
+            return PostMessage(renderWin, msg, wParam, lParam);
         }
 
         private double GetDpiScale()
@@ -1712,66 +1781,6 @@ namespace DesktopHtmlHost
         public static extern void WlanFreeMemory(IntPtr pMemory);
     }
 
-    public static class Nvml
-    {
-        private const string NvmlDll = "nvml.dll";
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct nvmlUtilization_t
-        {
-            public uint gpu;
-            public uint memory;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct nvmlMemory_t
-        {
-            public ulong total;
-            public ulong free;
-            public ulong used;
-        }
-
-        public enum nvmlTemperatureSensors_t
-        {
-            NVML_TEMPERATURE_GPU = 0
-        }
-
-        public enum nvmlClockType_t
-        {
-            NVML_CLOCK_GRAPHICS = 0,
-            NVML_CLOCK_SM = 1,
-            NVML_CLOCK_MEM = 2,
-            NVML_CLOCK_VIDEO = 3
-        }
-
-        [DllImport(NvmlDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "nvmlInit_v2")]
-        public static extern int nvmlInit();
-
-        [DllImport(NvmlDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "nvmlDeviceGetHandleByIndex_v2")]
-        public static extern int nvmlDeviceGetHandleByIndex(uint index, out IntPtr device);
-
-        [DllImport(NvmlDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "nvmlDeviceGetUtilizationRates")]
-        public static extern int nvmlDeviceGetUtilizationRates(IntPtr device, out nvmlUtilization_t utilization);
-
-        [DllImport(NvmlDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "nvmlDeviceGetTemperature")]
-        public static extern int nvmlDeviceGetTemperature(IntPtr device, nvmlTemperatureSensors_t sensorType, out uint temp);
-
-        [DllImport(NvmlDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "nvmlDeviceGetClockInfo")]
-        public static extern int nvmlDeviceGetClockInfo(IntPtr device, nvmlClockType_t clockType, out uint clock);
-
-        [DllImport(NvmlDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "nvmlDeviceGetName")]
-        public static extern int nvmlDeviceGetName(IntPtr device, byte[] name, uint length);
-
-        [DllImport(NvmlDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "nvmlDeviceGetMemoryInfo")]
-        public static extern int nvmlDeviceGetMemoryInfo(IntPtr device, out nvmlMemory_t memory);
-
-        [DllImport(NvmlDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "nvmlDeviceGetPowerUsage")]
-        public static extern int nvmlDeviceGetPowerUsage(IntPtr device, out uint milliwatts);
-
-        [DllImport(NvmlDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "nvmlShutdown")]
-        public static extern int nvmlShutdown();
-    }
-
     public class TelemetryCollector
     {
         // Static / Boot cached specs
@@ -1857,6 +1866,19 @@ namespace DesktopHtmlHost
         private int cachedDgpuUtil = 0;
         private long cachedDgpuMemBytes = 0;
         private int cachedIgpuDecodeUtil = 0;
+
+        // NVIDIA telemetry is queried out of process so a faulty display driver cannot corrupt
+        // the wallpaper host. Windows performance counters remain the fast utilization source.
+        private DateTime lastNvidiaSmiTime = DateTime.MinValue;
+        private DateTime lastNvidiaSmiErrorTime = DateTime.MinValue;
+        private bool cachedNvidiaSmiSuccess = false;
+        private int cachedNvidiaGpuUtil = 0;
+        private int cachedNvidiaGpuTemp = -1;
+        private int cachedNvidiaCoreClock = -1;
+        private int cachedNvidiaMemoryClock = -1;
+        private int cachedNvidiaPowerW = -1;
+        private ulong cachedNvidiaVramTotal = 0;
+        private ulong cachedNvidiaVramUsed = 0;
 
         // Wi-Fi signal cache
         private bool wlanUnavailable = false;
@@ -2169,26 +2191,97 @@ namespace DesktopHtmlHost
 
             ReadDgpuVramTotalFromRegistry();
 
-            // Initialize NVML
+            // Initialize power plans
+            UpdatePowerPlansCache();
+        }
+
+        private bool TryGetNvidiaStats(out int utilization, out int temperature, out int coreClock,
+            out int memoryClock, out int powerWatts, out ulong vramTotal, out ulong vramUsed)
+        {
+            if (lastNvidiaSmiTime == DateTime.MinValue || (DateTime.Now - lastNvidiaSmiTime).TotalSeconds >= 5.0)
+            {
+                lastNvidiaSmiTime = DateTime.Now;
+                cachedNvidiaSmiSuccess = QueryNvidiaSmi();
+            }
+
+            utilization = cachedNvidiaGpuUtil;
+            temperature = cachedNvidiaGpuTemp;
+            coreClock = cachedNvidiaCoreClock;
+            memoryClock = cachedNvidiaMemoryClock;
+            powerWatts = cachedNvidiaPowerW;
+            vramTotal = cachedNvidiaVramTotal;
+            vramUsed = cachedNvidiaVramUsed;
+            return cachedNvidiaSmiSuccess;
+        }
+
+        private bool QueryNvidiaSmi()
+        {
+            string windowsDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+            string executable = Path.Combine(windowsDirectory, "System32", "nvidia-smi.exe");
+            if (!File.Exists(executable)) return false;
+
             try
             {
-                int nvmlRes = Nvml.nvmlInit();
-                if (nvmlRes == 0)
+                ProcessStartInfo startInfo = new ProcessStartInfo(executable,
+                    "--query-gpu=utilization.gpu,temperature.gpu,clocks.gr,clocks.mem,power.draw,memory.total,memory.used --format=csv,noheader,nounits")
                 {
-                    Program.LogDebug("NVML initialized successfully!");
-                }
-                else
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                using (Process process = Process.Start(startInfo))
                 {
-                    Program.LogDebug("NVML initialization failed: " + nvmlRes);
+                    if (process == null) return false;
+                    if (!process.WaitForExit(1500))
+                    {
+                        try { process.Kill(); } catch {}
+                        throw new TimeoutException("nvidia-smi did not respond within 1500 ms.");
+                    }
+                    string output = process.StandardOutput.ReadLine();
+                    if (process.ExitCode != 0 || string.IsNullOrWhiteSpace(output)) return false;
+
+                    string[] values = output.Split(',');
+                    if (values.Length < 7) return false;
+
+                    double parsedPower;
+                    double parsedTotalMiB;
+                    double parsedUsedMiB;
+                    int parsedUtilization;
+                    int parsedTemperature;
+                    int parsedCoreClock;
+                    int parsedMemoryClock;
+                    if (!int.TryParse(values[0].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out parsedUtilization) ||
+                        !int.TryParse(values[1].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out parsedTemperature) ||
+                        !int.TryParse(values[2].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out parsedCoreClock) ||
+                        !int.TryParse(values[3].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out parsedMemoryClock) ||
+                        !double.TryParse(values[4].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out parsedPower) ||
+                        !double.TryParse(values[5].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out parsedTotalMiB) ||
+                        !double.TryParse(values[6].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out parsedUsedMiB))
+                    {
+                        return false;
+                    }
+
+                    cachedNvidiaGpuUtil = Math.Max(0, Math.Min(100, parsedUtilization));
+                    cachedNvidiaGpuTemp = parsedTemperature;
+                    cachedNvidiaCoreClock = parsedCoreClock;
+                    cachedNvidiaMemoryClock = parsedMemoryClock;
+                    cachedNvidiaPowerW = (int)Math.Round(parsedPower);
+                    cachedNvidiaVramTotal = (ulong)Math.Max(0.0, parsedTotalMiB * 1024.0 * 1024.0);
+                    cachedNvidiaVramUsed = (ulong)Math.Max(0.0, parsedUsedMiB * 1024.0 * 1024.0);
+                    return true;
                 }
             }
             catch (Exception ex)
             {
-                Program.LogDebug("NVML init exception: " + ex.Message);
+                if (lastNvidiaSmiErrorTime == DateTime.MinValue || (DateTime.Now - lastNvidiaSmiErrorTime).TotalMinutes >= 1.0)
+                {
+                    lastNvidiaSmiErrorTime = DateTime.Now;
+                    Program.LogDebug("NVIDIA telemetry process failed safely: " + ex.Message);
+                }
+                return false;
             }
-
-            // Initialize power plans
-            UpdatePowerPlansCache();
         }
 
         private static string MemoryTypeFromSmbios(int smbiosType)
@@ -3105,7 +3198,8 @@ namespace DesktopHtmlHost
                 catch {}
             }
 
-            // nvidia GPU stats via NVML (-1 / 0 when the sensor is not available; the UI swaps in another real metric)
+            // NVIDIA metrics are isolated in nvidia-smi. A driver crash can only terminate the
+            // short-lived helper process, never this wallpaper process.
             int gpuUtil = dgpuUtil;
             int gpuTemp = -1;
             int gpuCoreClock = -1;
@@ -3113,56 +3207,10 @@ namespace DesktopHtmlHost
             int gpuPowerW = -1;
             ulong vramTotal = 0;
             ulong vramUsed = 0;
-            bool nvmlSuccess = false;
+            bool nvidiaStatsSuccess = TryGetNvidiaStats(out gpuUtil, out gpuTemp, out gpuCoreClock,
+                out gpuMemClock, out gpuPowerW, out vramTotal, out vramUsed);
 
-            try
-            {
-                IntPtr dev;
-                if (Nvml.nvmlDeviceGetHandleByIndex(0, out dev) == 0)
-                {
-                    Nvml.nvmlUtilization_t util;
-                    if (Nvml.nvmlDeviceGetUtilizationRates(dev, out util) == 0)
-                    {
-                        gpuUtil = (int)util.gpu;
-                    }
-                    
-                    uint temp;
-                    if (Nvml.nvmlDeviceGetTemperature(dev, Nvml.nvmlTemperatureSensors_t.NVML_TEMPERATURE_GPU, out temp) == 0)
-                    {
-                        gpuTemp = (int)temp;
-                    }
-                    
-                    uint coreClock;
-                    if (Nvml.nvmlDeviceGetClockInfo(dev, Nvml.nvmlClockType_t.NVML_CLOCK_GRAPHICS, out coreClock) == 0)
-                    {
-                        gpuCoreClock = (int)coreClock;
-                    }
-                    
-                    uint memClock;
-                    if (Nvml.nvmlDeviceGetClockInfo(dev, Nvml.nvmlClockType_t.NVML_CLOCK_MEM, out memClock) == 0)
-                    {
-                        gpuMemClock = (int)memClock;
-                    }
-
-                    uint milliwatts;
-                    if (Nvml.nvmlDeviceGetPowerUsage(dev, out milliwatts) == 0)
-                    {
-                        gpuPowerW = (int)Math.Round(milliwatts / 1000.0);
-                    }
-
-                    Nvml.nvmlMemory_t mem;
-                    if (Nvml.nvmlDeviceGetMemoryInfo(dev, out mem) == 0)
-                    {
-                        vramTotal = mem.total;
-                        vramUsed = mem.used;
-                    }
-                    
-                    nvmlSuccess = true;
-                }
-            }
-            catch {}
-
-            if (!nvmlSuccess)
+            if (!nvidiaStatsSuccess)
             {
                 // Real fallback: driver-reported VRAM size and the Windows dedicated-memory counter.
                 vramTotal = (ulong)Math.Max(0, dgpuVramTotalBytes);
@@ -3173,7 +3221,7 @@ namespace DesktopHtmlHost
             UpdateTopProcesses();
 
             bool igpuDetected = !string.IsNullOrEmpty(igpuLuid) || !string.IsNullOrEmpty(IgpuInfo);
-            bool dgpuDetected = nvmlSuccess || !string.IsNullOrEmpty(dgpuLuid) || !string.IsNullOrEmpty(GpuName);
+            bool dgpuDetected = nvidiaStatsSuccess || !string.IsNullOrEmpty(dgpuLuid) || !string.IsNullOrEmpty(GpuName);
 
             int wifiSignal = cachedNetType == "Wi-Fi" ? GetWifiSignal() : -1;
 

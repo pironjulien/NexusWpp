@@ -9,12 +9,12 @@ graph TD
     EXE --> HOOK[WH_MOUSE_LL selective click hook]
     EXE --> TEL[Native telemetry collector]
     TEL --> WMI[WMI / Win32 APIs]
-    TEL --> NVML[NVML when available]
+    TEL --> NVIDIA[Isolated nvidia-smi process when available]
     TEL --> POWER[powercfg / PowerGetActiveScheme]
     WV --> UI[index.html + app.js + style.css]
     TEL --> MSG[PostWebMessageAsJson]
     MSG --> UI
-    UI --> CMD[SET_POWER / REQUEST_TELEMETRY messages]
+    UI --> CMD[SET_POWER / REQUEST_RUNTIME_STATE / REQUEST_TELEMETRY messages]
     CMD --> EXE
 ```
 
@@ -24,7 +24,7 @@ graph TD
 2. A named mutex keeps only one instance alive.
 3. WebView2 starts immediately off screen and loads `http://nexuswpp.local/index.html` through a virtual host folder mapping.
 4. A 100 ms timer asks Explorer to create the wallpaper layer and searches for `WorkerW`.
-5. If `WorkerW` is not ready after 5 seconds, the host temporarily attaches to `Progman` so the wallpaper appears sooner.
+5. If `WorkerW` is not ready after 800 ms, the host temporarily attaches to `Progman` so the wallpaper appears sooner.
 6. Once attached, the host covers the virtual screen and keeps listening for display changes.
 
 ## Telemetry
@@ -38,7 +38,7 @@ Telemetry is collected inside `DesktopHtmlHost.cs`.
 - Disk: WMI logical disk counters
 - Network: `NetworkInterface` byte counters plus async ping to `1.1.1.1`
 - GPU/iGPU: DirectX LUID registry mapping plus GPU performance counters
-- NVIDIA details: NVML when available (temperature, clocks, fan, VRAM); otherwise driver-reported VRAM size and the Windows `DedicatedUsage` counter
+- NVIDIA details: isolated `nvidia-smi` process (temperature, clocks, power, VRAM), cached for five seconds; otherwise driver-reported VRAM size and Windows counters
 - System uptime: `GetTickCount64`
 - Power plans: `powercfg /list`, `PowerGetActiveScheme`, and `PowerSetActiveScheme`
 
@@ -54,4 +54,6 @@ The injected WebView2 window lives below desktop icons, so normal mouse delivery
 - The Canvas loop sleeps when particles/interactions stop.
 - Top-process WMI collection is throttled and protected against overlapping calls.
 - GPU routing is left to Windows; NexusWpp does not write DirectX GPU preferences.
-- Fullscreen app detection suspends telemetry and Canvas work, then resumes immediately when fullscreen clears.
+- A 500 ms coverage check pauses work only when all monitor work areas are covered (or the session is inactive). WebView2 stays visible and is never suspended for occlusion; the real composed scene remains available before animation resumes.
+- Canvas pixels, particles and critical-state styling survive pause. CSS animations and in-flight transitions pause, clock callbacks stop, and stale asynchronous telemetry is discarded. The page requests runtime state after its listener is ready, including recovery/navigation.
+- The mouse hook runs on its own message-pump thread, consuming immutable routing snapshots from the UI thread.

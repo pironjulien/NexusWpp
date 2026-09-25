@@ -57,8 +57,8 @@ if (!(Test-Path -LiteralPath $cscPath)) {
 
 & (Join-Path $projectRoot "compile.ps1")
 
-if (Test-Path -LiteralPath $distDir) {
-    Remove-Item -LiteralPath $distDir -Recurse -Force
+if (Test-Path -LiteralPath $payloadDir) {
+    Remove-Item -LiteralPath $payloadDir -Recurse -Force
 }
 New-Item -ItemType Directory -Path $payloadDir -Force | Out-Null
 
@@ -103,7 +103,8 @@ $compilerArgs = @(
     "/reference:System.Drawing.dll",
     "/reference:System.Management.dll",
     "/reference:System.Windows.Forms.dll",
-    $installerSource
+    $installerSource,
+    (Join-Path $projectRoot 'bin\ReleaseVersion.cs')
 )
 
 $process = Start-Process -FilePath $cscPath -ArgumentList $compilerArgs -NoNewWindow -Wait -PassThru
