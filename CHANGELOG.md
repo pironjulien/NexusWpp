@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-25
+
+- Suspension réelle de WebView2 quand le bureau est recouvert ou la session
+  verrouillée; les animations CSS sont mises en pause avec le canvas.
+- Détection des fenêtres maximisées et juxtaposées sur tous les écrans,
+  en ignorant les fenêtres transparentes et celles d'autres bureaux virtuels.
+- Reprise du rendu et de la télémétrie dès que le bureau redevient visible,
+  avec protection contre une suspension asynchrone terminant après une reprise.
+- Tests de couverture multi-écran et mesure réelle CPU/GPU des transitions.
+- Version MSIX locale 1.0.15.0.
+
 ## 2026-07-23
 
 - Passage des mises à jour GitHub Actions de Dependabot à un rythme mensuel,

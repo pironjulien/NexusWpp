@@ -177,7 +177,7 @@ $fullscreenMeasureSeconds = [Math]::Max(1, [Math]::Floor($FullscreenSeconds - $e
 $fullscreen = Measure-NexusCpu -Since $startMarker -Seconds $fullscreenMeasureSeconds
 $probe.WaitForExit()
 $fullscreenEndedAt = Get-Date
-$resumeMatch = Wait-NewLogMatch -StartLine $fullscreenStartLine -Pattern "Runtime resumed: fullscreen foreground cleared" -TimeoutSeconds $DetectionTimeoutSeconds
+$resumeMatch = Wait-NewLogMatch -StartLine $fullscreenStartLine -Pattern "Runtime resumed:" -TimeoutSeconds $DetectionTimeoutSeconds
 $telemetryMatch = Wait-NewLogMatch -StartLine $fullscreenStartLine -Pattern "REQUEST_TELEMETRY" -TimeoutSeconds $DetectionTimeoutSeconds
 Start-Sleep -Seconds 2
 

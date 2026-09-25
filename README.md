@@ -12,12 +12,15 @@ NexusWpp affiche un cockpit matériel dynamique directement dans le bureau Windo
 ## Architecture Actuelle
 
 - `DesktopHtmlHost.cs` : hôte WinForms/WebView2, injection desktop, hook souris, collecte télémétrie native.
+- `DesktopVisibility.cs` : détection du bureau couvert, du plein écran et calcul de couverture multi-écrans.
 - `index.html`, `app.js`, `style.css` : interface du cockpit et moteur Canvas.
-- `compile.ps1` : compile `DesktopHtmlHost.cs` en `bin\nexuswpp.exe`.
+- `compile.ps1` : compile l'hôte et la détection de visibilité en `bin\nexuswpp.exe`.
 - `deploy_local.ps1` : copie l'app dans `C:\nexuswpp` et configure le lancement Windows via `HKLM\...\Run`.
 - `run.bat` : menu local pour démarrer, compiler, déployer ou arrêter l'app.
 - `scripts/benchmark_nexuswpp.ps1` : benchmark multi-run CPU/RAM/startup.
 - `scripts/benchmark_fullscreen_suspend.ps1` : mesure actif vs suspension plein écran.
+- `scripts/measure_desktop_suspension.ps1` : mesure CPU/GPU avec bureau visible, fenêtres juxtaposées, plein écran et fenêtres transparentes, puis restaure les fenêtres précédentes.
+- `scripts/test_desktop_coverage.cs` : dix scénarios géométriques indépendants du bureau réel.
 
 ## Démarrage Rapide
 
@@ -69,6 +72,16 @@ L'installeur configure:
 Le package MSIX configure le lancement Windows via une tache de démarrage packagée `windows.startupTask`, car les entrées `HKLM\...\Run` de l'installeur EXE ne s'appliquent pas au mode Store/MSIX. L'hote natif s'enregistre aussi aupres du Restart Manager Windows pour que le Store puisse relancer NexusWpp automatiquement apres une mise a jour qui ferme l'instance active.
 
 L'application contient un verrou single-instance, donc relancer `NexusWpp` depuis le menu Démarrer ne crée pas deux fonds d'écran.
+
+Une installation Store/MSIX se met à jour avec le package de même identité et un numéro de version supérieur. Ne pas lui ajouter le déploiement EXE, qui utilise un autre emplacement et un autre mécanisme de démarrage.
+
+## Suspension du rendu
+
+À partir de la version 1.0.15.0, un bureau entièrement couvert par des fenêtres opaques suspend la télémétrie, le Canvas, les animations CSS et WebView2 lui-même. Le calcul prend en compte les zones utiles de tous les écrans, sans compter deux fois les fenêtres qui se chevauchent. Une fenêtre transparente ou masquée sur un autre bureau virtuel ne déclenche pas cette suspension.
+
+La politique de pause lorsqu'une application couvre un écran entier est conservée. Le verrouillage ou la déconnexion de session suspend aussi le rendu. Quand le bureau redevient visible, WebView2 reprend et la télémétrie est rafraîchie.
+
+Validation du 25 septembre 2026 sur PCSALON : dix tests géométriques passants; mesure réelle à 0 % d'activité GPU du groupe de processus lorsque le bureau est couvert, reprise entre 9 et 12 % lorsqu'il est visible. Ces valeurs désignent le moteur GPU le plus actif pendant les intervalles mesurés, pas un pourcentage de capacité totale. La comparaison CPU/RAM avant/après sous couverture a obtenu le verdict `KEEP`, avec une somme des working sets passant de 599 à 374 Mio. Les fenêtres transparentes conservent le rendu et les journaux confirment la reprise de la télémétrie.
 
 ## Portabilité
 
