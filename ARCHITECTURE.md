@@ -29,10 +29,10 @@ graph TD
 
 ## Telemetry
 
-Telemetry is collected inside `DesktopHtmlHost.cs`.
+Telemetry is collected in `TelemetryCollector.cs`. `NvidiaTelemetry.cs` isolates driver reads in a bounded helper process and invalidates failed readings. `WindowsGpuTelemetry.cs` batches the engine and memory snapshots for all adapters. DOM-independent freshness and alert rules live in `telemetry-state.js`.
 
 - CPU load: `GetSystemTimes`
-- CPU temperature: ACPI thermal zone (`MSAcpi_ThermalZoneTemperature`), hidden behind a real fallback metric when the sensor is absent
+- Thermal reading: Windows thermal zone counters or ACPI `MSAcpi_ThermalZoneTemperature`, explicitly labelled as a thermal zone rather than a CPU core sensor
 - CPU frequency: `PercentProcessorPerformance` counter scaled by the base clock
 - RAM: `GlobalMemoryStatusEx` plus WMI memory counters; type and module count from SMBIOS
 - Disk: WMI logical disk counters

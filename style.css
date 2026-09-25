@@ -1,4 +1,4 @@
-/* Modern, Premium Gaming Dashboard CSS Design System - Version 4 (Apple Frosted Glass) */
+﻿/* Modern, Premium Gaming Dashboard CSS Design System - Version 4 (Apple Frosted Glass) */
 :root {
     --bg-dark: #040509;
     
@@ -434,7 +434,9 @@ body {
     stroke-linecap: round;
     stroke-dasharray: 477.5; /* 2 * PI * 76 = 477.5 */
     stroke-dashoffset: 477.5;
-    transition: stroke-dashoffset 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+    /* Complete each interpolation before the next sample instead of repainting
+       filtered SVG rings for most of the sampling interval. Profiled in WebView2. */
+    transition: stroke-dashoffset 0.18s cubic-bezier(0.22, 1, 0.36, 1);
     
     /* Optimize stroke animation and prepare layer promotion */
     will-change: stroke-dashoffset, filter;
@@ -848,70 +850,22 @@ body {
     box-shadow: 0 0 6px rgba(0, 199, 190, 0.3);
 }
 
-/* --- OVERLOAD CYBER-CRISIS EASTER EGGS (>80%) --- */
-.critical-alert {
-    position: absolute;
-    top: 14px;
-    right: 18px;
-    font-family: var(--font-heading);
-    font-size: 11px;
-    font-weight: 900;
-    color: #ff375f;
-    background: rgba(255, 55, 95, 0.15);
-    border: 1px solid rgba(255, 55, 95, 0.4);
-    border-radius: 4px;
-    padding: 2px 8px;
-    letter-spacing: 1px;
-    opacity: 0;
-    transition: opacity 0.4s ease;
-    text-shadow: 0 0 6px rgba(255, 55, 95, 0.6);
-    pointer-events: none;
-    z-index: 100;
-}
-
-/* When active, blink alert badge */
-.gauge-card.overload .critical-alert {
-    opacity: 1;
-    animation: alert-blink 1s steps(2, start) infinite;
-}
-
-@keyframes alert-blink {
-    to { visibility: hidden; }
-}
-
-/* Red glow and hardware cockpit vibrations shake */
-.gauge-card.overload {
-    border-color: rgba(255, 55, 95, 0.45) !important;
-    box-shadow: 0 16px 48px 0 rgba(0, 0, 0, 0.45), 
-                inset 0 1px 1px rgba(255, 55, 95, 0.18),
-                0 0 20px rgba(255, 55, 95, 0.3) !important;
-    background: linear-gradient(135deg, rgba(255, 55, 95, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%) !important;
-    animation: cockpit-shake 0.35s linear infinite;
-}
-
-@keyframes cockpit-shake {
-    0% { transform: translate(0, 0); }
-    20% { transform: translate(-1px, 1px); }
-    40% { transform: translate(-1.5px, -1.5px); }
-    60% { transform: translate(1.5px, 0.5px); }
-    80% { transform: translate(-0.5px, -1.5px); }
-    100% { transform: translate(0, 0); }
-}
-
-/* Global emergency red hue-rotate and pulse on the background star system */
-body.system-critical .cosmos-bg {
-    filter: hue-rotate(320deg) saturate(1.8) !important;
-    transition: filter 1.5s ease-in-out;
-}
-
-body.system-critical .nebula {
-    animation-duration: 10s !important; /* Accelerated drift under stress */
-}
+/* Status shares a real header row with the title, including compact cards. */
+.card-heading { display: flex; align-items: center; gap: 6px; min-width: 0; width: 100%; }
+.card-heading .gauge-label { flex: 1; min-width: 0; width: auto; white-space: nowrap; }
+.critical-alert { display: none; flex: 0 1 auto; max-width: 58%; color: #ffcf78;
+    font: 600 10px/1.2 var(--font-body); padding: 2px 4px; border-radius: 4px;
+    background: rgba(255, 185, 65, .12); text-align: center; overflow-wrap: anywhere; }
+.critical-alert:not(:empty) { display: block; }
+.gauge-card.high-load { border-color: rgba(255, 185, 65, .5); }
+.gauge-card.sensor-stale .critical-alert { color: #d2d7e2; background: rgba(190, 200, 215, .12); }
+.sensor-unavailable { color: #afb7c7 !important; }
+@container gauge (max-height: 160px) { .critical-alert { font-size: 8px; padding: 1px 3px; } }
 
 /* A short card places its dial beside the readings. No metric is removed and
    no scrolling is needed on the desktop's non-interactive telemetry panels. */
 @container gauge (max-height: 210px) and (min-width: 220px) {
-    .gauge-label { grid-column: 1 / -1; }
+    .card-heading { grid-column: 1 / -1; }
     .gauge-slot { grid-column: 1; grid-row: 2; width: 28%; }
     .card-sub-metrics { grid-column: 1; grid-row: 2; width: 68%; justify-self: end; align-self: center; }
 }
@@ -924,7 +878,7 @@ body.system-critical .nebula {
 }
 
 @container gauge (max-height: 160px) and (max-width: 219px) {
-    .gauge-label {
+    .card-heading {
         grid-row: 1;
         grid-column: 1;
         width: calc(100% - 38px);
@@ -938,7 +892,7 @@ body.system-critical .nebula {
 }
 
 @container gauge (max-height: 110px) and (min-width: 160px) {
-    .gauge-label { grid-column: 1 / -1; width: 100%; white-space: nowrap; }
+    .card-heading { grid-column: 1 / -1; width: 100%; white-space: nowrap; }
     .gauge-slot { grid-row: 2; grid-column: 1; width: 20%; height: 100%; }
     .card-sub-metrics { grid-row: 2; grid-column: 1; width: 77%; justify-self: end; }
 }

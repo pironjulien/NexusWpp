@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 $projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $distDir = Join-Path $projectRoot "dist"
@@ -57,19 +57,13 @@ if (!(Test-Path -LiteralPath $cscPath)) {
 
 & (Join-Path $projectRoot "compile.ps1")
 
+if (-not [IO.Path]::GetFullPath($payloadDir).StartsWith([IO.Path]::GetFullPath($distDir) + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid payload directory.' }
 if (Test-Path -LiteralPath $payloadDir) {
     Remove-Item -LiteralPath $payloadDir -Recurse -Force
 }
 New-Item -ItemType Directory -Path $payloadDir -Force | Out-Null
 
-$payloadFiles = @(
-    "app.js",
-    "style.css",
-    "index.html",
-    "julienpiron.png",
-    "splash.jpg",
-    "icon.ico"
-)
+$payloadFiles = & (Join-Path $PSScriptRoot 'application_files.ps1')
 
 foreach ($file in $payloadFiles) {
     Copy-Item -LiteralPath (Join-Path $projectRoot $file) -Destination (Join-Path $payloadDir $file) -Force

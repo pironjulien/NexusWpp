@@ -23,3 +23,7 @@ jobs:
       - name: Compile NexusWpp
         shell: pwsh
         run: .\compile.ps1
+
+      - name: Sensor and alert rules
+        shell: pwsh
+        run: .\scripts\test_features.ps1

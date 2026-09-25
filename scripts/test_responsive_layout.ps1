@@ -52,6 +52,11 @@ foreach ($size in @(@(800,450),@(960,540),@(1280,720),@(1706,960),@(432,768),@(5
         }
     }
 }
-$cases | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $casesPath -Encoding UTF8
+$expanded = foreach ($item in $cases) {
+    foreach ($state in @('normal','high','stale')) {
+        $variant=$item.Clone(); $variant.state=$state; $variant.id=$item.id+'-'+$state; $variant
+    }
+}
+$expanded | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $casesPath -Encoding UTF8
 & $binary $project $output $casesPath
 if ($LASTEXITCODE -ne 0) { throw "Responsive layout failures; see $output\results.json" }

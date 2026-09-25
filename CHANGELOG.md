@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-25 — 1.0.24.0
+
+- Alertes « Charge élevée » et « Mémoire très utilisée » intégrées au titre sans chevauchement ; confirmation à 90 % pendant 5 secondes et retour à 80 % pendant 5 secondes, sans clignotement ni tremblement.
+- Capteurs NVIDIA traités individuellement, anciennes valeurs invalidées après échec, indication des données périmées et conservation de la précision des watts. Les puissances affichées concernent la carte entière.
+- Collecte des moteurs et de la mémoire GPU Windows regroupée en deux requêtes ; pourcentages calculés par moteur, sans additionner des moteurs distincts.
+- Transition des jauges raccourcie après profilage A/B ; halos et radar à 12 images/s conservés.
+- Séparation de la collecte et des capteurs GPU en modules testables ; manifeste de fichiers livré partagé entre les modes d’installation.
+- Matrice de disposition étendue aux charges élevées et aux capteurs périmés ; vérification de la récupération après une interruption des mesures.
+- Protection de l’initialisation WebView2 contre les récupérations concurrentes ; notifications d’écran traitées sur le thread de l’interface.
+
 ## 2026-09-25 — 1.0.20.0
 
 - Ajustement fin du placement : cockpit remonté de 10 pixels sur un écran à 125 %, avec une rangée d'icônes préservée sur les petits formats et des cartes de taille identique.

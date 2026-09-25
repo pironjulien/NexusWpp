@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 # 0. Check if running as administrator, relaunch if not (UAC Auto-elevation)
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -60,8 +60,8 @@ if (!(Test-Path $localFolder)) {
 
 # 1.8 Clean up obsolete files and leftovers in destination directory C:\nexuswpp
 Write-Host "Cleaning up obsolete files in C:\nexuswpp..." -ForegroundColor Yellow
-$allowedFiles = @(
-    "app.js", "style.css", "index.html", "julienpiron.png", "splash.jpg", "icon.ico", "nexuswpp.exe",
+$allowedFiles = @(& (Join-Path $PSScriptRoot 'scripts\application_files.ps1')) + @(
+    "nexuswpp.exe",
     "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll", "WebView2Loader.dll",
     "webview_debug.log"
 )
@@ -77,7 +77,7 @@ Get-ChildItem -Path $localFolder | ForEach-Object {
 }
 
 Write-Host "Copying optimized files from $PSScriptRoot to local folder..." -ForegroundColor Yellow
-$filesToCopy = @("app.js", "style.css", "index.html", "julienpiron.png", "splash.jpg", "icon.ico")
+$filesToCopy = & (Join-Path $PSScriptRoot 'scripts\application_files.ps1')
 foreach ($file in $filesToCopy) {
     $src = Join-Path $PSScriptRoot $file
     $dest = Join-Path $localFolder $file

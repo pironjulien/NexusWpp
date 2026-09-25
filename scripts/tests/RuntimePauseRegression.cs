@@ -32,7 +32,9 @@ class RuntimePauseRegression : Form
         project = root;
         Text = "NexusWpp — vérification automatique de la pause";
         ClientSize = new Size(1280, 800);
-        StartPosition = FormStartPosition.CenterScreen;
+        ShowInTaskbar = false;
+        StartPosition = FormStartPosition.Manual;
+        Location = new Point(-20000, -20000);
         Controls.Add(view);
         Shown += Run;
     }
@@ -83,8 +85,8 @@ class RuntimePauseRegression : Form
             await Task.Delay(300);
             await Check("!runtimeSuspended && clockTimer !== 0", "resume restarts clock");
             await view.CoreWebView2.ExecuteScriptAsync(@"
-                document.body.classList.add('system-critical');
-                document.querySelector('.gauge-card').classList.add('overload');
+                document.querySelector('.gauge-card').classList.add('high-load');
+                setCircularProgress(cpuRing, 75);
                 spawnCoreSplash(telemetryNodes.npu.x, telemetryNodes.npu.y, '#ffffff');
                 dataPackets.push(new DataPacket(telemetryNodes.cpu, '#ffffff'));
                 wakeCanvas();");
@@ -96,17 +98,17 @@ class RuntimePauseRegression : Form
                     pixels: canvas.toDataURL(), particles: JSON.stringify(coreParticles),
                     packets: JSON.stringify(dataPackets), angles: telemetryNodeList.map(n => n.rotAngle).join(','),
                     clock: document.getElementById('clock-s').textContent,
-                    filter: getComputedStyle(document.querySelector('.cosmos-bg')).filter
+                    border: getComputedStyle(document.querySelector('.gauge-card')).borderColor
                 };");
             await Task.Delay(1200);
             await Check("canvas.toDataURL() === pauseTest.pixels", "paused canvas preserves exact pixel buffer");
             await Check("coreParticles.length > 0 && dataPackets.length > 0 && JSON.stringify(coreParticles) === pauseTest.particles && JSON.stringify(dataPackets) === pauseTest.packets", "pause retains particles and packets without advancing them");
             await Check("telemetryNodeList.map(n => n.rotAngle).join(',') === pauseTest.angles", "pause retains orbit angles");
             await Check("document.getElementById('clock-s').textContent === pauseTest.clock && !clockTimer", "clock stays frozen under cover");
-            await Check("document.body.classList.contains('system-critical')", "pause preserves actual critical state");
+            await Check("document.querySelector('.gauge-card').classList.contains('high-load')", "pause preserves displayed load state");
             Console.WriteLine("ANIMATIONS " + await view.CoreWebView2.ExecuteScriptAsync("JSON.stringify(document.getAnimations().filter(a => a.playState === 'running').map(a => ({type:a.constructor.name,name:a.animationName,property:a.transitionProperty,target:a.effect.target.className})))"));
-            await Check("document.getAnimations().every(a => a.playState !== 'running')", "all CSS animations including overload are paused");
-            await Check("getComputedStyle(document.querySelector('.cosmos-bg')).filter === pauseTest.filter", "pause retains in-flight CSS transition appearance");
+            await Check("document.getAnimations().every(a => a.playState !== 'running')", "all CSS animations and gauge transitions are paused");
+            await Check("getComputedStyle(document.querySelector('.gauge-card')).borderColor === pauseTest.border", "pause retains in-flight CSS transition appearance");
 
             await view.CoreWebView2.ExecuteScriptAsync("resizeCanvas();");
             await Check("canvas.toDataURL() === pauseTest.pixels", "same-size resize does not clear canvas");
@@ -136,6 +138,18 @@ class RuntimePauseRegression : Form
             await Ready();
             await Check("runtimeSuspended && telemetryNodesInitialized && !clockTimer", "navigation while covered re-synchronizes pause");
             await Check("ctx.getImageData(0,0,width,height).data.some((v,i) => i % 4 === 3 && v > 0)", "navigation while covered paints scene pixels before resume");
+
+            await view.CoreWebView2.ExecuteScriptAsync(File.ReadAllText(Path.Combine(project,"scripts","tests","responsive_layout.js")));
+            await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal'});lastTelemetryReceived=performance.now()-7000;refreshTelemetryFreshness(true);");
+            await Check("[...document.querySelectorAll('.gauge-value')].every(v=>v.textContent==='—') && document.querySelectorAll('.sensor-stale').length===7", "expired stream clears old values on every card");
+            await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal'});");
+            await Check("document.querySelectorAll('.sensor-stale').length===0 && [...document.querySelectorAll('.critical-alert')].every(v=>v.textContent==='')", "fresh stream clears expired badges including disk and network");
+            await Check("gpuVal.querySelector('span').textContent==='%' && gpuVal.textContent==='73%'", "recovered gauge restores both real value and unit");
+            await view.CoreWebView2.ExecuteScriptAsync(@"
+                window.drawnLabels=[];const originalText=ctx.fillText;
+                ctx.fillText=function(text,...args){drawnLabels.push(String(text));originalText.call(this,text,...args);};
+                telemetryNodes.cpu.value=-1;telemetryNodes.gpu.value=null;redrawCanvas();ctx.fillText=originalText;");
+            await Check("drawnLabels.filter(text=>text==='—').length>=2 && !drawnLabels.some(text=>text==='-1%' || text==='null%')", "radar marks unavailable readings instead of negative or fabricated percentages");
             exitCode = 0;
         }
         catch (Exception error) { Console.Error.WriteLine("FAIL " + error); }
