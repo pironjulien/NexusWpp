@@ -23,7 +23,19 @@ window.layoutFixture = function (test) {
         totalProcesses: 456, ping: 124,
         powerPlans: planNames.slice(0, test.plans || 4).map((name, index) => ({ name, guid: 'layout-test-' + index, active: index === 0 }))
     };
+    if (test.state === 'high') {
+        for (const key of ['cpu','igpu','npu','gpu','ram']) stats[key].utilization = 96;
+    } else if (test.state === 'stale') {
+        stats.sources = { nvidia: { status: 'stale' }, windowsGpu: { status: 'stale' } };
+        stats.gpu.temp = stats.gpu.powerW = stats.gpu.memoryClock = -1;
+    }
     updateDOM(stats);
+    if (typeof loadAlerts !== 'undefined') {
+        loadAlerts.forEach(alert => alert.reset());
+        updateLoadAlerts(stats, 1000);
+        updateLoadAlerts(stats, 6000);
+        refreshTelemetryFreshness(true);
+    }
     // Settle telemetry transitions in this static boundary-data snapshot.
     document.getAnimations().filter(animation => animation instanceof CSSTransition).forEach(animation => animation.finish());
     setRuntimeSuspended(true);
@@ -44,7 +56,7 @@ window.inspectLayout = function () {
     for (const element of cards) {
         if (!inside(rect(element), viewport)) issues.push(name(element) + ': outside viewport');
     }
-    for (const element of document.querySelectorAll('.gauge-label, .gauge-container, .gauge-value, .sub-metric, .sub-metric .lbl, .sub-metric .val, .sub-progress-container, .clock-time, .clock-date, .clock-mb, .clock-battery, .remote-btn, .btn-lbl, #physics-canvas')) {
+    for (const element of document.querySelectorAll('.gauge-label, .critical-alert, .settings-button, .gauge-container, .gauge-value, .sub-metric, .sub-metric .lbl, .sub-metric .val, .sub-progress-container, .clock-time, .clock-date, .clock-mb, .clock-battery, .remote-btn, .btn-lbl, #physics-canvas')) {
         if (!visible(element)) continue;
         const bounds = rect(element);
         if (!inside(bounds, viewport)) issues.push(name(element) + ': outside viewport');
@@ -54,7 +66,7 @@ window.inspectLayout = function () {
                 break;
             }
         }
-        if (element.matches('.sub-metric .lbl, .sub-metric .val, .btn-lbl, .clock-date, .clock-mb, .clock-battery')) {
+        if (element.matches('.critical-alert, .settings-button, .sub-metric .lbl, .sub-metric .val, .btn-lbl, .clock-date, .clock-mb, .clock-battery')) {
             const range = document.createRange();
             range.selectNodeContents(element);
             for (const line of range.getClientRects()) {
@@ -66,6 +78,15 @@ window.inspectLayout = function () {
             if (bounds.width < 30 || bounds.height < 30) issues.push(name(element) + ': unreadable gauge');
         }
         if (element.matches('.gauge-value') && !inside(bounds, rect(element.closest('.gauge-slot')))) issues.push(name(element) + ': outside gauge slot');
+    }
+    for (const card of cards.filter(card => card.matches('.gauge-card'))) {
+        const badge = card.querySelector('.critical-alert');
+        if (!badge || !visible(badge)) continue;
+        const a = rect(badge);
+        for (const other of card.querySelectorAll('.gauge-label,.gauge-container,.sub-metric')) {
+            const b = rect(other);
+            if (Math.min(a.right,b.right)-Math.max(a.left,b.left)>1 && Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1) issues.push(name(card)+': status overlaps '+name(other));
+        }
     }
     for (let i = 0; i < cards.length; i++) for (let j = i + 1; j < cards.length; j++) {
         const a = rect(cards[i]), b = rect(cards[j]);

@@ -89,7 +89,10 @@ const powerPlansContainer = document.getElementById("power-plans-container");
 
 // Local state
 let currentPowerPlan = "";
-let systemIsOverloaded = false;
+const loadAlerts = new Map();
+let lastTelemetry = null;
+let lastTelemetryReceived = 0;
+let telemetryExpired = false;
 let isPowerPlanSwitching = false;
 let pendingPowerPlanGuid = "";
 let powerPlanSwitchTimer = 0;
@@ -106,6 +109,7 @@ const days = ["DIMANCHE", "LUNDI", "MARDI", "MERCREDI", "JEUDI", "VENDREDI", "SA
 const months = ["JANVIER", "FEVRIER", "MARS", "AVRIL", "MAI", "JUIN", "JUILLET", "AOUT", "SEPTEMBRE", "OCTOBRE", "NOVEMBRE", "DECEMBRE"];
 
 function updateClock() {
+    if (lastTelemetry) refreshTelemetryFreshness();
     const now = new Date();
     const h = String(now.getHours()).padStart(2, '0');
     const m = String(now.getMinutes()).padStart(2, '0');
@@ -634,6 +638,7 @@ function setRuntimeSuspended(suspended) {
     if (runtimeSuspended === suspended) return;
     runtimeSuspended = suspended;
     if (suspended) {
+        loadAlerts.forEach(alert => alert.reset());
         pauseRunningTransitions();
         mouse.grabbedNode = null;
         mouse.isDown = false;
@@ -883,7 +888,7 @@ function updatePhysics(timestamp, renderOnly = false) {
         if (node !== telemetryNodes.npu) {
             ctx.font = "bold 13px Bahnschrift, 'Segoe UI', sans-serif";
             ctx.fillStyle = "#ffffff";
-            ctx.fillText(`${node.value}${node.suffix}`, node.x, node.y - 3);
+            ctx.fillText(NexusTelemetry.valid(node.value) ? `${node.value}${node.suffix}` : '—', node.x, node.y - 3);
             
             // Draw Label below node
             ctx.font = "900 11px Bahnschrift, 'Segoe UI', sans-serif";
@@ -970,6 +975,12 @@ function setHtmlIfChanged(element, value) {
 
 function setAttrIfChanged(element, name, value) {
     if (!element) return;
+    if (name === 'aria-valuenow' && !NexusTelemetry.valid(value)) {
+        element.removeAttribute(name);
+        element.setAttribute('aria-valuetext', 'Mesure indisponible');
+        return;
+    }
+    if (name === 'aria-valuenow') element.removeAttribute('aria-valuetext');
     const textValue = String(value);
     if (element.getAttribute(name) !== textValue) {
         element.setAttribute(name, textValue);
@@ -990,14 +1001,14 @@ function setSubMetric(valEl, label, value) {
 
 function setWidthIfChanged(element, value) {
     if (!element) return;
-    const widthValue = `${value}%`;
+    const widthValue = `${NexusTelemetry.valid(value) ? Math.min(100, value) : 0}%`;
     if (element.style.width !== widthValue) {
         element.style.width = widthValue;
     }
 }
 
 function setCircularProgress(ring, value) {
-    const offset = RING_CIRCUMFERENCE - (value / 100) * RING_CIRCUMFERENCE;
+    const offset = RING_CIRCUMFERENCE - ((NexusTelemetry.valid(value) ? Math.min(100, value) : 0) / 100) * RING_CIRCUMFERENCE;
     const offsetValue = offset.toFixed(3);
     if (ring && ring._nexusOffset !== offsetValue) {
         ring._nexusOffset = offsetValue;
@@ -1070,6 +1081,9 @@ function setGpuVisibility(hasIgpu, hasDgpu) {
 }
 
 function updateDOM(stats) {
+    lastTelemetry = stats;
+    lastTelemetryReceived = performance.now();
+    telemetryExpired = false;
     const npuStats = stats.npu || {
         utilization: 0,
         name: "",
@@ -1101,10 +1115,12 @@ function updateDOM(stats) {
     setAttrIfChanged(gpuGaugeContainer, "aria-valuenow", stats.gpu.utilization);
 
     // 2. CPU Sub-metrics (real sensor when present, otherwise another real metric fills the slot)
-    if (stats.cpu.temp >= 0) {
-        setSubMetric(cpuTempSub, "TEMPÉRATURE", `${stats.cpu.temp} °C`);
+    if (NexusTelemetry.sensorState(stats, 'cpuTemperature') === 'stale' || stats.cpu.temp >= 0) {
+        setSensorMetric(cpuTempSub, 'ZONE THERMIQUE', stats.cpu.temp, '°C', stats, 'cpuTemperature');
     } else {
         setSubMetric(cpuTempSub, "CACHE L2 / L3", `${stats.cpu.l2Cache} / ${stats.cpu.l3Cache}`);
+        cpuTempSub.classList.remove('sensor-unavailable');
+        cpuTempSub.title = '';
     }
     if (cpuFreqSub) {
         cpuFreqSub.textContent = `${stats.cpu.freqGhz} GHz`;
@@ -1125,29 +1141,12 @@ function updateDOM(stats) {
     }
 
     // 3. GPU Sub-metrics (NVML when available, otherwise real Windows counters fill the slots)
-    const dgpuVramUsedGb = ((stats.vram.usedMb || 0) / 1024).toFixed(1);
+    const dgpuVramUsedGb = NexusTelemetry.valid(stats.vram.usedMb) ? (stats.vram.usedMb / 1024).toFixed(1) : '—';
     const dgpuVramTotalGb = stats.vram.totalMb > 0 ? (stats.vram.totalMb / 1024).toFixed(0) : "";
-    if (stats.gpu.temp >= 0) {
-        setSubMetric(gpuTempSub, "TEMPÉRATURE", `${stats.gpu.temp} °C`);
-    } else {
-        setSubMetric(gpuTempSub, "PILOTE", stats.gpu.driver || "--");
-    }
+    setSensorMetric(gpuTempSub, "TEMPÉRATURE", stats.gpu.temp, "°C", stats, "nvidia");
     setSubMetric(gpuVramSub, "VRAM", dgpuVramTotalGb ? `${dgpuVramUsedGb} / ${dgpuVramTotalGb} Go` : `${dgpuVramUsedGb} Go`);
-    const gpuPowerW = Number(stats.gpu.powerW);
-    if (gpuPowerW >= 0) {
-        setSubMetric(gpuCoreSub, "CONSOMMATION", `${gpuPowerW} W`);
-    } else if (stats.gpu.coreClock >= 0) {
-        setSubMetric(gpuCoreSub, "CORE CLOCK", `${stats.gpu.coreClock} MHz`);
-    } else {
-        setSubMetric(gpuCoreSub, "MAJ PILOTE", stats.gpu.driverDate || "--");
-    }
-    if (stats.gpu.memoryClock >= 0) {
-        setSubMetric(gpuMemClockSub, "MÉMOIRE CLOCK", `${stats.gpu.memoryClock} MHz`);
-    } else if (stats.vram.totalMb > 0) {
-        setSubMetric(gpuMemClockSub, "VRAM LIBRE", `${((stats.vram.totalMb - stats.vram.usedMb) / 1024).toFixed(1)} Go`);
-    } else {
-        setSubMetric(gpuMemClockSub, "ACTIVITÉ 3D", `${stats.gpu.utilization} %`);
-    }
+    setSensorMetric(gpuCoreSub, "PUISSANCE GPU", stats.gpu.powerW, "W", stats, "nvidia");
+    setSensorMetric(gpuMemClockSub, "FRÉQ. MÉMOIRE", stats.gpu.memoryClock, "MHz", stats, "nvidia");
     if (gpuVramBar) {
         const gpuVramPct = stats.vram.totalMb > 0 ? Math.round((stats.vram.usedMb / stats.vram.totalMb) * 100) : 0;
         setWidthIfChanged(gpuVramBar, gpuVramPct);
@@ -1159,7 +1158,7 @@ function updateDOM(stats) {
     animateTextValue(ramVal, stats.ram.utilization, "%");
     setAttrIfChanged(ramGaugeContainer, "aria-valuenow", stats.ram.utilization);
     
-    const totalRamGb = stats.ram.totalGb || 32;
+    const totalRamGb = stats.ram.totalGb || 0;
     const freeRamGb = ((1 - stats.ram.utilization / 100) * totalRamGb).toFixed(1);
     const usedRamGb = ((stats.ram.utilization / 100) * totalRamGb).toFixed(1);
     ramFreeSub.textContent = `${freeRamGb} Go`;
@@ -1234,8 +1233,8 @@ function updateDOM(stats) {
     }
 
     // 5. Update iGPU VRAM Sub-metrics
-    const usedVramGb = (stats.igpu.usedMb / 1024).toFixed(1);
-    const freeVramGb = ((stats.igpu.totalMb - stats.igpu.usedMb) / 1024).toFixed(1);
+    const usedVramGb = NexusTelemetry.valid(stats.igpu.usedMb) ? (stats.igpu.usedMb / 1024).toFixed(1) : '—';
+    const freeVramGb = NexusTelemetry.valid(stats.igpu.usedMb) ? (Math.max(0, stats.igpu.totalMb - stats.igpu.usedMb) / 1024).toFixed(1) : '—';
     const totalVramGb = (stats.igpu.totalMb / 1024).toFixed(0);
     vramUsedSub.textContent = `${usedVramGb} Go`;
     vramFreeSub.textContent = `${freeVramGb} Go`;
@@ -1243,17 +1242,17 @@ function updateDOM(stats) {
         vramTotalSub.textContent = `${totalVramGb} Go`;
     }
     if (igpuDecodeSub) {
-        const decodePct = Math.max(0, Math.min(100, Number(stats.igpu.decodeUtil) || 0));
+        const decodePct = NexusTelemetry.valid(stats.igpu.decodeUtil) ? Math.min(100, stats.igpu.decodeUtil) : '—';
         igpuDecodeSub.textContent = `${decodePct} %`;
     }
     if (igpuVramBar) {
         const igpuVramPct = Math.round((stats.igpu.usedMb / stats.igpu.totalMb) * 100) || 0;
         setWidthIfChanged(igpuVramBar, igpuVramPct);
     }
-    const npuUsedGb = ((Number(npuStats.usedMb) || 0) / 1024).toFixed(1);
+    const npuUsedGb = NexusTelemetry.valid(npuStats.usedMb) ? (npuStats.usedMb / 1024).toFixed(1) : '—';
     const npuTotalMb = Number(npuStats.totalMb) || 0;
     const npuTotalGb = npuTotalMb > 0 ? (npuTotalMb / 1024).toFixed(0) : "0";
-    const npuFreeGb = npuTotalMb > 0 ? ((npuTotalMb - (Number(npuStats.usedMb) || 0)) / 1024).toFixed(1) : "0.0";
+    const npuFreeGb = npuTotalMb > 0 && NexusTelemetry.valid(npuStats.usedMb) ? (Math.max(0, npuTotalMb - npuStats.usedMb) / 1024).toFixed(1) : '—';
     if (npuUsedSub) {
         npuUsedSub.textContent = `${npuUsedGb} Go`;
     }
@@ -1325,7 +1324,7 @@ function updateDOM(stats) {
         telemetryNodes.igpu.value = stats.igpu.utilization;
         telemetryNodes.igpu.subLabel = `${usedVramGb} Go`;
 
-        telemetryNodes.npuAccel.value = npuStats.utilization || 0;
+        telemetryNodes.npuAccel.value = npuStats.utilization;
         telemetryNodes.npuAccel.subLabel = `${npuUsedGb} Go`;
         
         // Rolling minimum baseline for page faults/sec to filter idle background noise on any PC
@@ -1382,136 +1381,11 @@ function updateDOM(stats) {
         telemetryNodes.net.subLabel = speedStr;
     }
 
-    // 9. Update Remote controllers buttons dynamically based on actual Windows power plans
-    if (stats.powerPlans && powerPlansContainer) {
-        powerPlansContainer.dataset.planCount = String(stats.powerPlans.length);
+    updatePowerPlanButtons(stats);
 
-        if (pendingPowerPlanGuid) {
-            const pendingPlan = stats.powerPlans.find(p => p.guid === pendingPowerPlanGuid);
-            if (pendingPlan && pendingPlan.active) {
-                clearPowerPlanPending();
-            }
-        }
+    updateLoadAlerts(stats, performance.now());
+    refreshTelemetryFreshness(true);
 
-        if (isPowerPlanSwitching) {
-            return;
-        }
-
-        const currentGuids = Array.from(powerPlansContainer.children).map(btn => btn.dataset.guid).join(',');
-        const newGuids = stats.powerPlans.map(p => p.guid).join(',');
-        if (currentGuids !== newGuids) {
-            powerPlansContainer.innerHTML = "";
-            stats.powerPlans.forEach(plan => {
-                const button = document.createElement("button");
-                button.className = "remote-btn";
-                button.dataset.guid = plan.guid;
-                button.title = plan.name;
-                button.setAttribute("aria-label", `Mode d'alimentation ${plan.name}`);
-                
-                // Determine icon based on name
-                let iconSvg = "";
-                const lowerName = plan.name.toLowerCase();
-                if (lowerName.includes("gamer") || lowerName.includes("extreme") || lowerName.includes("perform") || lowerName.includes("jeux")) {
-                    iconSvg = `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 2L1 21h22L12 2zm0 4l7.5 13h-15L12 6zm-1 5h2v4h-2v-4zm0-3h2v2h-2V8z"/></svg>`;
-                } else if (lowerName.includes("veille") || lowerName.includes("eco") || lowerName.includes("silent") || lowerName.includes("silencieux") || lowerName.includes("econom")) {
-                    iconSvg = `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M9.5 2c-1.82 0-3.53.5-5 1.35 2.99 1.73 5 4.95 5 8.65s-2.01 6.92-5 8.65c1.47.85 3.18 1.35 5 1.35 5.52 0 10-4.48 10-10S15.02 2 9.5 2z"/></svg>`;
-                } else {
-                    iconSvg = `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>`;
-                }
-                
-                // Use actual Windows plan name directly for premium custom setups
-                let displayName = plan.name;
-                
-                button.innerHTML = `
-                    <div class="icon-wrap">${iconSvg}</div>
-                    <span class="btn-lbl">${displayName.toUpperCase()}</span>
-                `;
-                
-                button.addEventListener("click", () => setPowerPlan(plan.guid));
-                powerPlansContainer.appendChild(button);
-            });
-        }
-        
-        // Update active classes
-        currentPowerPlan = "";
-        Array.from(powerPlansContainer.children).forEach(button => {
-            const guid = button.dataset.guid;
-            const plan = stats.powerPlans.find(p => p.guid === guid);
-            if (plan && plan.active) {
-                currentPowerPlan = guid;
-                button.className = "remote-btn active";
-                button.setAttribute("aria-pressed", "true");
-                const lowerName = plan.name.toLowerCase();
-                if (lowerName.includes("gamer") || lowerName.includes("extreme") || lowerName.includes("perform") || lowerName.includes("jeux")) {
-                    button.id = "btn-extreme";
-                } else if (lowerName.includes("veille") || lowerName.includes("eco") || lowerName.includes("silent") || lowerName.includes("silencieux") || lowerName.includes("econom")) {
-                    button.id = "btn-eco";
-                } else {
-                    button.id = "btn-balanced";
-                }
-            } else {
-                button.className = "remote-btn";
-                button.setAttribute("aria-pressed", "false");
-                button.id = "";
-            }
-        });
-    }
-
-
-
-    // 10. Overload Crisis Easter Egg (>80%) - Triggers map stress vibrations
-    let hasOverload = false;
-
-    if (stats.cpu.utilization > 80) {
-        cpuCard.classList.add("overload");
-        hasOverload = true;
-    } else {
-        cpuCard.classList.remove("overload");
-    }
-
-    if (stats.gpu.utilization > 80) {
-        gpuCard.classList.add("overload");
-        hasOverload = true;
-    } else {
-        gpuCard.classList.remove("overload");
-    }
-
-    if (npuCard && hasNpu) {
-        if (npuStats.utilization > 90) {
-            npuCard.classList.add("overload");
-            hasOverload = true;
-        } else {
-            npuCard.classList.remove("overload");
-        }
-    } else if (npuCard) {
-        npuCard.classList.remove("overload");
-    }
-
-    if (stats.ram.utilization > 80) {
-        ramCard.classList.add("overload");
-        hasOverload = true;
-    } else {
-        ramCard.classList.remove("overload");
-    }
-
-    if (stats.igpu.utilization > 90) { // check iGPU utilization for overload
-        vramCard.classList.add("overload");
-        hasOverload = true;
-    } else {
-        vramCard.classList.remove("overload");
-    }
-
-    const overloadChanged = hasOverload !== systemIsOverloaded;
-
-    // Sync stress mode state variable for the map
-    systemIsOverloaded = hasOverload;
-
-    if (hasOverload) {
-        document.body.classList.add("system-critical");
-    } else {
-        document.body.classList.remove("system-critical");
-    }
-    
     // Spawn data packets per node so every active circle emits fairly.
     const now = performance.now();
     let spawnedPacket = false;
@@ -1549,10 +1423,81 @@ function updateDOM(stats) {
     
     if (spawnedPacket) {
         wakeCanvas();
-    } else if (mapValueChanged || overloadChanged) {
+    } else if (mapValueChanged) {
         wakeCanvas();
     }
     sendRemoteBounds(false);
+}
+
+function updatePowerPlanButtons(stats) {
+    if (!stats.powerPlans || !powerPlansContainer) return;
+    powerPlansContainer.dataset.planCount = String(stats.powerPlans.length);
+
+    if (pendingPowerPlanGuid) {
+        const pendingPlan = stats.powerPlans.find(p => p.guid === pendingPowerPlanGuid);
+        if (pendingPlan && pendingPlan.active) {
+            clearPowerPlanPending();
+        }
+    }
+
+    if (isPowerPlanSwitching) return;
+
+    const currentGuids = Array.from(powerPlansContainer.children).map(btn => btn.dataset.guid).join(',');
+    const newGuids = stats.powerPlans.map(p => p.guid).join(',');
+    if (currentGuids !== newGuids) {
+        powerPlansContainer.innerHTML = "";
+        stats.powerPlans.forEach(plan => {
+            const button = document.createElement("button");
+            button.className = "remote-btn";
+            button.dataset.guid = plan.guid;
+            button.title = plan.name;
+            button.setAttribute("aria-label", `Mode d'alimentation ${plan.name}`);
+
+            // Determine icon based on name
+            let iconSvg = "";
+            const lowerName = plan.name.toLowerCase();
+            if (lowerName.includes("gamer") || lowerName.includes("extreme") || lowerName.includes("perform") || lowerName.includes("jeux")) {
+                iconSvg = `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 2L1 21h22L12 2zm0 4l7.5 13h-15L12 6zm-1 5h2v4h-2v-4zm0-3h2v2h-2V8z"/></svg>`;
+            } else if (lowerName.includes("veille") || lowerName.includes("eco") || lowerName.includes("silent") || lowerName.includes("silencieux") || lowerName.includes("econom")) {
+                iconSvg = `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M9.5 2c-1.82 0-3.53.5-5 1.35 2.99 1.73 5 4.95 5 8.65s-2.01 6.92-5 8.65c1.47.85 3.18 1.35 5 1.35 5.52 0 10-4.48 10-10S15.02 2 9.5 2z"/></svg>`;
+            } else {
+                iconSvg = `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>`;
+            }
+
+            // Use actual Windows plan name directly for premium custom setups
+            let displayName = plan.name;
+
+            button.innerHTML = `<div class="icon-wrap">${iconSvg}</div><span class="btn-lbl"></span>`;
+            button.querySelector('.btn-lbl').textContent = displayName.toUpperCase();
+
+            button.addEventListener("click", () => setPowerPlan(plan.guid));
+            powerPlansContainer.appendChild(button);
+        });
+    }
+
+    // Update active classes
+    currentPowerPlan = "";
+    Array.from(powerPlansContainer.children).forEach(button => {
+        const guid = button.dataset.guid;
+        const plan = stats.powerPlans.find(p => p.guid === guid);
+        if (plan && plan.active) {
+            currentPowerPlan = guid;
+            button.className = "remote-btn active";
+            button.setAttribute("aria-pressed", "true");
+            const lowerName = plan.name.toLowerCase();
+            if (lowerName.includes("gamer") || lowerName.includes("extreme") || lowerName.includes("perform") || lowerName.includes("jeux")) {
+                button.id = "btn-extreme";
+            } else if (lowerName.includes("veille") || lowerName.includes("eco") || lowerName.includes("silent") || lowerName.includes("silencieux") || lowerName.includes("econom")) {
+                button.id = "btn-eco";
+            } else {
+                button.id = "btn-balanced";
+            }
+        } else {
+            button.className = "remote-btn";
+            button.setAttribute("aria-pressed", "false");
+            button.id = "";
+        }
+    });
 }
 
 function setPowerPlan(guid) {
@@ -1608,15 +1553,70 @@ function clearPowerPlanPending() {
     }
 }
 
+function setSensorMetric(element, label, value, unit, stats, source) {
+    const state = NexusTelemetry.sensorState(stats, source);
+    const usable = state === 'fresh' && NexusTelemetry.valid(value);
+    setSubMetric(element, label, usable ? `${value} ${unit}` : '—');
+    element.classList.toggle('sensor-unavailable', !usable);
+    element.title = usable ? (unit === 'W' ? 'Puissance de la carte entière, pas celle de NexusWpp.' : '')
+        : state === 'stale' ? 'Dernière lecture périmée : mesure ignorée.' : 'Ce capteur ne fournit pas de mesure.';
+}
+
+function updateLoadAlerts(stats, now) {
+    for (const [card, section] of [[cpuCard, 'cpu'], [vramCard, 'igpu'], [npuCard, 'npu'], [gpuCard, 'gpu'], [ramCard, 'ram']]) {
+        if (!card) continue;
+        if (!loadAlerts.has(section)) loadAlerts.set(section, new NexusTelemetry.SustainedLoad());
+        const metric = stats[section];
+        const high = loadAlerts.get(section).update(metric && metric.detected !== false ? metric.utilization : null, now);
+        card.classList.toggle('high-load', high);
+        const badge = card.querySelector('.critical-alert');
+        badge.textContent = high ? (section === 'ram' ? 'Mémoire très utilisée' : 'Charge élevée') : '';
+        badge.title = high ? 'Au moins 90 % pendant 5 s. Retour à la normale sous 80 % pendant 5 s. Ce n’est pas un diagnostic de panne.' : '';
+    }
+}
+
+function refreshTelemetryFreshness(force = false) {
+    if (!lastTelemetry || (runtimeSuspended && !force)) return;
+    const expired = performance.now() - lastTelemetryReceived > 6000;
+    for (const card of document.querySelectorAll('.gauge-card')) {
+        const isGpu = card === gpuCard;
+        const status = isGpu ? NexusTelemetry.sensorState(lastTelemetry, 'nvidia')
+            : card === vramCard || card === npuCard ? NexusTelemetry.sensorState(lastTelemetry, 'windowsGpu')
+            : card === cpuCard ? NexusTelemetry.sensorState(lastTelemetry, 'cpuTemperature') : 'fresh';
+        const stale = expired || status === 'stale';
+        card.classList.toggle('sensor-stale', stale);
+        if (stale) {
+            card.querySelector('.critical-alert').textContent = expired ? 'Données périmées' : 'Capteurs périmés';
+            card.classList.remove('high-load');
+        } else if (!card.classList.contains('high-load')) {
+            card.querySelector('.critical-alert').textContent = '';
+            card.querySelector('.critical-alert').title = '';
+        }
+    }
+    if (expired && !telemetryExpired) {
+        telemetryExpired = true;
+        loadAlerts.forEach(alert => alert.reset());
+        for (const value of document.querySelectorAll('.gauge-value, .sub-metric .val')) value.textContent = '—';
+        for (const ring of document.querySelectorAll('.ring-fill')) setCircularProgress(ring, 0);
+        for (const gauge of document.querySelectorAll('[role="progressbar"]')) gauge.removeAttribute('aria-valuenow');
+        for (const node of telemetryNodeList) { node.value = null; node.subLabel = 'DONNÉE PÉRIMÉE'; }
+        redrawCanvas();
+    }
+}
+
 // Direct DOM update instead of requestAnimationFrame loop to save CPU and iGPU cycles
 function animateTextValue(element, targetValue, suffix = "") {
+    if (!NexusTelemetry.valid(targetValue)) {
+        element.textContent = "—";
+        return;
+    }
     const currentText = element.textContent || "";
     if (currentText.includes(suffix)) {
         const parsed = parseInt(currentText, 10);
         if (parsed === targetValue) return;
     }
 
-    if (element.firstChild && element.firstChild.nodeType === 3) {
+    if (element.firstChild && element.firstChild.nodeType === 3 && element.querySelector('span')) {
         element.firstChild.nodeValue = targetValue;
     } else {
         element.innerHTML = `${targetValue}<span>${suffix}</span>`;
@@ -1682,7 +1682,7 @@ function dimGauges() {
     ssdVal.innerHTML = `0<span>%</span>`;
     netVal.innerHTML = `0<span>Ko/s</span>`;
     
-    systemIsOverloaded = false;
+
     
     cpuTempSub.textContent = `-- °C`;
     if (cpuFreqSub) cpuFreqSub.textContent = `0.00 GHz`;
@@ -1733,8 +1733,15 @@ function dimGauges() {
         clockBattery.style.display = "none";
     }
 
-    if (vramCard) vramCard.classList.remove("overload");
-    document.body.classList.remove("system-critical");
+    // Await real readings; a missing measurement is not an idle component.
+    for (const node of telemetryNodeList) node.value = null;
+    for (const value of document.querySelectorAll('.gauge-value, .sub-metric .val')) value.textContent = '—';
+    for (const gauge of document.querySelectorAll('[role="progressbar"]')) {
+        gauge.removeAttribute('aria-valuenow');
+        gauge.setAttribute('aria-valuetext', 'En attente d’une mesure');
+    }
+
+
 }
 
 window.addEventListener("DOMContentLoaded", () => {

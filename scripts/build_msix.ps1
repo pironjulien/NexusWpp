@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$SkipSigning
 )
 
@@ -64,19 +64,13 @@ if (!(Test-Path -LiteralPath $signTool)) {
 
 & (Join-Path $projectRoot "compile.ps1")
 
-if (Test-Path -LiteralPath $distDir) {
-    Remove-Item -LiteralPath $distDir -Recurse -Force
+if (-not [IO.Path]::GetFullPath($packageDir).StartsWith([IO.Path]::GetFullPath((Join-Path $projectRoot 'dist')) + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid package directory.' }
+if (Test-Path -LiteralPath $packageDir) {
+    Remove-Item -LiteralPath $packageDir -Recurse -Force
 }
 New-Item -ItemType Directory -Path $assetsDir -Force | Out-Null
 
-$payloadFiles = @(
-    "app.js",
-    "style.css",
-    "index.html",
-    "julienpiron.png",
-    "splash.jpg",
-    "icon.ico"
-)
+$payloadFiles = & (Join-Path $PSScriptRoot 'application_files.ps1')
 
 foreach ($file in $payloadFiles) {
     Copy-Item -LiteralPath (Join-Path $projectRoot $file) -Destination (Join-Path $packageDir $file) -Force

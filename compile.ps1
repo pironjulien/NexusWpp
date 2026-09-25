@@ -1,7 +1,8 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 $binDir = Join-Path $PSScriptRoot "bin"
 $buildTempDir = Join-Path $PSScriptRoot "work\webview2-build"
+if (-not [IO.Path]::GetFullPath($buildTempDir).StartsWith([IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'work')) + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid build directory.' }
 $nugetUrl = "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/1.0.2592.51/microsoft.web.webview2.1.0.2592.51.nupkg"
 $zipPath = Join-Path $buildTempDir "webview2.zip"
 $extractPath = Join-Path $buildTempDir "webview2_package"
@@ -71,6 +72,9 @@ $compilerArgs = @(
     "/reference:$(Join-Path $binDir Microsoft.Web.WebView2.Core.dll)",
     "/reference:$(Join-Path $binDir Microsoft.Web.WebView2.WinForms.dll)",
     "/reference:System.Management.dll",
+    (Join-Path $PSScriptRoot "NvidiaTelemetry.cs"),
+    (Join-Path $PSScriptRoot "TelemetryCollector.cs"),
+    (Join-Path $PSScriptRoot "WindowsGpuTelemetry.cs"),
     $sourceFile,
     $versionSource,
     (Join-Path $PSScriptRoot "DesktopVisibility.cs")

@@ -11,7 +11,9 @@ NexusWpp affiche un cockpit matériel dynamique directement dans le bureau Windo
 
 ## Architecture Actuelle
 
-- `DesktopHtmlHost.cs` : hôte WinForms/WebView2, injection desktop, hook souris, collecte télémétrie native.
+- `DesktopHtmlHost.cs` : hôte WinForms/WebView2, injection desktop, hook souris et cycle de vie.
+- `TelemetryCollector.cs`, `NvidiaTelemetry.cs`, `WindowsGpuTelemetry.cs` : collecte native et validité des capteurs.
+- `telemetry-state.js` : règles de validité des mesures et confirmation des charges élevées.
 - `DesktopVisibility.cs` : détection du bureau couvert, du plein écran et calcul de couverture multi-écrans.
 - `index.html`, `app.js`, `style.css` : interface du cockpit et moteur Canvas.
 - `compile.ps1` : compile l'hôte et la détection de visibilité en `bin\nexuswpp.exe`.
@@ -76,6 +78,12 @@ L'application contient un verrou single-instance, donc relancer `NexusWpp` depui
 Une installation Store/MSIX se met à jour avec le package de même identité et un numéro de version supérieur. Ne pas lui ajouter le déploiement EXE, qui utilise un autre emplacement et un autre mécanisme de démarrage.
 
 ## Pause et retour au bureau
+
+Depuis la version `1.0.24.0`, les badges « Charge élevée » et « Mémoire très utilisée » s’affichent après au moins 90 % pendant cinq secondes, puis disparaissent à 80 % ou moins pendant cinq secondes. Ils partagent une ligne avec le titre, sans clignotement ni tremblement. Une interruption des lectures réinitialise la confirmation.
+
+Une lecture NVIDIA échouée invalide immédiatement les anciennes valeurs. Les capteurs absents affichent « — » et les données périmées sont signalées. Les watts représentent la carte GPU entière, pas la consommation de NexusWpp ; la zone thermique Windows n’est pas une mesure du cœur CPU.
+
+La transition des jauges passe de 0,55 à 0,18 seconde après profilage A/B dans WebView2. Halos et radar à 12 images/s sont conservés. Le benchmark `scripts/profile_graphics.ps1` mesure l’occupation des moteurs GPU du groupe de processus, sans attribution de watts ni du coût du compositeur Windows. Les règles des capteurs et alertes se vérifient avec `scripts/test_features.ps1`.
 
 La version `1.0.16.0` fige les animations Canvas/CSS, les transitions en cours et l'horloge quand toutes les zones utiles des écrans sont recouvertes par des fenêtres opaques. La télémétrie cesse ses nouvelles collectes. Le DOM, les particules, les valeurs et la surface WebView2 restent en place : aucune dissimulation du contrôle, suspension Chromium, navigation ni reconstruction n'est nécessaire pour revoir le bureau.
 
