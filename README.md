@@ -94,6 +94,20 @@ Le premier test exécute la page réelle dans WebView2 et vérifie notamment les
 
 ## Portabilité
 
+### Résolutions et mise à l'échelle
+
+À partir de la version `1.0.18.0`, la grille respecte les deux dimensions du viewport WebView2 et préserve les marges pour une rangée d'icônes en haut et un espace au-dessus de la barre des tâches. Les cartes adaptent la place de leurs jauges et de leurs mesures à leur taille réelle ; les écrans portrait utilisent deux colonnes sous l'horloge et les commandes. Le radar ajuste uniformément son dessin et ses coordonnées de souris. Les mesures et les boutons restent présents, sans défilement des cartes du bureau.
+
+```powershell
+.\scripts\test_responsive_layout.ps1 -Label current
+```
+
+Le harnais charge les fichiers livrés dans le véritable Runtime WebView2 Evergreen, avec émulation Chromium du viewport et du ratio de pixels. Il couvre 29 résolutions physiques de 1280×720 à 7680×4320, les échelles 100, 125, 150, 175, 200, 225, 250, 300, 350 et 400 % lorsque la surface logique reste au moins 800×450 en paysage ou 432×768 en portrait. Il inclut les anciens seuils CSS, des variantes sans iGPU/NPU/GPU dédié et un à quatre profils d'alimentation.
+
+Les contrôles portent sur les cartes hors écran, les textes et commandes coupés, les chevauchements, la taille et la circularité des jauges, les nœuds du radar, les coordonnées de souris et le maintien de la pause pendant les redimensionnements. Les données de test restent dans le harnais et ne sont jamais embarquées dans le produit. Les JSON et captures PNG se trouvent dans `work\responsive\<Label>` ; ce test d'émulation ne valide ni l'overscan d'un téléviseur physique ni une topologie de plusieurs moniteurs aux DPI différents.
+
+### Installation et matériel
+
 - Le matériel est détecté automatiquement via WMI, Win32, interfaces réseau Windows et `nvidia-smi` quand disponible.
 - Le MSIX est installé par Windows dans `WindowsApps`; seul le mode EXE autonome utilise `C:\nexuswpp`. Les données et le profil WebView2 restent dans le dossier utilisateur local.
 - Le raccourci du menu Démarrer est créé dans le dossier commun Windows, pas dans un chemin utilisateur codé en dur.

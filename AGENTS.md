@@ -20,7 +20,8 @@
 - Verifier que `.\compile.ps1` compile `bin\nexuswpp.exe`.
 - Verifier le transfert des clics et le cycle de vie du hook avec `.\scripts\test_mouse_hook.ps1` apres une modification de la gestion souris.
 - Verifier que `.\scripts\build_installer.ps1` cree `dist\NexusWppSetup.exe`.
-- Verifier que `.\scripts\build_msix.ps1` cree le package Store `dist\msix\julienpiron.fr.NexusWpp_<VERSION>_x64.msix`, avec le numero du fichier `VERSION` (actuellement `1.0.16.0`).
+- Verifier que `.\scripts\build_msix.ps1` cree le package Store `dist\msix\julienpiron.fr.NexusWpp_<VERSION>_x64.msix`, avec le numero du fichier `VERSION`.
+- Verifier les changements de disposition avec `.\scripts\test_responsive_layout.ps1` (WebView2, resolutions, DPI, portrait et variantes materielles).
 - Verifier la pause et la conservation de scene avec `.\scripts\test_runtime_pause.ps1`, puis mesurer le retour physique avec `.\scripts\test_desktop_visual_resume.ps1`.
 - Ne pas versionner `bin/`, `dist/`, les logs, les fichiers temporaires ou les resultats de benchmark.
 

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JULIENPIRON.FR - Control Cockpit</title>
-    <link rel="stylesheet" href="style.css?v=19">
+    <link rel="stylesheet" href="style.css?v=21">
 </head>
 <body>
     <!-- Vibrant Saturated Cosmic Background (Booster for Apple Glass) -->
@@ -27,18 +27,20 @@
                 <div class="gauge-card glass-panel" id="cpu-card">
                     <h2 class="gauge-label" id="spec-cpu-name">CPU</h2>
                     <div class="critical-alert">ALERT: CPU OVERLOAD</div>
-                    <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-cpu-name" id="cpu-gauge-container">
-                        <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
-                            <defs>
-                                <linearGradient id="cpu-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" stop-color="#bf5aff" />
-                                    <stop offset="100%" stop-color="#8a2be2" />
-                                </linearGradient>
-                            </defs>
-                            <circle class="ring-bg" cx="90" cy="90" r="76" />
-                            <circle class="ring-fill" id="cpu-ring" cx="90" cy="90" r="76" stroke="url(#cpu-grad)" />
-                        </svg>
-                        <div class="gauge-value" id="cpu-val">0<span>%</span></div>
+                    <div class="gauge-slot">
+                        <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-cpu-name" id="cpu-gauge-container">
+                            <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
+                                <defs>
+                                    <linearGradient id="cpu-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#bf5aff" />
+                                        <stop offset="100%" stop-color="#8a2be2" />
+                                    </linearGradient>
+                                </defs>
+                                <circle class="ring-bg" cx="90" cy="90" r="76" />
+                                <circle class="ring-fill" id="cpu-ring" cx="90" cy="90" r="76" stroke="url(#cpu-grad)" />
+                            </svg>
+                            <div class="gauge-value" id="cpu-val">0<span>%</span></div>
+                        </div>
                     </div>
                     <!-- Sub-metrics Grid for CPU -->
                     <div class="card-sub-metrics">
@@ -67,19 +69,21 @@
                     <div class="gauge-card glass-panel accelerator-card" id="vram-card">
                         <h2 class="gauge-label" id="spec-vram-name">iGPU</h2>
                         <div class="critical-alert">ALERT: iGPU OVERLOAD</div>
-                        <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-vram-name" id="vram-gauge-container">
-                            <div class="vram-scanner-eye"></div>
-                            <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
-                                <defs>
-                                    <linearGradient id="vram-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                                        <stop offset="0%" stop-color="#30d158" />
-                                        <stop offset="100%" stop-color="#1db954" />
-                                    </linearGradient>
-                                </defs>
-                                <circle class="ring-bg" cx="90" cy="90" r="76" />
-                                <circle class="ring-fill" id="vram-ring" cx="90" cy="90" r="76" stroke="url(#vram-grad)" />
-                            </svg>
-                            <div class="gauge-value" id="vram-val">0<span>%</span></div>
+                        <div class="gauge-slot">
+                            <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-vram-name" id="vram-gauge-container">
+                                <div class="vram-scanner-eye"></div>
+                                <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
+                                    <defs>
+                                        <linearGradient id="vram-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" stop-color="#30d158" />
+                                            <stop offset="100%" stop-color="#1db954" />
+                                        </linearGradient>
+                                    </defs>
+                                    <circle class="ring-bg" cx="90" cy="90" r="76" />
+                                    <circle class="ring-fill" id="vram-ring" cx="90" cy="90" r="76" stroke="url(#vram-grad)" />
+                                </svg>
+                                <div class="gauge-value" id="vram-val">0<span>%</span></div>
+                            </div>
                         </div>
                         <div class="card-sub-metrics">
                             <div class="sub-metric">
@@ -108,19 +112,21 @@
                     <div class="gauge-card glass-panel accelerator-card npu-card" id="npu-card">
                         <h2 class="gauge-label" id="spec-npu-name">NPU</h2>
                         <div class="critical-alert">ALERT: NPU OVERLOAD</div>
-                        <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-npu-name" id="npu-gauge-container">
-                            <div class="npu-scanner-eye"></div>
-                            <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
-                                <defs>
-                                    <linearGradient id="npu-card-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                                        <stop offset="0%" stop-color="#00c7be" />
-                                        <stop offset="100%" stop-color="#64d2ff" />
-                                    </linearGradient>
-                                </defs>
-                                <circle class="ring-bg" cx="90" cy="90" r="76" />
-                                <circle class="ring-fill" id="npu-ring" cx="90" cy="90" r="76" stroke="url(#npu-card-grad)" />
-                            </svg>
-                            <div class="gauge-value" id="npu-val">0<span>%</span></div>
+                        <div class="gauge-slot">
+                            <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-npu-name" id="npu-gauge-container">
+                                <div class="npu-scanner-eye"></div>
+                                <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
+                                    <defs>
+                                        <linearGradient id="npu-card-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" stop-color="#00c7be" />
+                                            <stop offset="100%" stop-color="#64d2ff" />
+                                        </linearGradient>
+                                    </defs>
+                                    <circle class="ring-bg" cx="90" cy="90" r="76" />
+                                    <circle class="ring-fill" id="npu-ring" cx="90" cy="90" r="76" stroke="url(#npu-card-grad)" />
+                                </svg>
+                                <div class="gauge-value" id="npu-val">0<span>%</span></div>
+                            </div>
                         </div>
                         <div class="card-sub-metrics">
                             <div class="sub-metric">
@@ -150,18 +156,20 @@
                 <div class="gauge-card glass-panel" id="gpu-card">
                     <h2 class="gauge-label" id="spec-gpu-name">GPU</h2>
                     <div class="critical-alert">ALERT: GPU OVERLOAD</div>
-                    <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-gpu-name" id="gpu-gauge-container">
-                        <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
-                            <defs>
-                                <linearGradient id="gpu-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" stop-color="#ff375f" />
-                                    <stop offset="100%" stop-color="#ff2d55" />
-                                </linearGradient>
-                            </defs>
-                            <circle class="ring-bg" cx="90" cy="90" r="76" />
-                            <circle class="ring-fill" id="gpu-ring" cx="90" cy="90" r="76" stroke="url(#gpu-grad)" />
-                        </svg>
-                        <div class="gauge-value" id="gpu-val">0<span>%</span></div>
+                    <div class="gauge-slot">
+                        <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-gpu-name" id="gpu-gauge-container">
+                            <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
+                                <defs>
+                                    <linearGradient id="gpu-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#ff375f" />
+                                        <stop offset="100%" stop-color="#ff2d55" />
+                                    </linearGradient>
+                                </defs>
+                                <circle class="ring-bg" cx="90" cy="90" r="76" />
+                                <circle class="ring-fill" id="gpu-ring" cx="90" cy="90" r="76" stroke="url(#gpu-grad)" />
+                            </svg>
+                            <div class="gauge-value" id="gpu-val">0<span>%</span></div>
+                        </div>
                     </div>
                     <!-- Sub-metrics Grid for GPU -->
                     <div class="card-sub-metrics">
@@ -221,18 +229,20 @@
                 <div class="gauge-card glass-panel" id="ram-card">
                     <h2 class="gauge-label" id="spec-ram-name">RAM</h2>
                     <div class="critical-alert">ALERT: RAM OVERLOAD</div>
-                    <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-ram-name" id="ram-gauge-container">
-                        <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
-                            <defs>
-                                <linearGradient id="ram-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" stop-color="#0a84ff" />
-                                    <stop offset="100%" stop-color="#00c7be" />
-                                </linearGradient>
-                            </defs>
-                            <circle class="ring-bg" cx="90" cy="90" r="76" />
-                            <circle class="ring-fill" id="ram-ring" cx="90" cy="90" r="76" stroke="url(#ram-grad)" />
-                        </svg>
-                        <div class="gauge-value" id="ram-val">0<span>%</span></div>
+                    <div class="gauge-slot">
+                        <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-ram-name" id="ram-gauge-container">
+                            <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
+                                <defs>
+                                    <linearGradient id="ram-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#0a84ff" />
+                                        <stop offset="100%" stop-color="#00c7be" />
+                                    </linearGradient>
+                                </defs>
+                                <circle class="ring-bg" cx="90" cy="90" r="76" />
+                                <circle class="ring-fill" id="ram-ring" cx="90" cy="90" r="76" stroke="url(#ram-grad)" />
+                            </svg>
+                            <div class="gauge-value" id="ram-val">0<span>%</span></div>
+                        </div>
                     </div>
                     <!-- Sub-metrics Grid for RAM -->
                     <div class="card-sub-metrics">
@@ -259,18 +269,20 @@
                 <!-- SSD Card -->
                 <div class="gauge-card glass-panel" id="ssd-card">
                     <h2 class="gauge-label" id="spec-ssd-name">SSD</h2>
-                    <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-ssd-name" id="ssd-gauge-container">
-                        <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
-                            <defs>
-                                <linearGradient id="ssd-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" stop-color="#00c7be" />
-                                    <stop offset="100%" stop-color="#64d2ff" />
-                                </linearGradient>
-                            </defs>
-                            <circle class="ring-bg" cx="90" cy="90" r="76" />
-                            <circle class="ring-fill" id="ssd-ring" cx="90" cy="90" r="76" stroke="url(#ssd-grad)" />
-                        </svg>
-                        <div class="gauge-value" id="ssd-val">0<span>%</span></div>
+                    <div class="gauge-slot">
+                        <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-ssd-name" id="ssd-gauge-container">
+                            <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
+                                <defs>
+                                    <linearGradient id="ssd-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#00c7be" />
+                                        <stop offset="100%" stop-color="#64d2ff" />
+                                    </linearGradient>
+                                </defs>
+                                <circle class="ring-bg" cx="90" cy="90" r="76" />
+                                <circle class="ring-fill" id="ssd-ring" cx="90" cy="90" r="76" stroke="url(#ssd-grad)" />
+                            </svg>
+                            <div class="gauge-value" id="ssd-val">0<span>%</span></div>
+                        </div>
                     </div>
                     <!-- Sub-metrics Grid for SSD -->
                     <div class="card-sub-metrics">
@@ -297,18 +309,20 @@
                 <!-- Network Card -->
                 <div class="gauge-card glass-panel" id="net-card">
                     <h2 class="gauge-label" id="spec-net-mode">RÉSEAU</h2>
-                    <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-net-mode" id="net-gauge-container">
-                        <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
-                            <defs>
-                                <linearGradient id="net-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" stop-color="#ff9f0a" />
-                                    <stop offset="100%" stop-color="#ffd60a" />
-                                </linearGradient>
-                            </defs>
-                            <circle class="ring-bg" cx="90" cy="90" r="76" />
-                            <circle class="ring-fill" id="net-ring" cx="90" cy="90" r="76" stroke="url(#net-grad)" />
-                        </svg>
-                        <div class="gauge-value" id="net-val">0<span>%</span></div>
+                    <div class="gauge-slot">
+                        <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-net-mode" id="net-gauge-container">
+                            <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
+                                <defs>
+                                    <linearGradient id="net-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#ff9f0a" />
+                                        <stop offset="100%" stop-color="#ffd60a" />
+                                    </linearGradient>
+                                </defs>
+                                <circle class="ring-bg" cx="90" cy="90" r="76" />
+                                <circle class="ring-fill" id="net-ring" cx="90" cy="90" r="76" stroke="url(#net-grad)" />
+                            </svg>
+                            <div class="gauge-value" id="net-val">0<span>%</span></div>
+                        </div>
                     </div>
                     <!-- Sub-metrics Grid for Network -->
                     <div class="card-sub-metrics">
@@ -337,6 +351,6 @@
         </section>
     </main>
 
-    <script src="app.js?v=21" charset="UTF-8"></script>
+    <script src="app.js?v=22" charset="UTF-8"></script>
 </body>
 </html>
