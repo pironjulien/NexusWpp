@@ -68,7 +68,12 @@ body {
     overflow: hidden;
     display: flex;
     justify-content: center;
-    align-items: flex-end;
+    align-items: center;
+    /* Keep a complete desktop icon row above the cockpit, and breathing room
+       above the taskbar. Cards must fit the remaining area, not consume it. */
+    --desktop-safe-top: clamp(80px, 7.9vh, 144px);
+    --desktop-safe-bottom: clamp(80px, 7.9vh, 144px);
+    padding: var(--desktop-safe-top) clamp(12px, 2.5vw, 96px) var(--desktop-safe-bottom);
 }
 
 /* --- COSMIC BACKGROUND (SATURATED BOOSTER FOR APPLE GLASS) --- */
@@ -247,13 +252,10 @@ body {
 
 
 .dashboard {
-    width: 92vw;
-    max-width: 2700px;
-    /* Preserve the same optical safe area at every DPI. On a 4K TV Windows can
-       expose a short CSS viewport, so fixed 180/85 px offsets used to crop cards. */
-    height: calc(100vh - clamp(112px, 16.6vh, 180px)) !important;
-    margin-bottom: clamp(56px, 7.9vh, 96px) !important;
-    padding: 0 !important;
+    width: 100%;
+    max-width: 3600px;
+    height: 100%;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -265,8 +267,9 @@ body {
 .workspace {
     flex: 1;
     display: grid;
-    grid-template-columns: 1fr 1.22fr 1.12fr; /* Grille ultra-premium, resserrée et équilibrée */
-    gap: 32px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.22fr) minmax(0, 1.12fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: clamp(8px, 1.2vw, 32px);
     min-height: 0; /* Flexbox containment to prevent overflowing parent padding */
     align-items: stretch;
     position: relative;
@@ -278,13 +281,15 @@ body {
 .column-right {
     position: relative;
     z-index: 1;
+    min-width: 0;
+    min-height: 0;
 }
 
 /* --- COLUMN LEFT: Telemetry Gauges (CPU, NPU, GPU Vertically Stacked) --- */
 .column-left {
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: clamp(6px, 1.2vh, 24px);
     height: 100%;
     justify-content: space-between;
 }
@@ -293,7 +298,7 @@ body {
     flex: 1;
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 16px;
+    gap: clamp(6px, 0.8vw, 16px);
     min-height: 0;
 }
 
@@ -318,84 +323,95 @@ body {
 }
 
 .gauge-card {
-    flex: 1;
-    padding: 20px 24px;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start; /* Title stays at the top of the card, preventing vertical clipping */
-    align-items: center;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+    padding: clamp(5px, 0.8vh, 20px) clamp(6px, 0.8vw, 24px);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
     position: relative;
     overflow: hidden;
 
-    /* SOTA Layout Containment & Paint Optimization (Corrected to 'content' for flexible flex items) */
-    contain: content;
-    content-visibility: auto;
-    contain-intrinsic-size: auto 300px;
+    /* Children adapt to the space actually allocated to this card. */
+    container-type: size;
+    container-name: gauge;
 }
 
 .accelerator-card {
     min-width: 0;
     height: 100%;
-    padding: 16px 18px;
+    padding: clamp(5px, 0.8vh, 16px) clamp(6px, 0.6vw, 18px);
 }
 
 .accelerator-card .gauge-label {
     font-size: 13px;
     letter-spacing: 1.2px;
-    margin-bottom: 8px;
+    margin-bottom: 0;
 }
 
 .accelerator-card .gauge-container {
-    width: 136px;
-    height: 136px;
+    --gauge-limit: 136px;
 }
 
 .accelerator-card .gauge-value {
-    font-size: 42px;
+    font-size: 30cqw;
 }
 
 .accelerator-card .gauge-value span {
-    font-size: 17px;
+    font-size: 12cqw;
 }
 
 .accelerator-card .card-sub-metrics {
-    gap: 7px;
-    margin-top: 9px;
-    padding-top: 9px;
+    gap: clamp(2px, 0.5vh, 7px);
+    margin-top: 0;
+    padding-top: clamp(2px, 0.5vh, 9px);
 }
 
 .accelerator-card .sub-metric .lbl {
-    font-size: 10px;
-    letter-spacing: 0.6px;
+    font-size: clamp(9px, 0.7vw, 10px);
+    letter-spacing: 0.2px;
 }
 
 .accelerator-card .sub-metric .val {
-    font-size: 15px;
+    font-size: clamp(11px, 1vw, 15px);
 }
 
 .gauge-label {
     font-family: var(--font-heading);
-    font-size: 15px; /* SOTA adjusted for full hardware names at the top */
+    font-size: clamp(11px, 1vw, 18px);
     font-weight: 800;
     letter-spacing: 1.5px;
     color: var(--text-secondary);
     text-transform: uppercase;
-    margin-bottom: 12px;
+    margin-bottom: 0;
     text-shadow: 0 0 10px rgba(255, 255, 255, 0.05);
     text-align: center;
     width: 100%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    line-height: 1.6; /* Prevents compact heading font clipping on Windows */
-    padding-top: 6px; /* Extra breathing space to ensure no top clipping */
-    padding-bottom: 4px;
+    line-height: 1.4;
+    padding: 0;
+}
+
+.gauge-slot {
+    min-width: 0;
+    min-height: 0;
+    width: 100%;
+    height: 100%;
+    container-type: size;
+    display: grid;
+    place-items: center;
 }
 
 .gauge-container {
     position: relative;
-    width: 180px;
-    height: 180px;
+    --gauge-limit: 180px;
+    width: min(100cqw, 100cqh, var(--gauge-limit));
+    height: min(100cqw, 100cqh, var(--gauge-limit));
+    container-type: size;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -435,7 +451,7 @@ body {
 .gauge-value {
     position: absolute;
     font-family: var(--font-heading);
-    font-size: 54px; /* Grandeur cockpit imposante */
+    font-size: 30cqw;
     font-weight: 900;
     color: var(--text-primary);
     display: flex;
@@ -444,16 +460,20 @@ body {
 }
 
 .gauge-value span {
-    font-size: 22px;
+    font-size: 12cqw;
     font-weight: 600;
     color: var(--text-secondary);
     margin-left: 2px;
 }
 
+/* Network throughput also includes a decimal and a longer unit. */
+#net-val { font-size: 24cqw; }
+#net-val span { font-size: 8cqw; }
+
 .vram-scanner-eye {
     position: absolute;
-    width: 64px;
-    height: 64px;
+    width: 36cqw;
+    height: 36cqw;
     border-radius: 50%;
     border: 1px solid transparent;
     border-top: 1px solid rgba(48, 209, 88, 0.45);
@@ -466,8 +486,8 @@ body {
 
 .npu-scanner-eye {
     position: absolute;
-    width: 58px;
-    height: 58px;
+    width: 36cqw;
+    height: 36cqw;
     border-radius: 50%;
     border: 1px solid transparent;
     border-left: 1px solid rgba(0, 199, 190, 0.48);
@@ -487,8 +507,8 @@ body {
 .column-center {
     display: flex;
     flex-direction: column;
-    gap: 28px;
-    padding: 24px 28px;
+    gap: clamp(6px, 1.4vh, 28px);
+    padding: clamp(8px, 1.4vh, 24px) clamp(8px, 1vw, 28px);
     justify-content: space-between;
     height: 100%;
     position: relative;
@@ -512,7 +532,7 @@ body {
     align-items: center;
     position: relative;
     width: 100%;
-    min-height: 280px;
+    min-height: 0;
     background: radial-gradient(circle, rgba(255, 255, 255, 0.02) 0%, rgba(0, 0, 0, 0) 70%);
 }
 
@@ -548,8 +568,8 @@ body {
 
 .remote-grid.horizontal {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+    gap: clamp(4px, 0.7vw, 12px);
     align-items: stretch;
 }
 
@@ -579,9 +599,9 @@ body {
 .remote-grid.horizontal .remote-btn {
     justify-content: center;
     min-width: 0;
-    min-height: 64px;
-    padding: 10px 12px;
-    gap: 8px;
+    min-height: 36px;
+    padding: clamp(4px, 0.7vh, 10px) clamp(4px, 0.5vw, 12px);
+    gap: 5px;
     border-radius: 12px;
 }
 
@@ -591,11 +611,8 @@ body {
 
 .remote-grid.horizontal .remote-btn .btn-lbl {
     min-width: 0;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
-    font-size: clamp(11px, 0.72vw, 14px);
+    display: block;
+    font-size: clamp(9px, 0.72vw, 14px);
     line-height: 1.15;
     letter-spacing: 0.3px;
     white-space: normal;
@@ -666,14 +683,18 @@ body {
 .column-right {
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: clamp(6px, 1.2vh, 24px);
     height: 100%;
     justify-content: space-between;
 }
 
 /* Cyber-Clock Widget */
 .cyber-clock-card {
-    padding: 20px 24px;
+    padding: clamp(2px, 0.8vh, 20px) 0;
+    flex: 0 0 auto;
+    min-width: 0;
+    text-align: center;
+    overflow-wrap: anywhere;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -683,7 +704,7 @@ body {
 
 .clock-time {
     font-family: var(--font-heading);
-    font-size: 40px;
+    font-size: clamp(22px, 2.8vw, 48px);
     font-weight: 900;
     color: var(--text-primary);
     letter-spacing: 2px;
@@ -702,9 +723,9 @@ body {
 
 .clock-date {
     font-family: var(--font-body);
-    font-size: 15px;
+    font-size: clamp(10px, 0.9vw, 15px);
     font-weight: 700;
-    letter-spacing: 3px;
+    letter-spacing: 1px;
     color: var(--text-secondary);
     text-transform: uppercase;
     margin-top: 6px;
@@ -713,9 +734,9 @@ body {
 
 .clock-battery {
     font-family: var(--font-heading);
-    font-size: 12px;
+    font-size: clamp(9px, 0.7vw, 12px);
     font-weight: 700;
-    letter-spacing: 2px;
+    letter-spacing: 0.8px;
     color: rgba(255, 255, 255, 0.55);
     text-transform: uppercase;
     margin-top: 4px;
@@ -724,9 +745,9 @@ body {
 
 .clock-mb {
     font-family: var(--font-heading);
-    font-size: 12px;
+    font-size: clamp(9px, 0.7vw, 12px);
     font-weight: 700;
-    letter-spacing: 2px;
+    letter-spacing: 0.8px;
     color: var(--vram-glow);
     text-transform: uppercase;
     margin-top: 5px;
@@ -749,12 +770,12 @@ body {
 /* --- COLUMN LEFT SUB-METRICS SYSTEM --- */
 .card-sub-metrics {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: clamp(2px, 0.5vh, 10px);
     width: 100%;
-    margin-top: 14px;
+    margin-top: 0;
     border-top: 1px dashed rgba(255, 255, 255, 0.08);
-    padding-top: 12px;
+    padding-top: clamp(2px, 0.5vh, 12px);
 }
 
 .sub-metric {
@@ -762,6 +783,8 @@ body {
     flex-direction: column;
     align-items: center;
     text-align: center;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .sub-metric.wide {
@@ -774,16 +797,18 @@ body {
 
 .sub-metric .lbl {
     font-family: var(--font-body);
-    font-size: 12px;
+    font-size: clamp(9px, 0.7vw, 12px);
     font-weight: 700;
     color: var(--text-dark);
-    letter-spacing: 1px;
+    letter-spacing: 0.3px;
+    line-height: 1.2;
     text-transform: uppercase;
 }
 
 .sub-metric .val {
     font-family: var(--font-heading);
-    font-size: 18px;
+    font-size: clamp(11px, 1vw, 18px);
+    line-height: 1.2;
     font-weight: 700;
     color: var(--text-primary);
 }
@@ -792,12 +817,12 @@ body {
 .sub-progress-container {
     grid-column: span 2;
     width: 100%;
-    height: 7px;
+    height: clamp(3px, 0.5vh, 7px);
     background: rgba(255, 255, 255, 0.03);
     border-radius: 4px;
     overflow: hidden;
     border: 1px solid rgba(255, 255, 255, 0.06);
-    margin-top: 6px;
+    margin-top: 0;
 }
 
 .sub-progress-fill {
@@ -820,91 +845,6 @@ body {
 .npu-util-bar {
     background: linear-gradient(90deg, #00c7be, #64d2ff);
     box-shadow: 0 0 6px rgba(0, 199, 190, 0.3);
-}
-
-/* --- RESPONSIVE ADAPTATIONS --- */
-@media (max-width: 2500px) {
-    .dashboard {
-        width: 95vw;
-        height: 100vh;
-        padding: 15px 0 75px 0; /* Shifted further UP to maximize vertical space, and cleared from taskbar */
-    }
-    
-    .workspace {
-        gap: 20px;
-    }
-    
-    .column-left, .column-right {
-        gap: 16px;
-    }
-
-    .accelerator-row {
-        gap: 12px;
-    }
-    
-    .column-center {
-        gap: 20px;
-    }
-    
-    .gauge-card {
-        padding: 14px 20px;
-    }
-    
-    .gauge-label {
-        font-size: 22px;
-        margin-bottom: 6px;
-        line-height: 1.6;
-        padding-top: 8px;
-        padding-bottom: 4px;
-    }
-    
-    .gauge-container {
-        width: 170px;
-        height: 170px;
-    }
-
-    .accelerator-card .gauge-container {
-        width: 128px;
-        height: 128px;
-    }
-    
-    .gauge-value {
-        font-size: 48px;
-    }
-
-    .accelerator-card .gauge-value {
-        font-size: 38px;
-    }
-    
-    .card-sub-metrics {
-        margin-top: 8px;
-        padding-top: 8px;
-    }
-    
-    .chip-name {
-        margin-top: 6px;
-    }
-}
-
-@media (max-width: 1000px) {
-    .dashboard {
-        height: auto;
-        padding: 60px 4vw 80px 4vw;
-        overflow-y: auto;
-    }
-    .workspace {
-        grid-template-columns: 1fr;
-        gap: 24px;
-    }
-    .column-left, .column-center, .column-right {
-        grid-column: span 1;
-        height: auto;
-        gap: 24px;
-    }
-
-    .accelerator-row {
-        grid-template-columns: 1fr;
-    }
 }
 
 /* --- OVERLOAD CYBER-CRISIS EASTER EGGS (>80%) --- */
@@ -967,294 +907,80 @@ body.system-critical .nebula {
     animation-duration: 10s !important; /* Accelerated drift under stress */
 }
 
-@media (max-height: 1200px) {
-    .dashboard {
-        height: calc(100vh - clamp(112px, 16.6vh, 180px)) !important;
-        margin-bottom: clamp(56px, 7.9vh, 96px) !important;
-        padding: 0 !important;
-    }
-    
-    .workspace {
-        gap: 16px !important;
-    }
-    
-    .column-left, .column-right {
-        gap: 10px !important;
-    }
-
-    .accelerator-row {
-        gap: 10px !important;
-    }
-    
-    .column-center {
-        gap: 12px !important;
-        padding: 12px 16px !important;
-    }
-      .gauge-card {
-        padding: 12px 16px !important;
-        justify-content: flex-start !important; /* Always align to top to prevent header clipping */
-    }
-    
-    .gauge-label {
-        font-size: 15px !important;
-        margin-bottom: 8px !important;
-        letter-spacing: 1.5px !important;
-        line-height: 1.6 !important; /* Prevents compact heading font clipping */
-        padding-top: 4px !important;
-        padding-bottom: 2px !important;
-    }
-    
-    .gauge-container {
-        width: 140px !important; /* Scaled up from 106px to fill empty space and look premium */
-        height: 140px !important;
-        margin-top: 2px !important;
-        margin-bottom: 2px !important;
-    }
-
-    .accelerator-card {
-        padding: 10px 12px !important;
-    }
-
-    .accelerator-card .gauge-label {
-        font-size: 12px !important;
-        letter-spacing: 1px !important;
-    }
-
-    .accelerator-card .gauge-container {
-        width: 112px !important;
-        height: 112px !important;
-    }
-    
-    .vram-scanner-eye {
-        width: 52px !important;
-        height: 52px !important;
-    }
-
-    .npu-scanner-eye {
-        width: 48px !important;
-        height: 48px !important;
-    }
-    
-    .gauge-value {
-        font-size: 42px !important;
-    }
-
-    .accelerator-card .gauge-value {
-        font-size: 32px !important;
-    }
-    
-    .gauge-value span {
-        font-size: 17px !important;
-    }
-    
-    .card-sub-metrics {
-        margin-top: 8px !important;
-        padding-top: 8px !important;
-        gap: 6px !important;
-    }
-    
-    .sub-metric .lbl {
-        font-size: 10px !important;
-        letter-spacing: 0.5px !important;
-    }
-    
-    .sub-metric .val {
-        font-size: 15px !important;
-    }
-    
-    .sub-progress-container {
-        height: 5px !important;
-        margin-top: 2px !important;
-    }
-    
-    .chip-name {
-        display: none !important;
-    }
-    
-    /* Clock */
-    .cyber-clock-card {
-        padding: 10px 16px !important;
-    }
-    
-    .clock-time {
-        font-size: 32px !important;
-    }
-    
-    .clock-time .ms-tick {
-        font-size: 14px !important;
-        width: 36px !important;
-    }
-    
-    .clock-date {
-        font-size: 13px !important;
-        margin-top: 2px !important;
-    }
-    
-    .clock-mb {
-        font-size: 11px !important;
-        margin-top: 2px !important;
-    }
-    
-    /* Power buttons container */
-    .remote-sub-panel {
-        gap: 10px !important;
-    }
-    
-    .remote-btn {
-        padding: 10px 14px !important;
-    }
-    
-    .remote-grid.horizontal .remote-btn .btn-lbl {
-        font-size: clamp(10px, 0.7vw, 13px) !important;
-        line-height: 1.12;
-    }
-    
-    .remote-grid.horizontal .remote-btn .icon-wrap svg {
-        width: 18px !important;
-        height: 18px !important;
-    }
+/* A short card places its dial beside the readings. No metric is removed and
+   no scrolling is needed on the desktop's non-interactive telemetry panels. */
+@container gauge (max-height: 210px) and (min-width: 220px) {
+    .gauge-label { grid-column: 1 / -1; }
+    .gauge-slot { grid-column: 1; grid-row: 2; width: 28%; }
+    .card-sub-metrics { grid-column: 1; grid-row: 2; width: 68%; justify-self: end; align-self: center; }
 }
 
-/* TVs frequently run 4K output with 250-300% Windows scaling, which produces a
-   1280x720-ish CSS viewport. Keep every metric inside the visible 16:9 frame
-   instead of letting fixed-size gauges overflow their flex cards. */
-@media (max-height: 900px) and (min-width: 1001px) {
-    .dashboard {
-        width: 92vw !important;
-    }
+@container gauge (max-height: 160px) {
+    .gauge-card .gauge-label { font-size: 10px; letter-spacing: 0.3px; }
+    .gauge-card .card-sub-metrics { gap: 2px; padding-top: 2px; }
+    .gauge-card .sub-metric .lbl { font-size: 8px; letter-spacing: 0; }
+    .gauge-card .sub-metric .val { font-size: 10px; }
+}
 
+@container gauge (max-height: 160px) and (max-width: 219px) {
+    .gauge-label {
+        grid-row: 1;
+        grid-column: 1;
+        width: calc(100% - 38px);
+        justify-self: end;
+        align-self: center;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+    .gauge-slot { grid-row: 1; grid-column: 1; width: 32px; height: 32px; }
+    .card-sub-metrics { grid-row: 2 / 4; align-self: center; }
+}
+
+@container gauge (max-height: 110px) and (min-width: 160px) {
+    .gauge-label { grid-column: 1 / -1; width: 100%; white-space: nowrap; }
+    .gauge-slot { grid-row: 2; grid-column: 1; width: 20%; height: 100%; }
+    .card-sub-metrics { grid-row: 2; grid-column: 1; width: 77%; justify-self: end; }
+}
+
+/* Tall/narrow screens keep the clock and controls above a two-column set of
+   cards. The hardware cards flow naturally when an accelerator is absent. */
+@media (max-aspect-ratio: 6/5) {
     .workspace {
-        gap: 10px !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-rows: minmax(min-content, 1.618fr);
+        grid-auto-rows: minmax(0, 1fr);
     }
-
-    .column-left,
-    .column-right {
-        gap: 6px !important;
-    }
-
-    .accelerator-row {
-        gap: 6px !important;
-    }
-
-    .gauge-card,
-    .accelerator-card {
-        min-height: 0;
-        padding: 5px 10px !important;
-    }
-
-    .gauge-label,
-    .accelerator-card .gauge-label {
-        flex: 0 0 auto;
-        min-height: 0;
-        margin: 0 0 2px !important;
-        padding: 0 !important;
-        font-size: 11px !important;
-        line-height: 1.2 !important;
-        letter-spacing: 0.8px !important;
-    }
-
-    .gauge-container,
-    .accelerator-card .gauge-container {
-        flex: 0 0 auto;
-        width: 58px !important;
-        height: 58px !important;
-        margin: 0 !important;
-    }
-
-    .gauge-value,
-    .accelerator-card .gauge-value {
-        font-size: 21px !important;
-    }
-
-    .gauge-value span,
-    .accelerator-card .gauge-value span {
-        font-size: 9px !important;
-    }
-
-    .vram-scanner-eye,
-    .npu-scanner-eye {
-        width: 24px !important;
-        height: 24px !important;
-    }
-
-    .card-sub-metrics,
-    .accelerator-card .card-sub-metrics {
-        flex: 1 1 auto;
-        min-height: 0;
-        width: 100%;
-        gap: 1px !important;
-        margin-top: 2px !important;
-        padding-top: 2px !important;
-    }
-
-    .sub-metric .lbl,
-    .accelerator-card .sub-metric .lbl {
-        font-size: 8px !important;
-        line-height: 1.15 !important;
-        letter-spacing: 0.2px !important;
-    }
-
-    .sub-metric .val,
-    .accelerator-card .sub-metric .val {
-        font-size: 10px !important;
-        line-height: 1.15 !important;
-    }
-
-    .sub-progress-container {
-        height: 3px !important;
-        margin-top: 1px !important;
-    }
-
+    .column-left, .column-right, .accelerator-row { display: contents; }
+    .accelerator-row.no-npu.no-igpu { display: none; }
+    .column-center { grid-column: 1 / -1; grid-row: 1; }
+    .gauge-card { height: auto; }
+    #cpu-card { order: 1; }
+    #ram-card { order: 2; }
+    #vram-card { order: 3; }
+    #npu-card { order: 4; }
+    #gpu-card { order: 5; }
+    #ssd-card { order: 6; }
+    #net-card { order: 7; }
     .column-center {
-        gap: 6px !important;
-        padding: 8px 10px !important;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-rows: auto auto;
+        align-items: center;
     }
+    .hologram-sub-panel { grid-column: 2; grid-row: 1 / -1; height: 100%; }
+    .cyber-clock-card { grid-column: 1; grid-row: 1; }
+    .remote-sub-panel { grid-column: 1; grid-row: 2; }
+    .clock-time { font-size: clamp(20px, 4vw, 40px); }
+    .remote-grid.horizontal[data-plan-count="3"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .remote-grid.horizontal[data-plan-count="3"] .remote-btn:last-child { grid-column: 1 / -1; }
+}
 
-    .hologram-sub-panel {
-        min-height: 100px;
-    }
+@media (max-height: 600px) and (min-aspect-ratio: 6/5) {
+    /* Two accelerators share a row and need more height than a full-width card. */
+    .accelerator-row { flex: 1.618; }
+    .gauge-card { padding: 4px 6px; gap: 2px; }
+}
 
-    .cyber-clock-card {
-        padding: 4px 8px !important;
-    }
-
-    .clock-time {
-        font-size: 24px !important;
-    }
-
-    .clock-time .ms-tick {
-        width: 28px !important;
-        font-size: 10px !important;
-    }
-
-    .clock-date {
-        margin-top: 0 !important;
-        font-size: 10px !important;
-        letter-spacing: 1px !important;
-    }
-
-    .clock-mb,
-    .clock-battery {
-        margin-top: 0 !important;
-        font-size: 8px !important;
-    }
-
-    .remote-sub-panel,
-    .remote-grid.horizontal {
-        gap: 5px !important;
-    }
-
-    .remote-grid.horizontal .remote-btn {
-        min-height: 34px;
-        padding: 4px 6px !important;
-    }
-
-    .remote-grid.horizontal .remote-btn .btn-lbl {
-        font-size: 8px !important;
-    }
-
-    .remote-grid.horizontal .remote-btn .icon-wrap svg {
-        width: 13px !important;
-        height: 13px !important;
-    }
+@media (max-height: 900px) and (max-aspect-ratio: 6/5) {
+    .gauge-card { padding: 4px 6px; gap: 2px; }
 }

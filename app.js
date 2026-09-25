@@ -133,8 +133,6 @@ let bgCanvas = null;
 let telemetryMapReady = false;
 let telemetryNodesInitialized = false;
 let canvasHasRendered = false;
-const CORE_TARGET_OFFSET_X = 10;
-const CORE_TARGET_OFFSET_Y = -26;
 const TELEMETRY_ORBIT_SCALE = 0.38;
 const TELEMETRY_ORBIT_MAX = 320;
 const TELEMETRY_ORBIT_RING_INDEX = 3;
@@ -146,8 +144,14 @@ const TELEMETRY_ORBIT_START_ANGLE = -150;
 
 function resizeCanvas() {
     const rect = canvas.parentElement.getBoundingClientRect();
-    const nextWidth = Math.round(rect.width);
-    const nextHeight = Math.round(rect.height);
+    if (!rect.width || !rect.height) return false;
+    // Keep the complete diagram (nodes, orbit and captions) in a shared logical
+    // coordinate space. A small panel scales that diagram uniformly instead of
+    // forcing the old minimum orbit outside the visible canvas.
+    const minimumSize = getTelemetryMinimumSize();
+    const scale = Math.min(1, rect.width / minimumSize, rect.height / minimumSize);
+    const nextWidth = Math.round(rect.width / scale);
+    const nextHeight = Math.round(rect.height / scale);
     if (width === nextWidth && height === nextHeight) return false;
     width = canvas.width = nextWidth;
     height = canvas.height = nextHeight;
@@ -160,7 +164,6 @@ window.addEventListener("resize", () => {
     syncTelemetryLayoutAfterResize(true);
     redrawCanvas();
 });
-resizeCanvas();
 
 // SOTA ResizeObserver to guarantee perfect circular aspect ratio under any layout dynamic shifts
 if (canvas.parentElement && typeof ResizeObserver !== 'undefined') {
@@ -364,13 +367,32 @@ for (let i = 0; i < telemetryNodeList.length; i++) {
     renderNodeOffscreen(telemetryNodeList[i]);
 }
 
+function getTelemetryMinimumSize() {
+    const nodes = TELEMETRY_ORBIT_ORDER.map(key => telemetryNodes[key]);
+    // Measure the longest rendered caption, including its letter spacing.
+    ctx.save();
+    let extent = 0;
+    for (const node of nodes) {
+        ctx.font = "900 11px Bahnschrift, 'Segoe UI', sans-serif";
+        ctx.letterSpacing = '1.5px';
+        const labelWidth = ctx.measureText(node.label).width;
+        ctx.font = "700 9px Bahnschrift, 'Segoe UI', sans-serif";
+        ctx.letterSpacing = '1px';
+        const descriptionWidth = ctx.measureText(node.desc || '').width;
+        extent = Math.max(extent, labelWidth / 2, descriptionWidth / 2, node.radius + 38);
+    }
+    ctx.restore();
+    const orbit = Math.max(telemetryNodes.npu.radius + extent, extent / Math.sin(Math.PI / nodes.length));
+    return Math.ceil(2 * (orbit + extent));
+}
+
 function getTelemetryLayout() {
-    const cx = (width / 2) + CORE_TARGET_OFFSET_X;
-    const cy = (height / 2) + CORE_TARGET_OFFSET_Y;
-    const maxAvailableRadius = Math.max(80, Math.min(cx, width - cx, cy, height - cy) - 28);
-    const maxSafeNodeOrbit = Math.max(96, Math.min(cx - 44, width - cx - 44, cy - 44, height - cy - 72));
+    const cx = width / 2;
+    const cy = (height - 26) / 2; // Balance the captions below the orbit nodes.
+    const maxAvailableRadius = Math.max(1, Math.min(cx, width - cx, cy, height - cy) - 12);
+    const maxSafeNodeOrbit = Math.max(1, Math.min(cx - 70, width - cx - 70, cy - 40, height - cy - 66));
     const preferredOrbit = Math.min(Math.min(width, height) * TELEMETRY_ORBIT_SCALE, TELEMETRY_ORBIT_MAX);
-    const orbitRadius = Math.max(96, Math.min(preferredOrbit, maxSafeNodeOrbit));
+    const orbitRadius = Math.min(preferredOrbit, maxSafeNodeOrbit);
     const radarStep = orbitRadius / TELEMETRY_ORBIT_RING_INDEX;
     const maxRadarRadius = Math.max(orbitRadius, Math.min(maxAvailableRadius, radarStep * TELEMETRY_RADAR_RING_COUNT));
 
@@ -423,6 +445,7 @@ function syncTelemetryLayoutAfterResize(snapToTargets = false) {
 }
 
 telemetryMapReady = true;
+resizeCanvas();
 syncTelemetryLayoutAfterResize(true);
 
 // Neural flow data packets system
@@ -501,8 +524,8 @@ function spawnCoreSplash(x, y, color) {
 // Mouse interaction listeners for node dragging
 canvas.addEventListener("mousedown", (e) => {
     const rect = canvas.getBoundingClientRect();
-    mouse.x = e.clientX - rect.left;
-    mouse.y = e.clientY - rect.top;
+    mouse.x = (e.clientX - rect.left) * width / rect.width;
+    mouse.y = (e.clientY - rect.top) * height / rect.height;
     mouse.isDown = true;
     
     // Find closest node to grab (within 60px)
@@ -522,8 +545,8 @@ canvas.addEventListener("mousedown", (e) => {
 
 canvas.addEventListener("mousemove", (e) => {
     const rect = canvas.getBoundingClientRect();
-    mouse.x = e.clientX - rect.left;
-    mouse.y = e.clientY - rect.top;
+    mouse.x = (e.clientX - rect.left) * width / rect.width;
+    mouse.y = (e.clientY - rect.top) * height / rect.height;
     
     if (mouse.isDown && mouse.grabbedNode) {
         mouse.grabbedNode.x = mouse.x;

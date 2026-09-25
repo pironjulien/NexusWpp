@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-09-25 — 1.0.18.0
+
+- Correction du bas du cockpit coupé sur les écrans fortement mis à l'échelle, notamment en 4K à 225 % : pistes de grille bornées et cartes adaptées à la place réellement disponible.
+- Jauges proportionnelles, disposition compacte préservant toutes les mesures et grille spécifique aux écrans portrait, sans défilement des panneaux de télémétrie.
+- Réservation d'une rangée d'icônes au-dessus du cockpit et d'un espace au-dessus de la barre des tâches, également vérifiée dans la matrice de tailles.
+- Radar entièrement contenu dans son panneau, avec mise à l'échelle uniforme et coordonnées de souris correspondantes.
+- Suppression des anciennes règles responsive contradictoires et du tronquage des noms des modes d'alimentation.
+- Vérification automatique dans WebView2 des résolutions 720p à 8K, des échelles 100 à 400 %, des formats ultralarges/portrait et des variantes de matériel et de profils d'alimentation. Captures et mesures conservées hors Git.
+
 ## 2026-09-25 — 1.0.16.0
 
 - Conservation de la scène réelle du bureau pendant la pause : WebView2 reste visible, sans suspension Chromium ni reconstruction à la reprise.
