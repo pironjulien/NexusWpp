@@ -95,6 +95,7 @@ let pendingPowerPlanGuid = "";
 let powerPlanSwitchTimer = 0;
 let lastRemoteBoundsMsg = "";
 let runtimeSuspended = false;
+let hostRuntimeSuspended = false;
 const lastPacketNodeTime = {};
 const lastTelemetryNodeValues = {};
 const MAX_DATA_PACKETS = 72;
@@ -166,12 +167,7 @@ if (canvas.parentElement && typeof ResizeObserver !== 'undefined') {
 
 // SOTA Visibility Change handler to completely sleep the CPU/iGPU when wallpaper hidden
 document.addEventListener("visibilitychange", () => {
-    if (document.hidden) {
-        isCanvasLoopRunning = false;
-        // Suspend immediately when Windows hides the WebView to avoid background work.
-    } else {
-        wakeCanvas();
-    }
+    setRuntimeSuspended(hostRuntimeSuspended || document.hidden);
 });
 
 // Load Logo Image in case it can be drawn at NPU Core
@@ -593,6 +589,8 @@ function scheduleCanvasFrame(delay = physicsFpsInterval) {
 }
 
 function setRuntimeSuspended(suspended) {
+    document.body.classList.toggle("runtime-suspended", suspended);
+    if (runtimeSuspended === suspended) return;
     runtimeSuspended = suspended;
     if (suspended) {
         dataPackets.length = 0;
@@ -1561,7 +1559,8 @@ function connectStream() {
                 const stats = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
                 if (stats && stats.control) {
                     if (stats.control === "SUSPEND" || stats.control === "RESUME") {
-                        setRuntimeSuspended(stats.control === "SUSPEND");
+                        hostRuntimeSuspended = stats.control === "SUSPEND";
+                        setRuntimeSuspended(hostRuntimeSuspended || document.hidden);
                     } else if (stats.control === "POWER_RESULT") {
                         if (stats.success || !pendingPowerPlanGuid || stats.requestedGuid === pendingPowerPlanGuid) {
                             clearPowerPlanPending();

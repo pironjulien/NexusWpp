@@ -1,6 +1,7 @@
 bin/
 scripts/bin/
 dist/
+work/
 
 *.log
 server_output.log

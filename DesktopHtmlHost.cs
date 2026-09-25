@@ -264,6 +264,8 @@ namespace DesktopHtmlHost
         private bool telemetryCollectPending = false;
         private System.Windows.Forms.Timer fullscreenTimer;
         private bool runtimeSuspended = false;
+        private bool sessionInactive = false;
+        private int webViewRuntimeGeneration = 0;
         private string fullscreenReason = "";
         private bool isClosing = false;
 
@@ -330,13 +332,6 @@ namespace DesktopHtmlHost
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
-        [DllImport("user32.dll")]
-        private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
-
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
-
         private delegate bool EnumChildProc(IntPtr hwnd, IntPtr lParam);
         private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
 
@@ -357,15 +352,6 @@ namespace DesktopHtmlHost
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        private struct MONITORINFO
-        {
-            public int cbSize;
-            public RECT rcMonitor;
-            public RECT rcWork;
-            public uint dwFlags;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
         private struct MSLLHOOKSTRUCT
         {
             public POINT pt;
@@ -378,7 +364,6 @@ namespace DesktopHtmlHost
         private const int WH_MOUSE_LL = 14;
         private const int WM_LBUTTONDOWN = 0x0201;
         private const int WM_LBUTTONUP = 0x0202;
-        private const uint MONITOR_DEFAULTTONEAREST = 2;
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
@@ -624,10 +609,24 @@ namespace DesktopHtmlHost
 
         private void SystemEvents_SessionSwitch(object sender, SessionSwitchEventArgs e)
         {
+            if (e.Reason == SessionSwitchReason.SessionLock ||
+                e.Reason == SessionSwitchReason.RemoteDisconnect ||
+                e.Reason == SessionSwitchReason.ConsoleDisconnect)
+            {
+                TryBeginInvoke((MethodInvoker)delegate {
+                    sessionInactive = true;
+                    FullscreenTimer_Tick(null, null);
+                });
+            }
             if (e.Reason == SessionSwitchReason.SessionUnlock ||
                 e.Reason == SessionSwitchReason.SessionLogon ||
-                e.Reason == SessionSwitchReason.RemoteConnect)
+                e.Reason == SessionSwitchReason.RemoteConnect ||
+                e.Reason == SessionSwitchReason.ConsoleConnect)
             {
+                TryBeginInvoke((MethodInvoker)delegate {
+                    sessionInactive = false;
+                    FullscreenTimer_Tick(null, null);
+                });
                 QueueDesktopReattach("session became active: " + e.Reason);
             }
         }
@@ -900,6 +899,7 @@ namespace DesktopHtmlHost
             }
 
             fullscreenTimer.Start();
+            if (runtimeSuspended) ApplyWebViewRuntimeState();
         }
 
         private void QueueWebViewRecovery(string reason)
@@ -986,7 +986,8 @@ namespace DesktopHtmlHost
             try
             {
                 string reason;
-                bool fullscreen = IsAnyFullscreenWindow(out reason);
+                bool fullscreen = DesktopVisibility.ShouldSuspend(this.Handle, out reason);
+                if (sessionInactive) { fullscreen = true; reason = "session inactive"; }
                 fullscreenReason = reason;
                 SetRuntimeSuspended(fullscreen);
             }
@@ -1007,21 +1008,49 @@ namespace DesktopHtmlHost
                 else telemetryTimer.Start();
             }
 
+            ApplyWebViewRuntimeState();
+            Program.LogDebug(suspended ? "Runtime suspended: " + fullscreenReason + "." : "Runtime resumed: desktop visible.");
+        }
+
+        private async void ApplyWebViewRuntimeState()
+        {
+            CoreWebView2 core;
+            if (!TryGetCoreWebView2(out core)) return;
+            WebView2 currentView = webView;
+            int generation = ++webViewRuntimeGeneration;
             try
             {
-                PostWebMessageAsJsonSafe(suspended ? "{\"control\":\"SUSPEND\"}" : "{\"control\":\"RESUME\"}", "Runtime suspend post");
+                if (runtimeSuspended)
+                {
+                    core.PostWebMessageAsJson("{\"control\":\"SUSPEND\"}");
+                    currentView.Visible = false;
+                    bool didSuspend = await core.TrySuspendAsync();
+                    if (isClosing || IsDisposed || currentView != webView || currentView.IsDisposed) return;
+                    // A resume/navigation can overtake the asynchronous suspension.
+                    if (!runtimeSuspended)
+                    {
+                        core.Resume();
+                        currentView.Visible = true;
+                        core.PostWebMessageAsJson("{\"control\":\"RESUME\"}");
+                    }
+                    else if (generation == webViewRuntimeGeneration)
+                    {
+                        Program.LogDebug("WebView2 suspension completed: " + didSuspend + ".");
+                    }
+                }
+                else
+                {
+                    core.Resume();
+                    currentView.Visible = true;
+                    core.PostWebMessageAsJson("{\"control\":\"RESUME\"}");
+                    TelemetryTimer_Tick(null, null);
+                }
             }
             catch (Exception ex)
             {
-                Program.LogDebug("Runtime suspend post error: " + ex.Message);
+                if (!isClosing && !IsDisposed && currentView == webView && !currentView.IsDisposed)
+                    Program.LogDebug("WebView runtime state error: " + ex.Message);
             }
-
-            if (!suspended)
-            {
-                TelemetryTimer_Tick(null, null);
-            }
-
-            Program.LogDebug(suspended ? "Runtime suspended: fullscreen foreground detected (" + fullscreenReason + ")." : "Runtime resumed: fullscreen foreground cleared.");
         }
 
         private void SetPowerPlanFromUi(string guidStr)
@@ -1093,81 +1122,6 @@ namespace DesktopHtmlHost
             }
             sb.Append('"');
             return sb.ToString();
-        }
-
-        private bool IsAnyFullscreenWindow(out string reason)
-        {
-            bool found = false;
-            string foundReason = "";
-            EnumWindows((hwnd, lParam) =>
-            {
-                if (found) return false;
-                string candidateReason;
-                if (IsFullscreenCandidate(hwnd, out candidateReason))
-                {
-                    found = true;
-                    foundReason = candidateReason;
-                }
-                return !found;
-            }, IntPtr.Zero);
-
-            reason = foundReason;
-            return found;
-        }
-
-        private bool IsFullscreenCandidate(IntPtr hwnd, out string reason)
-        {
-            reason = "";
-            if (hwnd == IntPtr.Zero || hwnd == this.Handle || IsIconic(hwnd) || !IsWindowVisible(hwnd)) return false;
-
-            System.Text.StringBuilder className = new System.Text.StringBuilder(256);
-            GetClassName(hwnd, className, className.Capacity);
-            string cls = className.ToString();
-            if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" || cls == "Button") return false;
-
-            uint pid;
-            GetWindowThreadProcessId(hwnd, out pid);
-            if (pid == (uint)Process.GetCurrentProcess().Id) return false;
-            string processName = "";
-            try
-            {
-                Process p = Process.GetProcessById((int)pid);
-                processName = p.ProcessName.ToLowerInvariant();
-                if (processName == "msedgewebview2" ||
-                    processName == "explorer" ||
-                    processName == "textinputhost" ||
-                    processName == "shellexperiencehost" ||
-                    processName == "searchhost" ||
-                    processName == "startmenuexperiencehost")
-                {
-                    return false;
-                }
-            }
-            catch
-            {
-                return false;
-            }
-
-            RECT rect;
-            if (!GetWindowRect(hwnd, out rect)) return false;
-
-            IntPtr monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-            if (monitor == IntPtr.Zero) return false;
-
-            MONITORINFO info = new MONITORINFO();
-            info.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
-            if (!GetMonitorInfo(monitor, ref info)) return false;
-
-            int tolerance = 3;
-            bool fullscreen = rect.Left <= info.rcMonitor.Left + tolerance &&
-                              rect.Top <= info.rcMonitor.Top + tolerance &&
-                              rect.Right >= info.rcMonitor.Right - tolerance &&
-                              rect.Bottom >= info.rcMonitor.Bottom - tolerance;
-            if (fullscreen)
-            {
-                reason = string.Format(CultureInfo.InvariantCulture, "{0}/{1} hwnd=0x{2:x}", processName, cls, hwnd.ToInt64());
-            }
-            return fullscreen;
         }
 
         private void TelemetryTimer_Tick(object sender, EventArgs e)

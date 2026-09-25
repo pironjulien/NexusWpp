@@ -63,7 +63,8 @@ $compilerArgs = @(
     "/reference:$(Join-Path $binDir Microsoft.Web.WebView2.Core.dll)",
     "/reference:$(Join-Path $binDir Microsoft.Web.WebView2.WinForms.dll)",
     "/reference:System.Management.dll",
-    $sourceFile
+    $sourceFile,
+    (Join-Path $PSScriptRoot "DesktopVisibility.cs")
 )
 
 $process = Start-Process -FilePath $cscPath -ArgumentList $compilerArgs -NoNewWindow -Wait -PassThru

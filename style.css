@@ -26,6 +26,13 @@
     --font-body: 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
 }
 
+/* Pause compositor animations as well as the canvas while the desktop is hidden. */
+.runtime-suspended *,
+.runtime-suspended *::before,
+.runtime-suspended *::after {
+    animation-play-state: paused !important;
+}
+
 /* Helper class for visually hidden content (A11y) */
 .sr-only {
     position: absolute;
