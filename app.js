@@ -96,6 +96,7 @@ let powerPlanSwitchTimer = 0;
 let lastRemoteBoundsMsg = "";
 let runtimeSuspended = false;
 let hostRuntimeSuspended = false;
+const pausedTransitions = new Set();
 const lastPacketNodeTime = {};
 const lastTelemetryNodeValues = {};
 const MAX_DATA_PACKETS = 72;
@@ -122,7 +123,7 @@ function updateClock() {
     document.getElementById("clock-date").textContent = `${dayName} ${day} ${month} ${year}`;
 }
 updateClock();
-setInterval(updateClock, 1000); // 1-second interval to reduce CPU load
+let clockTimer = setInterval(updateClock, 1000);
 
 // --- 🌌 SOTA CANVAS 2D PHYSICS ENGINE (HOLOGRAPHIC NEURAL TELEMETRY MAP) ---
 const canvas = document.getElementById("physics-canvas");
@@ -131,6 +132,7 @@ let width, height;
 let bgCanvas = null;
 let telemetryMapReady = false;
 let telemetryNodesInitialized = false;
+let canvasHasRendered = false;
 const CORE_TARGET_OFFSET_X = 10;
 const CORE_TARGET_OFFSET_Y = -26;
 const TELEMETRY_ORBIT_SCALE = 0.38;
@@ -144,23 +146,28 @@ const TELEMETRY_ORBIT_START_ANGLE = -150;
 
 function resizeCanvas() {
     const rect = canvas.parentElement.getBoundingClientRect();
-    width = canvas.width = rect.width;
-    height = canvas.height = rect.height;
+    const nextWidth = Math.round(rect.width);
+    const nextHeight = Math.round(rect.height);
+    if (width === nextWidth && height === nextHeight) return false;
+    width = canvas.width = nextWidth;
+    height = canvas.height = nextHeight;
     bgCanvas = null; // force pre-rendered background to regenerate on next draw
+    canvasHasRendered = false;
+    return true;
 }
 window.addEventListener("resize", () => {
-    resizeCanvas();
+    if (!resizeCanvas()) return;
     syncTelemetryLayoutAfterResize(true);
-    wakeCanvas();
+    redrawCanvas();
 });
 resizeCanvas();
 
 // SOTA ResizeObserver to guarantee perfect circular aspect ratio under any layout dynamic shifts
 if (canvas.parentElement && typeof ResizeObserver !== 'undefined') {
     const resizeObserver = new ResizeObserver(() => {
-        resizeCanvas();
+        if (!resizeCanvas()) return;
         syncTelemetryLayoutAfterResize(true);
-        wakeCanvas();
+        redrawCanvas();
     });
     resizeObserver.observe(canvas.parentElement);
 }
@@ -176,7 +183,7 @@ logoImg.src = "julienpiron.png";
 let logoLoaded = false;
 logoImg.onload = () => {
     logoLoaded = true;
-    wakeCanvas();
+    redrawCanvas();
 };
 logoImg.onerror = () => {};
 
@@ -542,6 +549,7 @@ canvas.addEventListener("mouseleave", () => {
 let isCanvasLoopRunning = false;
 let needsRender = true;
 let canvasFrameTimer = 0;
+let canvasAnimationFrame = 0;
 
 function renderStaticBackground() {
     if (!bgCanvas) {
@@ -580,11 +588,21 @@ function wakeCanvas() {
     }
 }
 
+function redrawCanvas() {
+    // A real resize or loaded asset needs one paint even while paused.
+    // Draw the existing scene without advancing particles or starting a loop.
+    if (runtimeSuspended) updatePhysics(0, true);
+    else wakeCanvas();
+}
+
 function scheduleCanvasFrame(delay = physicsFpsInterval) {
-    if (runtimeSuspended || !isCanvasLoopRunning || canvasFrameTimer) return;
+    if (runtimeSuspended || !isCanvasLoopRunning || canvasFrameTimer || canvasAnimationFrame) return;
     canvasFrameTimer = setTimeout(() => {
         canvasFrameTimer = 0;
-        requestAnimationFrame(updatePhysics);
+        canvasAnimationFrame = requestAnimationFrame(timestamp => {
+            canvasAnimationFrame = 0;
+            updatePhysics(timestamp);
+        });
     }, delay);
 }
 
@@ -593,17 +611,30 @@ function setRuntimeSuspended(suspended) {
     if (runtimeSuspended === suspended) return;
     runtimeSuspended = suspended;
     if (suspended) {
-        dataPackets.length = 0;
-        coreParticles.length = 0;
+        pauseRunningTransitions();
         mouse.grabbedNode = null;
+        mouse.isDown = false;
         isCanvasLoopRunning = false;
         needsRender = false;
         if (canvasFrameTimer) {
             clearTimeout(canvasFrameTimer);
             canvasFrameTimer = 0;
         }
-        document.body.classList.remove("system-critical");
+        if (canvasAnimationFrame) {
+            cancelAnimationFrame(canvasAnimationFrame);
+            canvasAnimationFrame = 0;
+        }
+        clearInterval(clockTimer);
+        clockTimer = 0;
+        if (!canvasHasRendered) redrawCanvas();
     } else {
+        pausedTransitions.forEach(animation => {
+            if (animation.playState === "paused") animation.play();
+        });
+        pausedTransitions.clear();
+        updateClock();
+        clockTimer = setInterval(updateClock, 1000);
+        lastPhysicsTime = 0;
         needsRender = true;
         wakeCanvas();
         try {
@@ -614,19 +645,32 @@ function setRuntimeSuspended(suspended) {
     }
 }
 
+function pauseRunningTransitions() {
+    // animation-play-state covers CSS animations, but not in-flight transitions.
+    document.getAnimations().forEach(animation => {
+        if (animation instanceof CSSTransition && animation.playState === "running") {
+            animation.pause();
+            pausedTransitions.add(animation);
+        }
+    });
+}
+document.addEventListener("transitionrun", () => {
+    if (runtimeSuspended) pauseRunningTransitions();
+});
+
 // Main update physics and rendering loop
 let lastPhysicsTime = 0;
 const physicsFpsInterval = 1000 / 12; // active canvas cadence; sleeps fully when idle
-function updatePhysics(timestamp) {
-    if (!isCanvasLoopRunning) return; // Stop loop if suspended!
+function updatePhysics(timestamp, renderOnly = false) {
+    if (!renderOnly && (!isCanvasLoopRunning || runtimeSuspended)) return;
     
     if (!timestamp) timestamp = performance.now();
     const elapsed = timestamp - lastPhysicsTime;
-    if (elapsed < physicsFpsInterval) {
+    if (!renderOnly && elapsed < physicsFpsInterval) {
         scheduleCanvasFrame(physicsFpsInterval - elapsed);
         return;
     }
-    lastPhysicsTime = timestamp - (elapsed % physicsFpsInterval);
+    if (!renderOnly) lastPhysicsTime = timestamp - (elapsed % physicsFpsInterval);
     
 
     if (!telemetryNodesInitialized && width > 0) {
@@ -655,7 +699,7 @@ function updatePhysics(timestamp) {
         // Orbit ring rotation angle increment
         const baseRotSpeed = 0.008;
         const loadFactor = (node.value || 0) / 100;
-        node.rotAngle += baseRotSpeed + (loadFactor * 0.06);
+        if (!renderOnly) node.rotAngle += baseRotSpeed + (loadFactor * 0.06);
     }
     
     // 3. Neural data flow data packets spawner
@@ -706,11 +750,11 @@ function updatePhysics(timestamp) {
     // 5. Update and draw data packet signals traveling
     for (let i = dataPackets.length - 1; i >= 0; i--) {
         const p = dataPackets[i];
-        p.update();
+        if (!renderOnly) p.update();
         p.draw();
         
         // When packet reaches center NPU node
-        if (p.progress >= 1.0) {
+        if (!renderOnly && p.progress >= 1.0) {
             spawnCoreSplash(p.target.x, p.target.y, p.color);
             dataPackets.splice(i, 1);
             
@@ -720,7 +764,7 @@ function updatePhysics(timestamp) {
     }
     
     // Decay NPU core radius back to base size
-    telemetryNodes.npu.radius = Math.max(50, telemetryNodes.npu.radius - 0.25);
+    if (!renderOnly) telemetryNodes.npu.radius = Math.max(50, telemetryNodes.npu.radius - 0.25);
     
     // 6. Draw component nodes
     for (let i = 0; i < telemetryNodeList.length; i++) {
@@ -838,11 +882,13 @@ function updatePhysics(timestamp) {
     // 7. Update and draw NPU core splash sparkles
     for (let i = coreParticles.length - 1; i >= 0; i--) {
         const p = coreParticles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.vx *= 0.95;
-        p.vy *= 0.95;
-        p.life--;
+        if (!renderOnly) {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vx *= 0.95;
+            p.vy *= 0.95;
+            p.life--;
+        }
         
         ctx.save();
         const alpha = p.life / p.maxLife;
@@ -861,10 +907,13 @@ function updatePhysics(timestamp) {
         ctx.fill();
         ctx.restore();
         
-        if (p.life <= 0) {
+        if (!renderOnly && p.life <= 0) {
             coreParticles.splice(i, 1);
         }
     }
+
+    canvasHasRendered = true;
+    if (renderOnly) return;
 
     // 8. Idle-Stop Canvas Engine sleep check
     let nodesAreMoving = false;
@@ -1571,13 +1620,13 @@ function connectStream() {
                     }
                     return;
                 }
-                updateDOM(stats);
+                if (!runtimeSuspended) updateDOM(stats);
             } catch (error) {
                 console.error("WebView2 message parse error:", error);
             }
         });
         try {
-            window.chrome.webview.postMessage("REQUEST_TELEMETRY");
+            window.chrome.webview.postMessage("REQUEST_RUNTIME_STATE");
         } catch (e) {}
         return;
     }
@@ -1670,7 +1719,7 @@ window.addEventListener("DOMContentLoaded", () => {
     syncTelemetryLayoutAfterResize(true);
     dimGauges();
     connectStream();
-    wakeCanvas();
+    redrawCanvas();
 
     // Attach click listeners immediately to pre-populated power plans
     if (powerPlansContainer) {
@@ -1705,7 +1754,7 @@ window.addEventListener("resize", () => sendRemoteBounds(true));
 window.addEventListener("load", () => {
     resizeCanvas();
     syncTelemetryLayoutAfterResize(true);
-    wakeCanvas();
+    redrawCanvas();
 });
 
 if (typeof module !== 'undefined' && module.exports) {

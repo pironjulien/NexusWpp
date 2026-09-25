@@ -1,15 +1,29 @@
 # Changelog
 
-## 2026-09-25
+## 2026-09-25 — 1.0.16.0
 
-- Suspension réelle de WebView2 quand le bureau est recouvert ou la session
-  verrouillée; les animations CSS sont mises en pause avec le canvas.
-- Détection des fenêtres maximisées et juxtaposées sur tous les écrans,
-  en ignorant les fenêtres transparentes et celles d'autres bureaux virtuels.
-- Reprise du rendu et de la télémétrie dès que le bureau redevient visible,
-  avec protection contre une suspension asynchrone terminant après une reprise.
-- Tests de couverture multi-écran et mesure réelle CPU/GPU des transitions.
-- Version MSIX locale 1.0.15.0.
+- Conservation de la scène réelle du bureau pendant la pause : WebView2 reste visible, sans suspension Chromium ni reconstruction à la reprise.
+- Arrêt des animations Canvas/CSS, des transitions, de l'horloge et des nouvelles collectes sous couverture ; conservation des particules et des valeurs déjà affichées.
+- Synchronisation de l'état de pause au chargement et après récupération, premier affichage directement lisible, protection contre les collectes et callbacks devenus périmés.
+- Couverture opaque calculée sur tous les écrans, avec exclusion des fenêtres transparentes et des surfaces système ; un écran encore visible reste animé.
+- Réintégration des corrections distantes de septembre (hook souris dédié, collecte NVIDIA isolée, récupération WebView2 et affichage TV), absentes de l'essai local 1.0.15.0.
+- Source de version unique `VERSION` pour l'EXE, l'installeur et le MSIX. Le build de l'installeur conserve les packages MSIX existants.
+- Tests réels WebView2 de conservation de scène et harnais de captures du bureau avec chronologie, fenêtres maximisées/juxtaposées/plein écran, couverture partielle/transparente et transitions répétées.
+- La 1.0.15.0 locale, non publiée au Store, masquait WebView2 et provoquait une réapparition tardive : ses mesures CPU/GPU ne constituaient pas une validation visuelle.
+## 2026-09-10
+
+- Isolation du hook souris dans un thread dedie : les attentes de l'affichage WebView2 et de la detection plein ecran ne bloquent plus les mouvements de souris du bureau.
+- Publication atomique des coordonnees du panneau interactif depuis le thread d'affichage et retrait des acces WinForms, recherches de fenetres et ecritures de journal du callback souris.
+- Conservation des clics du selecteur d'alimentation, avec verification de leur transfert avant de les intercepter.
+- Passage du package MSIX en version `1.0.14.0` et de l'installateur autonome en version `1.0.12`.
+
+## 2026-09-04
+
+- Suppression des appels NVML dans le processus principal et collecte NVIDIA isolee via `nvidia-smi`, afin qu'un plantage du pilote ne puisse plus arreter NexusWpp.
+- Recuperation automatique de WebView2 et protection des acces asynchrones pendant sa fermeture.
+- Adaptation verticale du cockpit aux affichages 4K fortement mis a l'echelle, notamment les televiseurs 16:9, sans couper les cartes du bas.
+- Exclusion du panneau de saisie tactile Windows de la detection plein ecran pour eviter une suspension permanente de la telemetrie.
+- Passage du package Microsoft Store en version `1.0.13.0` et de l'installateur autonome en version `1.0.11`.
 
 ## 2026-07-23
 

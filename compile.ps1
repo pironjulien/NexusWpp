@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $binDir = Join-Path $PSScriptRoot "bin"
-$buildTempDir = Join-Path $env:TEMP "wv2_build_temp"
+$buildTempDir = Join-Path $PSScriptRoot "work\webview2-build"
 $nugetUrl = "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/1.0.2592.51/microsoft.web.webview2.1.0.2592.51.nupkg"
 $zipPath = Join-Path $buildTempDir "webview2.zip"
 $extractPath = Join-Path $buildTempDir "webview2_package"
@@ -55,6 +55,14 @@ Write-Host "Compiling DesktopHtmlHost.cs into nexuswpp.exe..." -ForegroundColor 
 $cscPath = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 $sourceFile = Join-Path $PSScriptRoot "DesktopHtmlHost.cs"
 $outputExe = Join-Path $binDir "nexuswpp.exe"
+$version = & (Join-Path $PSScriptRoot 'scripts\read_version.ps1')
+$versionSource = Join-Path $binDir 'ReleaseVersion.cs'
+@"
+using System.Reflection;
+[assembly: AssemblyVersion("$version")]
+[assembly: AssemblyFileVersion("$version")]
+namespace NexusWpp { internal static class ReleaseVersion { internal const string Value = "$version"; } }
+"@ | Set-Content -LiteralPath $versionSource -Encoding UTF8
 
 $compilerArgs = @(
     "/target:winexe",
@@ -64,6 +72,7 @@ $compilerArgs = @(
     "/reference:$(Join-Path $binDir Microsoft.Web.WebView2.WinForms.dll)",
     "/reference:System.Management.dll",
     $sourceFile,
+    $versionSource,
     (Join-Path $PSScriptRoot "DesktopVisibility.cs")
 )
 
