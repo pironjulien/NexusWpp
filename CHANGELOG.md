@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-28 — 1.0.26.0
+
+- Réseau reste exactement au-dessus du logo central, quel que soit le nombre de composants affichés ; les autres ronds du radar se répartissent symétriquement à rayon et espacement angulaire constants.
+- Vérification de l'axe, de la symétrie et de l'espacement dans la matrice WebView2, avec ajout de la configuration à six ronds.
+
 ## 2026-09-28 — 1.0.25.0
 
 - Détection des moteurs NPU « Neural », notamment Intel AI Boost, en complément de « Compute » : la charge et la mémoire partagée sont désormais lues sur le bon adaptateur.

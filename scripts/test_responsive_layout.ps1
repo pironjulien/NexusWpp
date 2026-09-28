@@ -46,7 +46,7 @@ foreach ($size in @(@(1000,900),@(1001,901),@(1280,900),@(1280,901),@(1920,1200)
 }
 $casesPath = Join-Path $output 'cases.json'
 foreach ($size in @(@(800,450),@(960,540),@(1280,720),@(1706,960),@(432,768),@(540,960),@(1000,900),@(3840,2160))) {
-    foreach ($hardware in @('full','integrated','npu-only','cpu-only')) {
+    foreach ($hardware in @('full','dual-gpu','integrated','npu-only','cpu-only')) {
         foreach ($plans in @(1,2,3,4)) {
             $cases.Add(@{ id="hardware-$($size[0])x$($size[1])-$hardware-$plans"; width=$size[0]; height=$size[1]; dpr=1.25; plans=$plans; hardware=$hardware; capture=($plans -eq 4 -and $hardware -eq 'full' -and $size[0] -in @(800,432)) })
         }
