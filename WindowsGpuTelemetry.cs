@@ -24,6 +24,11 @@ namespace DesktopHtmlHost
             }
             return totals.Count==0?0:(int)Math.Min(100,totals.Values.Max());
         }
+        internal static int BusiestNpuEngine(IEnumerable<GpuEngineReading> rows,string luid) {
+            // Intel exposes Neural engines; other NPU drivers expose Compute engines.
+            // Separate engines run concurrently, so retain the busiest, not their sum.
+            return Math.Max(BusiestEngine(rows,luid,"Neural"),BusiestEngine(rows,luid,"Compute"));
+        }
         // Two WMI snapshots for all adapters, replacing repeated per-adapter queries.
         internal static WindowsGpuSample[] Read(string igpu,string dgpu,string npu) {
             string[] luids={igpu,dgpu,npu};var result=new[]{new WindowsGpuSample(),new WindowsGpuSample(),new WindowsGpuSample()};
@@ -33,7 +38,7 @@ namespace DesktopHtmlHost
                     query.Options.Timeout=TimeSpan.FromSeconds(2);
                     foreach(ManagementObject row in query.Get()) rows.Add(new GpuEngineReading {Name=Convert.ToString(row["Name"]),Utilization=Convert.ToInt32(row["UtilizationPercentage"]??0)});
                 }
-                for(int i=0;i<3;i++) {result[i].Utilization=BusiestEngine(rows,luids[i],i==2?"Compute":"3D");result[i].Decode=BusiestEngine(rows,luids[i],"VideoDecode");}
+                for(int i=0;i<3;i++) {result[i].Utilization=i==2?BusiestNpuEngine(rows,luids[i]):BusiestEngine(rows,luids[i],"3D");result[i].Decode=BusiestEngine(rows,luids[i],"VideoDecode");}
             } catch(ManagementException) { } catch(System.Runtime.InteropServices.COMException) { }
             try {
                 using(var query=new ManagementObjectSearcher("SELECT Name,SharedUsage,DedicatedUsage FROM Win32_PerfFormattedData_GPUPerformanceCounters_GPUAdapterMemory")) {

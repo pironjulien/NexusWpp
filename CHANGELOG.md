@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-28 — 1.0.25.0
+
+- Détection des moteurs NPU « Neural », notamment Intel AI Boost, en complément de « Compute » : la charge et la mémoire partagée sont désormais lues sur le bon adaptateur.
+- Affichage d'un vrai 0 % au repos lorsque les compteurs répondent ; conservation de l'état indisponible en l'absence de mesure. Les moteurs distincts ne sont pas additionnés.
+
 ## 2026-09-25 — 1.0.24.0
 
 - Alertes « Charge élevée » et « Mémoire très utilisée » intégrées au titre sans chevauchement ; confirmation à 90 % pendant 5 secondes et retour à 80 % pendant 5 secondes, sans clignotement ni tremblement.

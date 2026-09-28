@@ -19,6 +19,21 @@ class FeatureRegression
             var engines=new[]{new GpuEngineReading{Name="pid_1_luid_A_phys_0_eng_0_engtype_3D",Utilization=30},new GpuEngineReading{Name="pid_2_luid_A_phys_0_eng_0_engtype_3D",Utilization=40},new GpuEngineReading{Name="pid_1_luid_A_phys_0_eng_1_engtype_3D",Utilization=50},new GpuEngineReading{Name="pid_1_luid_B_phys_0_eng_0_engtype_3D",Utilization=99}};
             Check(WindowsGpuTelemetry.BusiestEngine(engines,"luid_A","3D")==70,"GPU processes aggregate within each engine, separate engines and adapters stay distinct");
             Check(WindowsGpuTelemetry.BusiestEngine(engines,"","3D")==-1,"missing adapter is unavailable instead of idle");
+            var npuEngines=new[]{
+                new GpuEngineReading{Name="pid_1_luid_NPU_phys_0_eng_0_engtype_Neural",Utilization=30},
+                new GpuEngineReading{Name="pid_2_luid_NPU_phys_0_eng_0_engtype_Neural",Utilization=40},
+                new GpuEngineReading{Name="pid_1_luid_NPU_phys_0_eng_1_engtype_Neural",Utilization=50},
+                new GpuEngineReading{Name="pid_1_luid_NPU_phys_0_eng_2_engtype_Compute",Utilization=65},
+                new GpuEngineReading{Name="pid_1_luid_OTHER_phys_0_eng_0_engtype_Neural",Utilization=99}
+            };
+            Check(WindowsGpuTelemetry.BusiestNpuEngine(npuEngines,"luid_NPU")==70,"Neural processes aggregate per engine without adding distinct engines or adapters");
+            var computeOnly=new[]{new GpuEngineReading{Name="pid_1_luid_NPU_phys_0_eng_0_engtype_Compute",Utilization=42}};
+            Check(WindowsGpuTelemetry.BusiestNpuEngine(computeOnly,"luid_NPU")==42,"Compute-only NPU drivers remain supported");
+            var idleNpu=new[]{new GpuEngineReading{Name="pid_1_luid_NPU_phys_0_eng_0_engtype_nEuRaL",Utilization=0}};
+            Check(WindowsGpuTelemetry.BusiestNpuEngine(idleNpu,"luid_NPU")==0,"measured idle Neural engine is zero");
+            idleNpu[0].Utilization=18;
+            Check(WindowsGpuTelemetry.BusiestNpuEngine(idleNpu,"luid_NPU")==18,"Neural engine names are case insensitive");
+            Check(WindowsGpuTelemetry.BusiestNpuEngine(npuEngines,"")==-1,"missing NPU adapter remains unavailable");
             return 0;
         } catch(Exception ex) {Console.Error.WriteLine(ex);return 1;}
     }
