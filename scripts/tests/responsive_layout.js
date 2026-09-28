@@ -2,9 +2,9 @@
 window.layoutFixture = function (test) {
     window.layoutExpectedDpr = test.dpr;
     const full = test.hardware !== 'minimal';
-    const igpu = ['full', 'integrated'].includes(test.hardware);
+    const igpu = ['full', 'dual-gpu', 'integrated'].includes(test.hardware);
     const npu = ['full', 'npu-only'].includes(test.hardware);
-    const dgpu = ['full', 'minimal'].includes(test.hardware);
+    const dgpu = ['full', 'dual-gpu', 'minimal'].includes(test.hardware);
     window.layoutExpectedCards = 4 + Number(igpu) + Number(npu) + Number(dgpu);
     const planNames = ['Utilisation normale', 'Économies d’énergie', 'Performances élevées', 'Performances optimales'];
     const stats = {
@@ -93,6 +93,25 @@ window.inspectLayout = function () {
         if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > 2 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 2) issues.push(name(cards[i]) + ': overlaps ' + name(cards[j]));
     }
     const nodes = telemetryNodeList.filter(node => node.visible !== false);
+    const center = telemetryNodes.npu;
+    const orbitNodes = nodes.filter(node => node !== center);
+    if (orbitNodes.length !== window.layoutExpectedCards) issues.push('radar: missing hardware nodes');
+    const radius = getTelemetryLayout().orbitRadius;
+    const near = (a, b) => Math.abs(a - b) < 0.01;
+    if (!near(telemetryNodes.net.x, center.x) || !near(telemetryNodes.net.y, center.y - radius)) {
+        issues.push('radar: network is not directly above center');
+    }
+    const angles = orbitNodes.map(node => Math.atan2(node.y - center.y, node.x - center.x)).sort((a, b) => a - b);
+    for (let i = 0; i < angles.length; i++) {
+        const next = i + 1 < angles.length ? angles[i + 1] : angles[0] + 2 * Math.PI;
+        if (Math.abs(next - angles[i] - 2 * Math.PI / angles.length) > 0.0001) issues.push('radar: uneven angular spacing');
+    }
+    for (const node of orbitNodes) {
+        if (!near(Math.hypot(node.x - center.x, node.y - center.y), radius)) issues.push('radar: uneven orbit radius');
+        if (!orbitNodes.some(other => near(other.x, 2 * center.x - node.x) && near(other.y, node.y))) {
+            issues.push('radar: asymmetric node ' + node.label);
+        }
+    }
     for (const node of nodes) {
         const bounds = { left: node.x - node.radius - 12, top: node.y - node.radius - 12,
             right: node.x + node.radius + 12, bottom: node.y + node.radius + (node === telemetryNodes.npu ? 12 : 38) };
@@ -114,6 +133,8 @@ window.inspectLayout = function () {
             id: name(element), bounds: rect(element).toJSON(), rows: getComputedStyle(element).gridTemplateRows,
             fontSize: getComputedStyle(element).fontSize, padding: getComputedStyle(element).padding
         })) : [],
-        canvas: { width, height }, plans: document.querySelectorAll('.remote-btn').length,
+        canvas: { width, height }, radar: { center: { x: center.x, y: center.y }, radius,
+            nodes: orbitNodes.map(node => ({ label: node.label, x: node.x, y: node.y })) },
+        plans: document.querySelectorAll('.remote-btn').length,
         paused: runtimeSuspended && !canvasFrameTimer && !canvasAnimationFrame };
 };

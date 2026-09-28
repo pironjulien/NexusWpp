@@ -141,10 +141,10 @@ const TELEMETRY_ORBIT_SCALE = 0.38;
 const TELEMETRY_ORBIT_MAX = 320;
 const TELEMETRY_ORBIT_RING_INDEX = 3;
 const TELEMETRY_RADAR_RING_COUNT = 5;
-// Display order around the orbit; hidden nodes are skipped and the
-// remaining ones are redistributed evenly.
-const TELEMETRY_ORBIT_ORDER = ["cpu", "net", "ram", "ssd", "gpu", "igpu", "npuAccel"];
-const TELEMETRY_ORBIT_START_ANGLE = -150;
+// Start at the top with Network, then distribute visible nodes clockwise.
+// Keeping this anchor first preserves vertical symmetry for every node count.
+const TELEMETRY_ORBIT_ORDER = ["net", "ram", "ssd", "gpu", "igpu", "npuAccel", "cpu"];
+const TELEMETRY_ORBIT_START_ANGLE = -90;
 
 function resizeCanvas() {
     const rect = canvas.parentElement.getBoundingClientRect();
