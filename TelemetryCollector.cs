@@ -589,8 +589,9 @@ namespace DesktopHtmlHost
         {
             try
             {
-                using (var searcher = new ManagementObjectSearcher(@"root\cimv2", "SELECT Name FROM Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine WHERE Name LIKE '%engtype_compute%'"))
+                using (var searcher = new ManagementObjectSearcher(@"root\cimv2", "SELECT Name FROM Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine WHERE Name LIKE '%engtype_neural%' OR Name LIKE '%engtype_compute%'"))
                 {
+                    searcher.Options.Timeout = TimeSpan.FromSeconds(2);
                     foreach (ManagementObject obj in searcher.Get())
                     {
                         string name = Convert.ToString(obj["Name"] ?? "");
