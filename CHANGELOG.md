@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-12 — 1.0.32.0
+
+- Consommation du fond d'écran visible presque divisée par deux : les deux anneaux rotatifs du logo ne forcent plus 60 compositions par seconde ; ils tournent à 12 images/s, comme le reste du rendu, avec le même mouvement. Mesure A/B sur 20 s (processus hôte + WebView2) : environ 71 % d'un cœur avant, environ 39 % après (GPU WebView2 ≈ 45 % → ≈ 19 %, rendu ≈ 17 % → ≈ 9 %).
+
 ## 2026-10-12 — 1.0.31.0
 
 - Ping réseau plus universel : si 1.1.1.1 ne répond pas (réseau d'entreprise, ICMP public filtré), la mesure bascule sur 8.8.8.8 puis sur la passerelle locale, et mémorise la cible qui répond. L'indicateur n'est indisponible que si les trois échouent.
