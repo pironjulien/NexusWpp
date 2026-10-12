@@ -1377,6 +1377,7 @@ function updateDOM(stats) {
         telemetryNodes.gpu.value = stats.gpu.utilization;
         telemetryNodes.gpu.subLabel = stats.gpu.temp >= 0 ? `${stats.gpu.temp} °C` : `${dgpuVramUsedGb} Go`;
         
+        if (stats.disk.drive) telemetryNodes.ssd.label = `SSD ${stats.disk.drive}`;
         telemetryNodes.ssd.value = stats.disk.utilization; // Dynamic active % inside the center node map!
         telemetryNodes.ssd.subLabel = `${stats.disk.freeGb} Go libre`;
         
