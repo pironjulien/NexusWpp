@@ -33,6 +33,13 @@
     animation-play-state: paused !important;
 }
 
+/* First frames after a pause: show current values at once, no catch-up animation. */
+.runtime-resuming *,
+.runtime-resuming *::before,
+.runtime-resuming *::after {
+    transition: none !important;
+}
+
 /* Helper class for visually hidden content (A11y) */
 .sr-only {
     position: absolute;

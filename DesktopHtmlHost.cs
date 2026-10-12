@@ -265,6 +265,9 @@ namespace DesktopHtmlHost
         private bool telemetryCollectPending = false;
         private System.Windows.Forms.Timer fullscreenTimer;
         private bool runtimeSuspended = false;
+        // Suspend only after the desktop stays covered; resume on the first visible poll.
+        private const int SuspendConfirmTicks = 6;
+        private int coveredTicks;
         private bool sessionInactive = false;
         private int telemetryGeneration = 0;
         private string fullscreenReason = "";
@@ -961,7 +964,7 @@ namespace DesktopHtmlHost
             if (fullscreenTimer == null)
             {
                 fullscreenTimer = new System.Windows.Forms.Timer();
-                fullscreenTimer.Interval = 500;
+                fullscreenTimer.Interval = 250;
                 fullscreenTimer.Tick += FullscreenTimer_Tick;
             }
 
@@ -1061,7 +1064,9 @@ namespace DesktopHtmlHost
                 bool fullscreen = DesktopVisibility.ShouldSuspend(this.Handle, out reason);
                 if (sessionInactive) { fullscreen = true; reason = "session inactive"; }
                 fullscreenReason = reason;
-                SetRuntimeSuspended(fullscreen);
+                coveredTicks = fullscreen ? Math.Min(coveredTicks + 1, SuspendConfirmTicks) : 0;
+                bool confirmed = sessionInactive || (fullscreen && (runtimeSuspended || coveredTicks >= SuspendConfirmTicks));
+                SetRuntimeSuspended(confirmed);
             }
             catch (Exception ex)
             {
@@ -1082,7 +1087,7 @@ namespace DesktopHtmlHost
             }
 
             ApplyWebViewRuntimeState();
-            Program.LogDebug(suspended ? "Runtime suspended: " + fullscreenReason + "." : "Runtime resumed: desktop visible.");
+            Program.LogDebug(suspended ? "Runtime suspended: " + fullscreenReason + "." : "Runtime resumed: " + fullscreenReason + ".");
         }
 
         private void ApplyWebViewRuntimeState()

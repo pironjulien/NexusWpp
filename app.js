@@ -660,10 +660,15 @@ function setRuntimeSuspended(suspended) {
             if (animation.playState === "paused") animation.play();
         });
         pausedTransitions.clear();
+        // Snap gauges to fresh values instead of animating from stale ones.
+        document.body.classList.add("runtime-resuming");
+        clearTimeout(resumeSnapTimer);
+        resumeSnapTimer = setTimeout(endResumeSnap, 700);
         updateClock();
         clockTimer = setInterval(updateClock, 1000);
         lastPhysicsTime = 0;
         needsRender = true;
+        updatePhysics(0, true); // paint the scene now, not on the next timer/rAF
         wakeCanvas();
         try {
             if (window.chrome && window.chrome.webview) {
@@ -671,6 +676,13 @@ function setRuntimeSuspended(suspended) {
             }
         } catch (e) {}
     }
+}
+
+let resumeSnapTimer = 0;
+function endResumeSnap() {
+    clearTimeout(resumeSnapTimer);
+    resumeSnapTimer = 0;
+    document.body.classList.remove("runtime-resuming");
 }
 
 function pauseRunningTransitions() {
@@ -1643,7 +1655,10 @@ function connectStream() {
                     }
                     return;
                 }
-                if (!runtimeSuspended) updateDOM(stats);
+                if (!runtimeSuspended) {
+                    updateDOM(stats);
+                    if (resumeSnapTimer) requestAnimationFrame(() => requestAnimationFrame(endResumeSnap));
+                }
             } catch (error) {
                 console.error("WebView2 message parse error:", error);
             }
