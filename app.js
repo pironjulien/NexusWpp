@@ -664,6 +664,9 @@ function setRuntimeSuspended(suspended) {
         document.body.classList.add("runtime-resuming");
         clearTimeout(resumeSnapTimer);
         resumeSnapTimer = setTimeout(endResumeSnap, 700);
+        // The pause itself is not a telemetry outage: give the first fresh sample
+        // the normal window before declaring the last reading expired.
+        if (!telemetryExpired) lastTelemetryReceived = performance.now();
         updateClock();
         clockTimer = setInterval(updateClock, 1000);
         lastPhysicsTime = 0;

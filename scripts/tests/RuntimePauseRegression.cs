@@ -142,6 +142,14 @@ class RuntimePauseRegression : Form
             await view.CoreWebView2.ExecuteScriptAsync(File.ReadAllText(Path.Combine(project,"scripts","tests","responsive_layout.js")));
             await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal'});lastTelemetryReceived=performance.now()-7000;refreshTelemetryFreshness(true);");
             await Check("[...document.querySelectorAll('.gauge-value')].every(v=>v.textContent==='—') && document.querySelectorAll('.sensor-stale').length===7", "expired stream clears old values on every card");
+
+            // A long pause is not a telemetry outage: resume keeps the readings until the grace window ends.
+            await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal'});telemetryExpired=false;lastTelemetryReceived=performance.now()-3600000;");
+            Control(true);
+            await Task.Delay(150);
+            Control(false);
+            await Task.Delay(200);
+            await Check("document.querySelectorAll('.sensor-stale').length===0 && ![...document.querySelectorAll('.gauge-value')].some(v=>v.textContent==='—')", "resume after a long pause does not mark readings expired");
             await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal'});");
             await Check("document.querySelectorAll('.sensor-stale').length===0 && [...document.querySelectorAll('.critical-alert')].every(v=>v.textContent==='')", "fresh stream clears expired badges including disk and network");
             await Check("gpuVal.querySelector('span').textContent==='%' && gpuVal.textContent==='73%'", "recovered gauge restores both real value and unit");
