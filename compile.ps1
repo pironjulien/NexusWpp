@@ -67,6 +67,7 @@ namespace NexusWpp { internal static class ReleaseVersion { internal const strin
 
 $compilerArgs = @(
     "/target:winexe",
+    "/platform:x64",
     "/out:$outputExe",
     "/win32icon:$(Join-Path $PSScriptRoot "icon.ico")",
     "/reference:$(Join-Path $binDir Microsoft.Web.WebView2.Core.dll)",

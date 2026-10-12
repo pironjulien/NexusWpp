@@ -265,9 +265,10 @@ namespace DesktopHtmlHost
         private bool telemetryCollectPending = false;
         private System.Windows.Forms.Timer fullscreenTimer;
         private bool runtimeSuspended = false;
-        // Suspend only after the desktop stays covered; resume on the first visible poll.
-        private const int SuspendConfirmTicks = 6;
-        private int coveredTicks;
+        // Suspend only after the desktop stays covered this long; resume on the first visible check.
+        private const int SuspendConfirmMs = 1500;
+        private int coveredSince;
+        private bool coveredPending;
         private WindowChangeWatcher windowWatcher;
         private System.Windows.Forms.Timer windowChangeTimer;
         private bool sessionInactive = false;
@@ -746,7 +747,7 @@ namespace DesktopHtmlHost
             if (searchTimer != null) searchTimer.Stop();
             if (telemetryTimer != null) telemetryTimer.Stop();
             if (fullscreenTimer != null) fullscreenTimer.Stop();
-            StopWindowWatcher();
+            DisposeWindowWatcher();
             StopMouseHook();
 
             if (webView != null)
@@ -934,6 +935,9 @@ namespace DesktopHtmlHost
 
                 Program.LogDebug("WebView2 Runtime failed to initialize: " + ex.ToString());
                 BeginCleanShutdown();
+                // Without WebView2 the form would cover the desktop in grey and hold the
+                // single-instance mutex, blocking any relaunch: exit instead.
+                try { BeginInvoke((MethodInvoker)Close); } catch (InvalidOperationException) { Application.Exit(); }
             }
             finally
             {
@@ -972,29 +976,38 @@ namespace DesktopHtmlHost
             }
 
             fullscreenTimer.Start();
-            StartWindowWatcher();
-            if (runtimeSuspended) ApplyWebViewRuntimeState();
+            if (runtimeSuspended) { StartWindowWatcher(); ApplyWebViewRuntimeState(); }
         }
 
-        // While covered, any window change re-checks the desktop within ~40 ms
+        // While covered, a top-level window change re-checks the desktop within ~60 ms
         // rather than waiting for the 250 ms poll.
         private void StartWindowWatcher()
         {
-            if (windowWatcher != null) return;
-            windowChangeTimer = new System.Windows.Forms.Timer { Interval = 40 };
-            windowChangeTimer.Tick += delegate
+            if (windowWatcher != null || isClosing) return;
+            if (windowChangeTimer == null)
             {
-                windowChangeTimer.Stop();
-                FullscreenTimer_Tick(null, null);
-            };
-            windowWatcher = new WindowChangeWatcher(
-                delegate { if (!windowChangeTimer.Enabled && !isClosing) windowChangeTimer.Start(); },
-                delegate { return runtimeSuspended && !isClosing; });
+                windowChangeTimer = new System.Windows.Forms.Timer { Interval = 60 };
+                windowChangeTimer.Tick += delegate
+                {
+                    windowChangeTimer.Stop();
+                    FullscreenTimer_Tick(null, null);
+                };
+            }
+            windowWatcher = new WindowChangeWatcher(delegate
+            {
+                if (windowChangeTimer != null && !windowChangeTimer.Enabled && !isClosing) windowChangeTimer.Start();
+            });
         }
 
         private void StopWindowWatcher()
         {
             if (windowWatcher != null) { windowWatcher.Dispose(); windowWatcher = null; }
+            if (windowChangeTimer != null) windowChangeTimer.Stop();
+        }
+
+        private void DisposeWindowWatcher()
+        {
+            StopWindowWatcher();
             if (windowChangeTimer != null) { windowChangeTimer.Dispose(); windowChangeTimer = null; }
         }
 
@@ -1080,6 +1093,7 @@ namespace DesktopHtmlHost
 
         private void FullscreenTimer_Tick(object sender, EventArgs e)
         {
+            if (isClosing || IsDisposed) return;
             try
             {
                 Exception hookError = Interlocked.Exchange(ref mouseHookError, null);
@@ -1090,8 +1104,11 @@ namespace DesktopHtmlHost
                 bool fullscreen = DesktopVisibility.ShouldSuspend(this.Handle, out reason);
                 if (sessionInactive) { fullscreen = true; reason = "session inactive"; }
                 fullscreenReason = reason;
-                coveredTicks = fullscreen ? Math.Min(coveredTicks + 1, SuspendConfirmTicks) : 0;
-                bool confirmed = sessionInactive || (fullscreen && (runtimeSuspended || coveredTicks >= SuspendConfirmTicks));
+                // Elapsed time, not call count: page requests and session events also run this check.
+                if (!fullscreen) coveredPending = false;
+                else if (!coveredPending) { coveredPending = true; coveredSince = Environment.TickCount; }
+                bool confirmed = sessionInactive || (fullscreen &&
+                    (runtimeSuspended || unchecked(Environment.TickCount - coveredSince) >= SuspendConfirmMs));
                 SetRuntimeSuspended(confirmed);
             }
             catch (Exception ex)
@@ -1111,6 +1128,8 @@ namespace DesktopHtmlHost
                 if (suspended) telemetryTimer.Stop();
                 else telemetryTimer.Start();
             }
+            if (suspended) StartWindowWatcher();
+            else StopWindowWatcher();
 
             ApplyWebViewRuntimeState();
             Program.LogDebug(suspended ? "Runtime suspended: " + fullscreenReason + "." : "Runtime resumed: " + fullscreenReason + ".");

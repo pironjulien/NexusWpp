@@ -39,7 +39,7 @@ namespace DesktopHtmlHost
                     foreach(ManagementObject row in query.Get()) rows.Add(new GpuEngineReading {Name=Convert.ToString(row["Name"]),Utilization=Convert.ToInt32(row["UtilizationPercentage"]??0)});
                 }
                 for(int i=0;i<3;i++) {result[i].Utilization=i==2?BusiestNpuEngine(rows,luids[i]):BusiestEngine(rows,luids[i],"3D");result[i].Decode=BusiestEngine(rows,luids[i],"VideoDecode");}
-            } catch(ManagementException) { } catch(System.Runtime.InteropServices.COMException) { }
+            } catch(Exception) { }
             try {
                 using(var query=new ManagementObjectSearcher("SELECT Name,SharedUsage,DedicatedUsage FROM Win32_PerfFormattedData_GPUPerformanceCounters_GPUAdapterMemory")) {
                     query.Options.Timeout=TimeSpan.FromSeconds(2);
@@ -51,7 +51,7 @@ namespace DesktopHtmlHost
                         }
                     }
                 }
-            } catch(ManagementException) { } catch(System.Runtime.InteropServices.COMException) { }
+            } catch(Exception) { }
             return result;
         }
     }

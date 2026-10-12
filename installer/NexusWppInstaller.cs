@@ -6,6 +6,7 @@ using System.IO.Compression;
 using System.Management;
 using System.Net;
 using System.Reflection;
+using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Threading;
 using System.Windows.Forms;
@@ -116,6 +117,7 @@ namespace NexusWppInstaller
             progress.Report(12, "Arret de l'ancienne version...");
             StopRunningWallpaper();
             Directory.CreateDirectory(InstallDir);
+            SecureInstallDir();
 
             progress.Report(24, "Verification du runtime WebView2...");
             if (!IsWebView2RuntimeInstalled())
@@ -214,6 +216,24 @@ namespace NexusWppInstaller
             }
         }
 
+        // C:\ grants "Modify" to Authenticated Users and children inherit it. The folder
+        // holds an exe run at every logon (HKLM Run) and the elevated uninstaller, so only
+        // administrators and SYSTEM may write to it.
+        private static void SecureInstallDir()
+        {
+            var security = new DirectorySecurity();
+            security.SetAccessRuleProtection(true, false);
+            const InheritanceFlags inherit = InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit;
+            security.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null),
+                FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
+            security.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null),
+                FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
+            security.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null),
+                FileSystemRights.ReadAndExecute, inherit, PropagationFlags.None, AccessControlType.Allow));
+            Directory.SetAccessControl(InstallDir, security);
+            Log("Install directory ACL restricted to administrators and SYSTEM.");
+        }
+
         private static void KillOwnedWebView2Processes()
         {
             try
@@ -224,8 +244,8 @@ namespace NexusWppInstaller
                     {
                         string commandLine = Convert.ToString(item["CommandLine"]);
                         if (commandLine == null) continue;
-                        if (commandLine.IndexOf("nexuswpp", StringComparison.OrdinalIgnoreCase) < 0 &&
-                            commandLine.IndexOf("EBWebView", StringComparison.OrdinalIgnoreCase) < 0)
+                        if (commandLine.IndexOf("--webview-exe-name=nexuswpp.exe", StringComparison.OrdinalIgnoreCase) < 0 &&
+                            commandLine.IndexOf("\\nexuswpp\\EBWebView", StringComparison.OrdinalIgnoreCase) < 0)
                         {
                             continue;
                         }

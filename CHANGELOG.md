@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-10-12 — 1.0.33.0
+
+Revue complète du code, corrections vérifiées :
+
+- Disque : l'activité réelle et le temps de réponse étaient toujours à 0 (compteur WMI lu avec le mauvais type, erreur masquée). Ils sont désormais calculés à partir des compteurs bruts du disque système.
+- Ping : les cibles internet (1.1.1.1 puis 8.8.8.8) sont toujours essayées avant la passerelle ; une latence mesurée jusqu'au routeur est affichée « (routeur) » et n'est plus présentée comme une latence internet. 0 ms est une mesure valide. Un ping sans réponse ne peut plus bloquer la mesure.
+- Pause : les hooks d'événements Windows n'existent plus que pendant la pause (ils réveillaient l'hôte à chaque événement système même fond d'écran visible), filtrés aux fenêtres de premier niveau ; la confirmation de 1,5 s est mesurée en temps réel ; cache des noms de processus limité à 10 s.
+- Démarrage : si WebView2 ne peut pas démarrer, l'application se ferme au lieu de laisser un bureau gris et de bloquer toute relance.
+- Robustesse matérielle : lectures WMI tolérantes aux valeurs absentes (machines virtuelles, ARM), VRAM bornée à 100 %, volume de taille nulle, erreurs WMI GPU contenues, `powercfg` bloqué interrompu après 3 s.
+- Interface : les jauges ne rejouent plus d'animation depuis d'anciennes valeurs même si la première mesure tarde ; particules sans flash opaque ; barres remises à zéro quand les données expirent ; alertes accessibles réécrites seulement quand elles changent ; un ancien résultat de changement de mode d'alimentation n'annule plus un clic plus récent.
+- Installation EXE : le dossier `C:
+exuswpp` n'est plus modifiable par les comptes standard ; l'installation n'arrête plus les processus WebView2 d'autres applications ; exécutable compilé en x64 explicite.
+- Test de reprise visuelle : option `-DevBuild` pour mesurer la version de développement.
+
 ## 2026-10-12 — 1.0.32.0
 
 - Consommation du fond d'écran visible presque divisée par deux : les deux anneaux rotatifs du logo ne forcent plus 60 compositions par seconde ; ils tournent à 12 images/s, comme le reste du rendu, avec le même mouvement. Mesure A/B sur 20 s (processus hôte + WebView2) : environ 71 % d'un cœur avant, environ 39 % après (GPU WebView2 ≈ 45 % → ≈ 19 %, rendu ≈ 17 % → ≈ 9 %).

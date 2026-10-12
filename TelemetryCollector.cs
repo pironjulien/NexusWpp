@@ -61,9 +61,11 @@ namespace DesktopHtmlHost
         private long prevRxBytes = 0;
         private long prevTxBytes = 0;
         private DateTime prevNetTime = DateTime.MinValue;
-        private int pingTime = -1;
+        private volatile int pingTime = -1;
+        private volatile bool pingViaGateway;
         private DateTime lastPingTime = DateTime.MinValue;
-        private bool isPingPending = false;
+        private volatile bool isPingPending = false;
+        private DateTime pingStartedAt = DateTime.MinValue;
 
         // Process lists and cached top processes
         private string cachedTopProcessesJson = "[]";
@@ -216,13 +218,13 @@ namespace DesktopHtmlHost
                     {
                         object cpuNameVal = obj["Name"];
                         if (cpuNameVal != null) CpuInfo = cpuNameVal.ToString().Trim();
-                        uint l2 = (uint)(obj["L2CacheSize"] ?? 0);
-                        uint l3 = (uint)(obj["L3CacheSize"] ?? 0);
+                        uint l2 = Convert.ToUInt32(obj["L2CacheSize"] ?? 0);
+                        uint l3 = Convert.ToUInt32(obj["L3CacheSize"] ?? 0);
                         CpuL2Cache = string.Format("{0:F1} Mo", l2 / 1024.0);
                         CpuL3Cache = string.Format("{0:F1} Mo", l3 / 1024.0);
                         CpuCores = Convert.ToInt32(obj["NumberOfCores"] ?? CpuCores);
                         CpuLogical = Convert.ToInt32(obj["NumberOfLogicalProcessors"] ?? CpuLogical);
-                        uint maxClock = (uint)(obj["MaxClockSpeed"] ?? 0);
+                        uint maxClock = Convert.ToUInt32(obj["MaxClockSpeed"] ?? 0);
                         CpuBaseSpeed = (maxClock / 1000.0).ToString("F2", CultureInfo.InvariantCulture);
                         break;
                     }
@@ -237,8 +239,8 @@ namespace DesktopHtmlHost
                     int modules = 0;
                     foreach (ManagementObject obj in searcher.Get())
                     {
-                        totalCapacity += (ulong)(obj["Capacity"] ?? 0);
-                        speed = (uint)(obj["Speed"] ?? speed);
+                        totalCapacity += Convert.ToUInt64(obj["Capacity"] ?? 0);
+                        speed = Convert.ToUInt32(obj["Speed"] ?? speed);
                         modules++;
                         if (string.IsNullOrEmpty(RamType))
                         {
@@ -661,7 +663,15 @@ namespace DesktopHtmlHost
                 };
                 using (var p = Process.Start(startInfo))
                 {
-                    string output = p.StandardOutput.ReadToEnd();
+                    // A stuck powercfg must not block the caller (UI thread on plan changes).
+                    var read = p.StandardOutput.ReadToEndAsync();
+                    if (!read.Wait(3000))
+                    {
+                        try { p.Kill(); } catch {}
+                        Program.LogDebug("powercfg /list timed out.");
+                        return;
+                    }
+                    string output = read.Result;
                     p.WaitForExit(2000);
                     string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
                     foreach (var line in lines)
@@ -847,21 +857,75 @@ namespace DesktopHtmlHost
             catch {}
         }
 
+        // Raw counters, differenced between samples. The formatted class reports
+        // PercentDiskTime as UInt64 and latency in whole seconds (always 0).
+        private bool hasDiskSample;
+        private ulong prevDiskRead, prevDiskWrite, prevDiskBusy, prevDiskPerfTime, prevDiskSys100Ns;
+        private uint prevDiskLatency, prevDiskTransfers;
+
+        private void SampleDisk(ref long readPerSec, ref long writePerSec, ref long busyPercent, ref double latencySec)
+        {
+            try
+            {
+                using (var searcher = new ManagementObjectSearcher("SELECT DiskReadBytesPersec, DiskWriteBytesPersec, PercentDiskTime, AvgDisksecPerTransfer, AvgDisksecPerTransfer_Base, Timestamp_PerfTime, Frequency_PerfTime, Timestamp_Sys100NS FROM Win32_PerfRawData_PerfDisk_LogicalDisk WHERE Name = '" + SystemDrive + "'"))
+                {
+                    foreach (ManagementObject obj in searcher.Get())
+                    {
+                        ulong read = Convert.ToUInt64(obj["DiskReadBytesPersec"] ?? 0UL);
+                        ulong write = Convert.ToUInt64(obj["DiskWriteBytesPersec"] ?? 0UL);
+                        ulong busy = Convert.ToUInt64(obj["PercentDiskTime"] ?? 0UL);
+                        uint latency = Convert.ToUInt32(obj["AvgDisksecPerTransfer"] ?? 0U);
+                        uint transfers = Convert.ToUInt32(obj["AvgDisksecPerTransfer_Base"] ?? 0U);
+                        ulong perfTime = Convert.ToUInt64(obj["Timestamp_PerfTime"] ?? 0UL);
+                        ulong frequency = Convert.ToUInt64(obj["Frequency_PerfTime"] ?? 0UL);
+                        ulong sys100Ns = Convert.ToUInt64(obj["Timestamp_Sys100NS"] ?? 0UL);
+
+                        if (hasDiskSample && frequency > 0 && perfTime > prevDiskPerfTime && sys100Ns > prevDiskSys100Ns &&
+                            read >= prevDiskRead && write >= prevDiskWrite && busy >= prevDiskBusy)
+                        {
+                            double seconds = (perfTime - prevDiskPerfTime) / (double)frequency;
+                            readPerSec = (long)((read - prevDiskRead) / seconds);
+                            writePerSec = (long)((write - prevDiskWrite) / seconds);
+                            double busyPct = (busy - prevDiskBusy) * 100.0 / (sys100Ns - prevDiskSys100Ns);
+                            busyPercent = (long)Math.Round(Math.Max(0.0, Math.Min(100.0, busyPct)));
+                            uint transferDelta = unchecked(transfers - prevDiskTransfers);
+                            if (transferDelta > 0)
+                                latencySec = unchecked(latency - prevDiskLatency) / (double)frequency / transferDelta;
+                        }
+
+                        prevDiskRead = read; prevDiskWrite = write; prevDiskBusy = busy;
+                        prevDiskLatency = latency; prevDiskTransfers = transfers;
+                        prevDiskPerfTime = perfTime; prevDiskSys100Ns = sys100Ns;
+                        hasDiskSample = true;
+                        break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                hasDiskSample = false;
+                Program.LogDebug("Disk counters error: " + ex.Message);
+            }
+        }
+
         private string lastPingTarget;
 
         private void UpdatePing()
         {
-            if (isPingPending) return;
+            // A lost PingCompleted callback must not freeze the reading forever.
+            if (isPingPending && (DateTime.Now - pingStartedAt).TotalSeconds < 10.0) return;
             if (lastPingTime != DateTime.MinValue && (DateTime.Now - lastPingTime).TotalSeconds < 5.0) return;
 
             lastPingTime = DateTime.Now;
             isPingPending = true;
-            // The last target that answered goes first; others are tried only after a failure.
+            pingStartedAt = DateTime.Now;
+            // Internet targets always come first (the last one that answered leads); the
+            // gateway is a labelled last resort so LAN latency never poses as internet latency.
             var targets = new List<string> { "1.1.1.1", "8.8.8.8" };
+            if (lastPingTarget != null && targets.Remove(lastPingTarget)) targets.Insert(0, lastPingTarget);
             string gateway = GetDefaultGateway();
             if (gateway != null) targets.Add(gateway);
-            if (lastPingTarget != null && targets.Remove(lastPingTarget)) targets.Insert(0, lastPingTarget);
-            PingNext(targets, 0);
+            PingNext(targets, 0, gateway);
         }
 
         // Corporate and captive networks often drop public ICMP; the router still answers.
@@ -871,7 +935,8 @@ namespace DesktopHtmlHost
             {
                 foreach (NetworkInterface nic in NetworkInterface.GetAllNetworkInterfaces())
                 {
-                    if (nic.OperationalStatus != OperationalStatus.Up || nic.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+                    if (nic.OperationalStatus != OperationalStatus.Up || nic.NetworkInterfaceType == NetworkInterfaceType.Loopback ||
+                        IsVirtualOrTunnelAdapter(nic)) continue;
                     foreach (GatewayIPAddressInformation gw in nic.GetIPProperties().GatewayAddresses)
                     {
                         if (gw.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !gw.Address.Equals(System.Net.IPAddress.Any))
@@ -883,7 +948,7 @@ namespace DesktopHtmlHost
             return null;
         }
 
-        private void PingNext(List<string> targets, int index)
+        private void PingNext(List<string> targets, int index, string gateway)
         {
             try
             {
@@ -894,13 +959,15 @@ namespace DesktopHtmlHost
                     try { ((Ping)s).Dispose(); } catch {}
                     if (e.Reply != null && e.Reply.Status == IPStatus.Success)
                     {
-                        lastPingTarget = target;
+                        bool viaGateway = target == gateway;
+                        if (!viaGateway) lastPingTarget = target;
+                        pingViaGateway = viaGateway;
                         pingTime = (int)e.Reply.RoundtripTime;
                         isPingPending = false;
                     }
                     else if (index + 1 < targets.Count)
                     {
-                        PingNext(targets, index + 1);
+                        PingNext(targets, index + 1, gateway);
                     }
                     else
                     {
@@ -912,7 +979,7 @@ namespace DesktopHtmlHost
             }
             catch
             {
-                if (index + 1 < targets.Count) PingNext(targets, index + 1);
+                if (index + 1 < targets.Count) PingNext(targets, index + 1, gateway);
                 else isPingPending = false;
             }
         }
@@ -1158,7 +1225,8 @@ namespace DesktopHtmlHost
                 var drive = new DriveInfo(SystemDrive);
                 diskFreeGb = drive.AvailableFreeSpace / (1024.0 * 1024.0 * 1024.0);
                 diskTotalGb = drive.TotalSize / (1024.0 * 1024.0 * 1024.0);
-                diskStoragePercent = (int)Math.Round((1.0 - (double)drive.AvailableFreeSpace / drive.TotalSize) * 100);
+                if (drive.TotalSize > 0)
+                    diskStoragePercent = (int)Math.Round((1.0 - (double)drive.AvailableFreeSpace / drive.TotalSize) * 100);
             }
             catch {}
 
@@ -1180,14 +1248,14 @@ namespace DesktopHtmlHost
                     {
                         foreach (ManagementObject obj in searcher.Get())
                         {
-                            ulong cache = (ulong)(obj["CacheBytes"] ?? 0);
-                            ulong standbyNormal = (ulong)(obj["StandbyCacheNormalPriorityBytes"] ?? 0);
-                            ulong standbyReserve = (ulong)(obj["StandbyCacheReserveBytes"] ?? 0);
-                            ulong standbyCore = (ulong)(obj["StandbyCacheCoreBytes"] ?? 0);
+                            ulong cache = Convert.ToUInt64(obj["CacheBytes"] ?? 0);
+                            ulong standbyNormal = Convert.ToUInt64(obj["StandbyCacheNormalPriorityBytes"] ?? 0);
+                            ulong standbyReserve = Convert.ToUInt64(obj["StandbyCacheReserveBytes"] ?? 0);
+                            ulong standbyCore = Convert.ToUInt64(obj["StandbyCacheCoreBytes"] ?? 0);
                             ramCachedBytes = (long)(cache + standbyNormal + standbyReserve + standbyCore);
-                            ramPoolPagedBytes = (long)((ulong)(obj["PoolPagedBytes"] ?? 0));
-                            ramPoolNonPagedBytes = (long)((ulong)(obj["PoolNonpagedBytes"] ?? 0));
-                            ramActivityVal = (long)((uint)(obj["PageFaultsPersec"] ?? 0));
+                            ramPoolPagedBytes = (long)(Convert.ToUInt64(obj["PoolPagedBytes"] ?? 0));
+                            ramPoolNonPagedBytes = (long)(Convert.ToUInt64(obj["PoolNonpagedBytes"] ?? 0));
+                            ramActivityVal = (long)(Convert.ToUInt32(obj["PageFaultsPersec"] ?? 0));
                             cachedRamCachedBytes = ramCachedBytes;
                             cachedRamPoolPagedBytes = ramPoolPagedBytes;
                             cachedRamPoolNonPagedBytes = ramPoolNonPagedBytes;
@@ -1247,21 +1315,7 @@ namespace DesktopHtmlHost
             long diskWriteSec = 0;
             long diskActiveTime = 0;
             double diskResponse = 0.0;
-            try
-            {
-                using (var searcher = new ManagementObjectSearcher("SELECT DiskReadBytesPersec, DiskWriteBytesPersec, PercentDiskTime, AvgDiskSecPerTransfer FROM Win32_PerfFormattedData_PerfDisk_LogicalDisk WHERE Name = '" + SystemDrive + "'"))
-                {
-                    foreach (ManagementObject obj in searcher.Get())
-                    {
-                        diskReadSec = (long)((ulong)(obj["DiskReadBytesPersec"] ?? 0));
-                        diskWriteSec = (long)((ulong)(obj["DiskWriteBytesPersec"] ?? 0));
-                        diskActiveTime = (long)((uint)(obj["PercentDiskTime"] ?? 0));
-                        diskResponse = Convert.ToDouble(obj["AvgDiskSecPerTransfer"] ?? 0.0);
-                        break;
-                    }
-                }
-            }
-            catch {}
+            SampleDisk(ref diskReadSec, ref diskWriteSec, ref diskActiveTime, ref diskResponse);
 
             double diskReadMbNum = diskReadSec / (1024.0 * 1024.0);
             double diskWriteMbNum = diskWriteSec / (1024.0 * 1024.0);
@@ -1373,7 +1427,7 @@ namespace DesktopHtmlHost
                 NpuDetected ? "true" : "false", npuUtil, windowsGpuFresh && npuMemBytes >= 0 ? npuMemBytes / (1024 * 1024) : -1, npuTotalMb, npuTotalMb / 1024, JsonString(NpuName));
 
             // vram
-            int vramPct = vramTotal > 0 ? (int)Math.Round((double)vramUsed / vramTotal * 100) : 0;
+            int vramPct = vramTotal > 0 ? (int)Math.Round(Math.Min(100.0, (double)vramUsed / vramTotal * 100)) : 0;
             sb.AppendFormat(CultureInfo.InvariantCulture, "\"vram\":{{\"utilization\":{0},\"usedMb\":{1},\"totalMb\":{2},\"totalGb\":{3}}},",
                 vramFresh ? vramPct : -1, vramFresh ? (long)(vramUsed / (1024 * 1024)) : -1, vramTotal / (1024 * 1024), vramTotal / 1024 / 1024 / 1024);
 
@@ -1405,8 +1459,8 @@ namespace DesktopHtmlHost
                 batteryPresent ? "true" : "false", batteryPercent, acLine ? "true" : "false");
 
             // global/uptime/ping (real Windows uptime, not the process lifetime)
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"uptime\":{0},\"ping\":{1},\"totalProcesses\":{2},\"motherboard\":{3},",
-                Win32.GetTickCount64() / 1000, pingTime, processesCount, JsonString(MotherboardInfo));
+            sb.AppendFormat(CultureInfo.InvariantCulture, "\"uptime\":{0},\"ping\":{1},\"pingVia\":{4},\"totalProcesses\":{2},\"motherboard\":{3},",
+                Win32.GetTickCount64() / 1000, pingTime, processesCount, JsonString(MotherboardInfo), pingViaGateway ? "\"gateway\"" : "\"internet\"");
 
             // topProcesses
             string topProcessesStr;

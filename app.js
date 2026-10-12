@@ -100,6 +100,8 @@ let lastRemoteBoundsMsg = "";
 let runtimeSuspended = false;
 let hostRuntimeSuspended = false;
 const pausedTransitions = new Set();
+let resumeSnapTimer = 0;
+let resumeGeneration = 0;
 const lastPacketNodeTime = {};
 const lastTelemetryNodeValues = {};
 const MAX_DATA_PACKETS = 72;
@@ -638,6 +640,7 @@ function setRuntimeSuspended(suspended) {
     if (runtimeSuspended === suspended) return;
     runtimeSuspended = suspended;
     if (suspended) {
+        endResumeSnap();
         loadAlerts.forEach(alert => alert.reset());
         pauseRunningTransitions();
         mouse.grabbedNode = null;
@@ -661,9 +664,10 @@ function setRuntimeSuspended(suspended) {
         });
         pausedTransitions.clear();
         // Snap gauges to fresh values instead of animating from stale ones.
+        resumeGeneration++;
         document.body.classList.add("runtime-resuming");
         clearTimeout(resumeSnapTimer);
-        resumeSnapTimer = setTimeout(endResumeSnap, 700);
+        resumeSnapTimer = setTimeout(endResumeSnap, 3000);
         // The pause itself is not a telemetry outage: give the first fresh sample
         // the normal window before declaring the last reading expired.
         if (!telemetryExpired) lastTelemetryReceived = performance.now();
@@ -681,7 +685,6 @@ function setRuntimeSuspended(suspended) {
     }
 }
 
-let resumeSnapTimer = 0;
 function endResumeSnap() {
     clearTimeout(resumeSnapTimer);
     resumeSnapTimer = 0;
@@ -934,7 +937,7 @@ function updatePhysics(timestamp, renderOnly = false) {
         }
         
         ctx.save();
-        const alpha = p.life / p.maxLife;
+        const alpha = Math.max(0, p.life / p.maxLife);
         ctx.fillStyle = p.color;
         
         // Draw simulated glow: larger circle first (extremely fast!)
@@ -1244,7 +1247,10 @@ function updateDOM(stats) {
         }
     }
     if (netPingSub) {
-        netPingSub.textContent = stats.ping > 0 ? `${stats.ping} ms` : "-- ms";
+        netPingSub.textContent = stats.ping >= 0
+            ? `${stats.ping} ms${stats.pingVia === "gateway" ? " (routeur)" : ""}` : "-- ms";
+        netPingSub.title = stats.pingVia === "gateway" && stats.ping >= 0
+            ? "Internet ne répond pas au ping : latence mesurée jusqu'au routeur local." : "";
     }
 
     // 5. Update iGPU VRAM Sub-metrics
@@ -1585,10 +1591,17 @@ function updateLoadAlerts(stats, now) {
         const metric = stats[section];
         const high = loadAlerts.get(section).update(metric && metric.detected !== false ? metric.utilization : null, now);
         card.classList.toggle('high-load', high);
-        const badge = card.querySelector('.critical-alert');
-        badge.textContent = high ? (section === 'ram' ? 'Mémoire très utilisée' : 'Charge élevée') : '';
-        badge.title = high ? 'Au moins 90 % pendant 5 s. Retour à la normale sous 80 % pendant 5 s. Ce n’est pas un diagnostic de panne.' : '';
+        card.dataset.alertText = high ? (section === 'ram' ? 'Mémoire très utilisée' : 'Charge élevée') : '';
     }
+}
+
+const HIGH_LOAD_TITLE = 'Au moins 90 % pendant 5 s. Retour à la normale sous 80 % pendant 5 s. Ce n’est pas un diagnostic de panne.';
+// The badge is an aria-live region: rewriting identical text would be re-announced.
+function setBadge(card, text, title) {
+    const badge = card.querySelector('.critical-alert');
+    if (!badge) return;
+    if (badge.textContent !== text) badge.textContent = text;
+    if (badge.title !== title) badge.title = title;
 }
 
 function refreshTelemetryFreshness(force = false) {
@@ -1602,11 +1615,12 @@ function refreshTelemetryFreshness(force = false) {
         const stale = expired || status === 'stale';
         card.classList.toggle('sensor-stale', stale);
         if (stale) {
-            card.querySelector('.critical-alert').textContent = expired ? 'Données périmées' : 'Capteurs périmés';
             card.classList.remove('high-load');
-        } else if (!card.classList.contains('high-load')) {
-            card.querySelector('.critical-alert').textContent = '';
-            card.querySelector('.critical-alert').title = '';
+            setBadge(card, expired ? 'Données périmées' : 'Capteurs périmés', '');
+        } else if (card.classList.contains('high-load')) {
+            setBadge(card, card.dataset.alertText || 'Charge élevée', HIGH_LOAD_TITLE);
+        } else {
+            setBadge(card, '', '');
         }
     }
     if (expired && !telemetryExpired) {
@@ -1614,6 +1628,7 @@ function refreshTelemetryFreshness(force = false) {
         loadAlerts.forEach(alert => alert.reset());
         for (const value of document.querySelectorAll('.gauge-value, .sub-metric .val')) value.textContent = '—';
         for (const ring of document.querySelectorAll('.ring-fill')) setCircularProgress(ring, 0);
+        for (const bar of [igpuVramBar, gpuVramBar, npuUtilBar]) if (bar) bar.style.width = "0%";
         for (const gauge of document.querySelectorAll('[role="progressbar"]')) gauge.removeAttribute('aria-valuenow');
         for (const node of telemetryNodeList) { node.value = null; node.subLabel = 'DONNÉE PÉRIMÉE'; }
         redrawCanvas();
@@ -1650,7 +1665,7 @@ function connectStream() {
                         hostRuntimeSuspended = stats.control === "SUSPEND";
                         setRuntimeSuspended(hostRuntimeSuspended || document.hidden);
                     } else if (stats.control === "POWER_RESULT") {
-                        if (stats.success || !pendingPowerPlanGuid || stats.requestedGuid === pendingPowerPlanGuid) {
+                        if (!pendingPowerPlanGuid || stats.requestedGuid === pendingPowerPlanGuid) {
                             clearPowerPlanPending();
                             if (stats.activeGuid) {
                                 currentPowerPlan = stats.activeGuid;
@@ -1661,7 +1676,12 @@ function connectStream() {
                 }
                 if (!runtimeSuspended) {
                     updateDOM(stats);
-                    if (resumeSnapTimer) requestAnimationFrame(() => requestAnimationFrame(endResumeSnap));
+                    if (resumeSnapTimer) {
+                        const generation = resumeGeneration;
+                        requestAnimationFrame(() => requestAnimationFrame(() => {
+                            if (generation === resumeGeneration && !runtimeSuspended) endResumeSnap();
+                        }));
+                    }
                 }
             } catch (error) {
                 console.error("WebView2 message parse error:", error);

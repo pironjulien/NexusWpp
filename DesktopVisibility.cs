@@ -40,32 +40,34 @@ namespace DesktopHtmlHost
         }
     }
 
-    // Wakes the visibility check as soon as a top-level window changes, instead of
-    // waiting for the next poll. Callbacks run on the creating (UI) thread.
+    // While the wallpaper is paused, wakes the visibility check as soon as a top-level
+    // window closes, hides, minimizes, finishes moving or takes the foreground, instead of
+    // waiting for the next poll. Created only while paused: out-of-context hooks deliver
+    // every matching system event to our UI thread, so they must not run while visible.
     internal sealed class WindowChangeWatcher : IDisposable
     {
         private delegate void WinEventProc(IntPtr hook, uint evt, IntPtr hwnd, int idObject, int idChild, uint thread, uint time);
         [DllImport("user32.dll")] private static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr module, WinEventProc proc, uint pid, uint tid, uint flags);
         [DllImport("user32.dll")] private static extern bool UnhookWinEvent(IntPtr hook);
+        [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
 
-        private const uint ForegroundEvent = 0x0003, MinimizeStart = 0x0016, MinimizeEnd = 0x0017;
-        private const uint ObjectDestroy = 0x8001, ObjectLocationChange = 0x800B;
+        private const uint ForegroundEvent = 0x0003, MoveSizeEnd = 0x000B, MinimizeStart = 0x0016, MinimizeEnd = 0x0017;
+        private const uint ObjectDestroy = 0x8001, ObjectHide = 0x8003;
         private const uint OutOfContext = 0, SkipOwnProcess = 2;
+        private const uint RootAncestor = 2;
         private const int WindowObject = 0;
         private readonly WinEventProc callback;
         private readonly Action onChange;
-        private readonly Func<bool> shouldWatch;
         private readonly List<IntPtr> hooks = new List<IntPtr>();
 
-        // shouldWatch keeps drag-time location events free while the wallpaper runs.
-        internal WindowChangeWatcher(Action onChange, Func<bool> shouldWatch)
+        internal WindowChangeWatcher(Action onChange)
         {
             this.onChange = onChange;
-            this.shouldWatch = shouldWatch;
             callback = OnEvent;
             Add(ForegroundEvent, ForegroundEvent);
+            Add(MoveSizeEnd, MoveSizeEnd);
             Add(MinimizeStart, MinimizeEnd);
-            Add(ObjectDestroy, ObjectLocationChange);
+            Add(ObjectDestroy, ObjectHide); // destroy, show, hide
         }
 
         private void Add(uint min, uint max)
@@ -76,7 +78,9 @@ namespace DesktopHtmlHost
 
         private void OnEvent(IntPtr hook, uint evt, IntPtr hwnd, int idObject, int idChild, uint thread, uint time)
         {
-            if (idObject != WindowObject || hwnd == IntPtr.Zero || !shouldWatch()) return;
+            if (idObject != WindowObject || hwnd == IntPtr.Zero) return;
+            // A destroyed window may no longer have an ancestor chain; accept it.
+            if (evt != ObjectDestroy && GetAncestor(hwnd, RootAncestor) != hwnd) return;
             onChange();
         }
 
@@ -110,10 +114,17 @@ namespace DesktopHtmlHost
             "textinputhost", "tabtip", "shellexperiencehost", "searchhost", "startmenuexperiencehost"
         };
 
-        // Process.GetProcessById on every poll is costly; pids are reused rarely
-        // and the cache is bounded, so a stale name only delays one decision.
+        // Process.GetProcessById on every poll is costly; names are cached for 10 s,
+        // which bounds the effect of a recycled PID inheriting another classification.
+        private static int processNamesResetAt = Environment.TickCount;
+
         private static string GetProcessName(uint processId)
         {
+            if (unchecked(Environment.TickCount - processNamesResetAt) > 10000)
+            {
+                ProcessNames.Clear();
+                processNamesResetAt = Environment.TickCount;
+            }
             string name;
             if (ProcessNames.TryGetValue(processId, out name)) return name;
             try
