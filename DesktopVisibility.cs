@@ -57,12 +57,38 @@ namespace DesktopHtmlHost
         [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")] private static extern int GetFrameBounds(IntPtr hwnd, int attribute, out Rect rect, int size);
         [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")] private static extern int GetCloaked(IntPtr hwnd, int attribute, out int value, int size);
         private static readonly uint OwnProcessId = (uint)Process.GetCurrentProcess().Id;
+        private static readonly Dictionary<uint, string> ProcessNames = new Dictionary<uint, string>();
+        private static readonly HashSet<string> NonOpaqueShellProcesses = new HashSet<string>
+        {
+            "textinputhost", "tabtip", "shellexperiencehost", "searchhost", "startmenuexperiencehost"
+        };
+
+        // Process.GetProcessById on every poll is costly; pids are reused rarely
+        // and the cache is bounded, so a stale name only delays one decision.
+        private static string GetProcessName(uint processId)
+        {
+            string name;
+            if (ProcessNames.TryGetValue(processId, out name)) return name;
+            try
+            {
+                using (Process process = Process.GetProcessById((int)processId))
+                    name = process.ProcessName.ToLowerInvariant();
+            }
+            catch (ArgumentException) { name = null; }
+            catch (InvalidOperationException) { name = null; }
+            catch (System.ComponentModel.Win32Exception) { name = null; }
+            if (name == null) return null;
+            if (ProcessNames.Count > 512) ProcessNames.Clear();
+            ProcessNames[processId] = name;
+            return name;
+        }
 
         internal static bool ShouldSuspend(IntPtr host, out string reason)
         {
             Screen[] screens = Screen.AllScreens;
             var coverage = new DesktopCoverage(screens.Select(s => s.WorkingArea));
             string foundReason = null;
+            var coverers = new List<string>();
             EnumWindows(delegate(IntPtr hwnd, IntPtr unused)
             {
                 if (hwnd == host || !IsWindowVisible(hwnd) || IsIconic(hwnd)) return true;
@@ -93,24 +119,14 @@ namespace DesktopHtmlHost
 
                 // Shell/input surfaces can span the screen without opaque pixels.
                 // Keep Explorer file windows eligible; desktop windows are excluded by class.
-                try
-                {
-                    using (Process process = Process.GetProcessById((int)processId))
-                    {
-                        string name = process.ProcessName.ToLowerInvariant();
-                        if (name == "textinputhost" || name == "tabtip" ||
-                            name == "shellexperiencehost" || name == "searchhost" ||
-                            name == "startmenuexperiencehost") return true;
-                    }
-                }
-                catch (ArgumentException) { return true; }
-                catch (InvalidOperationException) { return true; }
-                catch (System.ComponentModel.Win32Exception) { return true; }
+                string name = GetProcessName(processId);
+                if (name == null || NonOpaqueShellProcesses.Contains(name)) return true;
                 // A fullscreen window on one monitor must not pause a visible second monitor.
                 coverage.Cover(window);
+                coverers.Add(name + "/" + cls + " " + window.Width + "x" + window.Height + "@" + window.Left + "," + window.Top);
                 if (coverage.IsCovered)
                 {
-                    foundReason = "desktop covered on all monitors";
+                    foundReason = "desktop covered on all monitors by " + string.Join("; ", coverers.ToArray());
                     return false;
                 }
                 return true;

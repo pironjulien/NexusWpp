@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-12 — 1.0.27.0
+
+- Reprise plus rapide du fond d'écran : détection du bureau visible toutes les 250 ms (au lieu de 500 ms) et première image dessinée immédiatement à la reprise.
+- Fin des saccades : la pause n'est confirmée qu'après 1,5 s de bureau réellement couvert, ce qui évite les cycles pause/reprise lors des changements de fenêtre.
+- Les jauges affichent directement les valeurs fraîches à la reprise, sans animation de rattrapage depuis d'anciennes valeurs.
+- Le journal indique désormais les fenêtres qui couvrent le bureau (processus, classe, taille, position) pour diagnostiquer les écrans larges ; noms de processus mis en cache pour réduire le coût de la détection.
+
 ## 2026-09-28 — 1.0.26.0
 
 - Réseau reste exactement au-dessus du logo central, quel que soit le nombre de composants affichés ; les autres ronds du radar se répartissent symétriquement à rayon et espacement angulaire constants.
