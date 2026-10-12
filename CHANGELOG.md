@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-12 — 1.0.31.0
+
+- Ping réseau plus universel : si 1.1.1.1 ne répond pas (réseau d'entreprise, ICMP public filtré), la mesure bascule sur 8.8.8.8 puis sur la passerelle locale, et mémorise la cible qui répond. L'indicateur n'est indisponible que si les trois échouent.
+
 ## 2026-10-12 — 1.0.30.0
 
 - Disque système détecté dynamiquement (variable `SystemDrive`) au lieu de `C:` figé : charge, espace libre, nom du disque et libellé du radar suivent le vrai lecteur Windows, y compris sur les PC installés sur une autre lettre.

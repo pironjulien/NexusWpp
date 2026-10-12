@@ -847,6 +847,8 @@ namespace DesktopHtmlHost
             catch {}
         }
 
+        private string lastPingTarget;
+
         private void UpdatePing()
         {
             if (isPingPending) return;
@@ -854,28 +856,64 @@ namespace DesktopHtmlHost
 
             lastPingTime = DateTime.Now;
             isPingPending = true;
+            // The last target that answered goes first; others are tried only after a failure.
+            var targets = new List<string> { "1.1.1.1", "8.8.8.8" };
+            string gateway = GetDefaultGateway();
+            if (gateway != null) targets.Add(gateway);
+            if (lastPingTarget != null && targets.Remove(lastPingTarget)) targets.Insert(0, lastPingTarget);
+            PingNext(targets, 0);
+        }
 
+        // Corporate and captive networks often drop public ICMP; the router still answers.
+        private static string GetDefaultGateway()
+        {
             try
             {
+                foreach (NetworkInterface nic in NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (nic.OperationalStatus != OperationalStatus.Up || nic.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+                    foreach (GatewayIPAddressInformation gw in nic.GetIPProperties().GatewayAddresses)
+                    {
+                        if (gw.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !gw.Address.Equals(System.Net.IPAddress.Any))
+                            return gw.Address.ToString();
+                    }
+                }
+            }
+            catch {}
+            return null;
+        }
+
+        private void PingNext(List<string> targets, int index)
+        {
+            try
+            {
+                string target = targets[index];
                 Ping pingSender = new Ping();
                 pingSender.PingCompleted += (s, e) =>
                 {
-                    isPingPending = false;
+                    try { ((Ping)s).Dispose(); } catch {}
                     if (e.Reply != null && e.Reply.Status == IPStatus.Success)
                     {
+                        lastPingTarget = target;
                         pingTime = (int)e.Reply.RoundtripTime;
+                        isPingPending = false;
+                    }
+                    else if (index + 1 < targets.Count)
+                    {
+                        PingNext(targets, index + 1);
                     }
                     else
                     {
                         pingTime = -1;
+                        isPingPending = false;
                     }
-                    try { ((Ping)s).Dispose(); } catch {}
                 };
-                pingSender.SendAsync("1.1.1.1", 1000, null);
+                pingSender.SendAsync(target, 1000, null);
             }
             catch
             {
-                isPingPending = false;
+                if (index + 1 < targets.Count) PingNext(targets, index + 1);
+                else isPingPending = false;
             }
         }
 
