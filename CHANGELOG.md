@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-12 — 1.0.30.0
+
+- Disque système détecté dynamiquement (variable `SystemDrive`) au lieu de `C:` figé : charge, espace libre, nom du disque et libellé du radar suivent le vrai lecteur Windows, y compris sur les PC installés sur une autre lettre.
+
 ## 2026-10-12 — 1.0.29.0
 
 - Reprise déclenchée par les événements Windows (premier plan, déplacement, minimisation, fermeture de fenêtre) : tant que le bureau est couvert, un changement de fenêtre relance la vérification en 40 ms au lieu d'attendre le prochain sondage. Aucun coût lorsque le fond d'écran est visible.

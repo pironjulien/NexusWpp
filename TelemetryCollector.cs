@@ -102,6 +102,17 @@ namespace DesktopHtmlHost
         // NVIDIA telemetry is queried out of process so a faulty display driver cannot corrupt
         // the wallpaper host. Windows performance counters remain the fast utilization source.
         private readonly NvidiaTelemetry nvidiaTelemetry = new NvidiaTelemetry();
+
+        // Windows may be installed on a drive other than C:; the value is validated
+        // because it is interpolated into WMI queries.
+        private static readonly string SystemDrive = ResolveSystemDrive();
+
+        private static string ResolveSystemDrive()
+        {
+            string drive = Environment.GetEnvironmentVariable("SystemDrive");
+            return !string.IsNullOrEmpty(drive) && System.Text.RegularExpressions.Regex.IsMatch(drive, "^[A-Za-z]:$")
+                ? drive.ToUpperInvariant() : "C:";
+        }
         private bool gpuCountersFresh;
         private DateTime lastGpuAttempt = DateTime.MinValue;
 
@@ -341,7 +352,7 @@ namespace DesktopHtmlHost
                 try
                 {
                     string partitionDeviceId = "";
-                    using (var searcher = new ManagementObjectSearcher("ASSOCIATORS OF {Win32_LogicalDisk.DeviceID='C:'} WHERE AssocClass=Win32_LogicalDiskToPartition"))
+                    using (var searcher = new ManagementObjectSearcher("ASSOCIATORS OF {Win32_LogicalDisk.DeviceID='" + SystemDrive + "'} WHERE AssocClass=Win32_LogicalDiskToPartition"))
                     {
                         foreach (ManagementObject obj in searcher.Get())
                         {
@@ -1106,7 +1117,7 @@ namespace DesktopHtmlHost
             int diskStoragePercent = 0;
             try
             {
-                var drive = new DriveInfo("C");
+                var drive = new DriveInfo(SystemDrive);
                 diskFreeGb = drive.AvailableFreeSpace / (1024.0 * 1024.0 * 1024.0);
                 diskTotalGb = drive.TotalSize / (1024.0 * 1024.0 * 1024.0);
                 diskStoragePercent = (int)Math.Round((1.0 - (double)drive.AvailableFreeSpace / drive.TotalSize) * 100);
@@ -1200,7 +1211,7 @@ namespace DesktopHtmlHost
             double diskResponse = 0.0;
             try
             {
-                using (var searcher = new ManagementObjectSearcher("SELECT DiskReadBytesPersec, DiskWriteBytesPersec, PercentDiskTime, AvgDiskSecPerTransfer FROM Win32_PerfFormattedData_PerfDisk_LogicalDisk WHERE Name = 'C:'"))
+                using (var searcher = new ManagementObjectSearcher("SELECT DiskReadBytesPersec, DiskWriteBytesPersec, PercentDiskTime, AvgDiskSecPerTransfer FROM Win32_PerfFormattedData_PerfDisk_LogicalDisk WHERE Name = '" + SystemDrive + "'"))
                 {
                     foreach (ManagementObject obj in searcher.Get())
                     {
@@ -1344,8 +1355,8 @@ namespace DesktopHtmlHost
             string diskReadMbStr = diskReadMbNum.ToString("F1", CultureInfo.InvariantCulture);
             string diskWriteMbStr = diskWriteMbNum.ToString("F1", CultureInfo.InvariantCulture);
             string diskResponseMsStr = (diskResponse * 1000.0).ToString("F1", CultureInfo.InvariantCulture);
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"disk\":{{\"freeGb\":{0},\"utilization\":{1},\"storagePercent\":{2},\"totalGb\":{3},\"readMb\":\"{4}\",\"writeMb\":\"{5}\",\"responseTimeMs\":{6},\"name\":{7}}},",
-                diskFreeGbStr, diskActiveTime, diskStoragePercent, (int)diskTotalGb, diskReadMbStr, diskWriteMbStr, diskResponseMsStr, JsonString(DiskName));
+            sb.AppendFormat(CultureInfo.InvariantCulture, "\"disk\":{{\"freeGb\":{0},\"utilization\":{1},\"storagePercent\":{2},\"totalGb\":{3},\"readMb\":\"{4}\",\"writeMb\":\"{5}\",\"responseTimeMs\":{6},\"name\":{7},\"drive\":{8}}},",
+                diskFreeGbStr, diskActiveTime, diskStoragePercent, (int)diskTotalGb, diskReadMbStr, diskWriteMbStr, diskResponseMsStr, JsonString(DiskName), JsonString(SystemDrive));
 
             // network
             sb.AppendFormat(CultureInfo.InvariantCulture, "\"network\":{{\"lan\":{0},\"wifi\":{1},\"ip\":{2},\"ipv6\":{3},\"name\":{4},\"type\":{5},\"linkSpeedMbps\":{6},\"signal\":{7}}},",
