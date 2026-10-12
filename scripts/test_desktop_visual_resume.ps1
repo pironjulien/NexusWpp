@@ -8,7 +8,9 @@ param(
     [ValidateRange(250, 10000)][int]$ResumeMilliseconds = 3000,
     [ValidateRange(1, 1000)][int]$SampleMilliseconds = 16,
     [ValidateRange(1, 30)][int]$RapidCycles = 8,
-    [switch]$BuildOnly
+    [switch]$BuildOnly,
+    # Measure the build running from bin\ instead of the installed Store package.
+    [switch]$DevBuild
 )
 $ErrorActionPreference = 'Stop'
 $project = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
@@ -24,14 +26,21 @@ if ($BuildOnly) {
     return
 }
 
-# Test exactly the installed packaged application. Never restart or deploy it here.
-$package = Get-AppxPackage -Name 'julienpiron.fr.NexusWpp'
-if (-not $package) { throw 'The NexusWpp package is not installed for this user.' }
+# Test exactly the running application (installed package by default). Never restart or deploy it here.
 $processes = @(Get-CimInstance Win32_Process -Filter "Name='nexuswpp.exe'")
 if ($processes.Count -ne 1) { throw "Expected one running NexusWpp process; found $($processes.Count)." }
 $appProcess = $processes[0]
-if (-not $appProcess.ExecutablePath -or -not $appProcess.ExecutablePath.StartsWith($package.InstallLocation + '\', [StringComparison]::OrdinalIgnoreCase)) {
-    throw 'The running process could not be verified as the installed NexusWpp package.'
+if ($DevBuild) {
+    $expected = Join-Path $project 'bin\nexuswpp.exe'
+    if (-not $appProcess.ExecutablePath -or -not [string]::Equals($appProcess.ExecutablePath, $expected, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "The running process is not the development build $expected."
+    }
+} else {
+    $package = Get-AppxPackage -Name 'julienpiron.fr.NexusWpp'
+    if (-not $package) { throw 'The NexusWpp package is not installed for this user.' }
+    if (-not $appProcess.ExecutablePath -or -not $appProcess.ExecutablePath.StartsWith($package.InstallLocation + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'The running process could not be verified as the installed NexusWpp package.'
+    }
 }
 if (-not $OutputDirectory) {
     $safeLabel = $Label -replace '[^a-zA-Z0-9_-]', '_'
@@ -49,10 +58,10 @@ New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $metadata = [ordered]@{
     Label = $Label
     CapturedAt = (Get-Date).ToUniversalTime().ToString('o')
-    PackageFullName = $package.PackageFullName
-    PackageFamilyName = $package.PackageFamilyName
-    Version = $package.Version.ToString()
-    InstallLocation = $package.InstallLocation
+    PackageFullName = if ($package) { $package.PackageFullName } else { 'development build' }
+    PackageFamilyName = if ($package) { $package.PackageFamilyName } else { '' }
+    Version = if ($package) { $package.Version.ToString() } else { (Get-Item -LiteralPath $appProcess.ExecutablePath).VersionInfo.FileVersion }
+    InstallLocation = if ($package) { $package.InstallLocation } else { Split-Path -Parent $appProcess.ExecutablePath }
     ProcessId = $appProcess.ProcessId
     ExecutablePath = $appProcess.ExecutablePath
     ExecutableSha256 = (Get-FileHash -LiteralPath $appProcess.ExecutablePath -Algorithm SHA256).Hash

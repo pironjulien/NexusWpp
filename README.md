@@ -22,7 +22,7 @@ NexusWpp affiche un cockpit matériel dynamique directement dans le bureau Windo
 - `scripts/benchmark_nexuswpp.ps1` : benchmark multi-run CPU/RAM/startup.
 - `scripts/benchmark_fullscreen_suspend.ps1` : ancien benchmark des versions qui utilisaient le motif de journal « fullscreen foreground detected » ; pour la politique actuelle, utiliser `measure_desktop_suspension.ps1`.
 - `scripts/measure_desktop_suspension.ps1` : mesure CPU/GPU avec bureau visible, fenêtres juxtaposées, plein écran et fenêtres transparentes, puis restaure les fenêtres précédentes.
-- `scripts/test_desktop_coverage.cs` : dix scénarios géométriques indépendants du bureau réel.
+- `scripts/test_desktop_coverage.cs` : dix scénarios géométriques indépendants du bureau réel (pas encore exécutés par un script ni par la CI).
 
 ## Démarrage Rapide
 
@@ -83,11 +83,11 @@ Depuis la version `1.0.24.0`, les badges « Charge élevée » et « Mémoire tr
 
 Une lecture NVIDIA échouée invalide immédiatement les anciennes valeurs. Les capteurs absents affichent « — » et les données périmées sont signalées. Les watts représentent la carte GPU entière, pas la consommation de NexusWpp ; la zone thermique Windows n’est pas une mesure du cœur CPU.
 
-La transition des jauges passe de 0,55 à 0,18 seconde après profilage A/B dans WebView2. Halos et radar à 12 images/s sont conservés. Le benchmark `scripts/profile_graphics.ps1` mesure l’occupation des moteurs GPU du groupe de processus, sans attribution de watts ni du coût du compositeur Windows. Les règles des capteurs et alertes se vérifient avec `scripts/test_features.ps1`.
+La transition des jauges passe de 0,55 à 0,18 seconde après profilage A/B dans WebView2. Halos, radar et anneaux rotatifs du logo tournent à 12 images/s. Le benchmark `scripts/profile_graphics.ps1` mesure l’occupation des moteurs GPU du groupe de processus, sans attribution de watts ni du coût du compositeur Windows. Les règles des capteurs et alertes se vérifient avec `scripts/test_features.ps1`.
 
 La version `1.0.16.0` fige les animations Canvas/CSS, les transitions en cours et l'horloge quand toutes les zones utiles des écrans sont recouvertes par des fenêtres opaques. La télémétrie cesse ses nouvelles collectes. Le DOM, les particules, les valeurs et la surface WebView2 restent en place : aucune dissimulation du contrôle, suspension Chromium, navigation ni reconstruction n'est nécessaire pour revoir le bureau.
 
-La détection s'effectue toutes les 500 ms. Ce délai concerne la reprise des animations et des mesures ; la scène déjà affichée reste disponible au compositeur Windows. Une collecte terminant après une pause est ignorée. La reprise demande de nouvelles mesures et actualise l'horloge. Un véritable redimensionnement redessine une fois la scène figée.
+La détection s'effectue toutes les 250 ms ; la pause n'est confirmée qu'après 1,5 s de bureau couvert. Pendant la pause, les changements de fenêtres (fermeture, réduction, déplacement, premier plan) relancent la vérification en 60 ms environ. Ce délai concerne la reprise des animations et des mesures ; la scène déjà affichée reste disponible au compositeur Windows. Une collecte terminant après une pause est ignorée. La reprise demande de nouvelles mesures et actualise l'horloge. Un véritable redimensionnement redessine une fois la scène figée.
 
 La couverture est calculée sur l'ensemble des écrans sans double comptage des chevauchements. Les fenêtres transparentes, masquées sur un autre bureau virtuel et les surfaces du shell sont exclues. Un jeu plein écran sur un seul moniteur laisse fonctionner le bureau encore visible sur un autre. Le verrouillage ou la déconnexion de session met également le travail en pause.
 

@@ -35,8 +35,8 @@ Telemetry is collected in `TelemetryCollector.cs`. `NvidiaTelemetry.cs` isolates
 - Thermal reading: Windows thermal zone counters or ACPI `MSAcpi_ThermalZoneTemperature`, explicitly labelled as a thermal zone rather than a CPU core sensor
 - CPU frequency: `PercentProcessorPerformance` counter scaled by the base clock
 - RAM: `GlobalMemoryStatusEx` plus WMI memory counters; type and module count from SMBIOS
-- Disk: WMI logical disk counters
-- Network: `NetworkInterface` byte counters plus async ping to `1.1.1.1`
+- Disk: raw WMI logical disk counters of the system drive (`%SystemDrive%`), differenced between samples for throughput, busy time and latency
+- Network: `NetworkInterface` byte counters plus async ping to `1.1.1.1`, then `8.8.8.8`; the local gateway is a last resort reported as `pingVia: "gateway"` so LAN latency is never shown as internet latency
 - GPU/iGPU: DirectX LUID registry mapping plus GPU performance counters
 - NVIDIA details: isolated `nvidia-smi` process (temperature, clocks, power, VRAM), cached for five seconds; otherwise driver-reported VRAM size and Windows counters
 - System uptime: `GetTickCount64`
@@ -51,9 +51,9 @@ The injected WebView2 window lives below desktop icons, so normal mouse delivery
 ## Performance Choices
 
 - WebView2 is warmed before `WorkerW` is found.
-- The Canvas loop sleeps when particles/interactions stop.
+- The Canvas loop sleeps when particles/interactions stop. The two logo spin rings use `steps()` at 12 frames/s instead of a 60 frames/s compositor animation.
 - Top-process WMI collection is throttled and protected against overlapping calls.
 - GPU routing is left to Windows; NexusWpp does not write DirectX GPU preferences.
-- A 500 ms coverage check pauses work only when all monitor work areas are covered (or the session is inactive). WebView2 stays visible and is never suspended for occlusion; the real composed scene remains available before animation resumes.
+- A 250 ms coverage check pauses work only when all monitor work areas stay covered for 1.5 s (or the session is inactive). While paused, a WinEvent hook (foreground, move/size end, minimize, show/hide/destroy of top-level windows) re-checks within about 60 ms; the hook exists only while paused. WebView2 stays visible and is never suspended for occlusion; the real composed scene remains available before animation resumes.
 - Canvas pixels, particles and critical-state styling survive pause. CSS animations and in-flight transitions pause, clock callbacks stop, and stale asynchronous telemetry is discarded. The page requests runtime state after its listener is ready, including recovery/navigation.
 - The mouse hook runs on its own message-pump thread, consuming immutable routing snapshots from the UI thread.

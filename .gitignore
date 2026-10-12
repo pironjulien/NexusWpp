@@ -17,3 +17,8 @@ deploy_error.txt
 
 Desktop.ini
 Thumbs.db
+
+# Signing material
+*.pfx
+*.p12
+*.snk

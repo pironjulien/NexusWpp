@@ -57,6 +57,10 @@ $localFolder = "C:\nexuswpp"
 if (!(Test-Path $localFolder)) {
     New-Item -ItemType Directory -Path $localFolder -Force | Out-Null
 }
+# C:\ lets any authenticated user modify new folders; this one holds an exe started
+# at every logon, so only administrators and SYSTEM may write to it.
+& icacls.exe $localFolder /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX" | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "icacls failed to secure $localFolder" }
 
 # 1.8 Clean up obsolete files and leftovers in destination directory C:\nexuswpp
 Write-Host "Cleaning up obsolete files in C:\nexuswpp..." -ForegroundColor Yellow
