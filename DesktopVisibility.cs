@@ -40,6 +40,53 @@ namespace DesktopHtmlHost
         }
     }
 
+    // Wakes the visibility check as soon as a top-level window changes, instead of
+    // waiting for the next poll. Callbacks run on the creating (UI) thread.
+    internal sealed class WindowChangeWatcher : IDisposable
+    {
+        private delegate void WinEventProc(IntPtr hook, uint evt, IntPtr hwnd, int idObject, int idChild, uint thread, uint time);
+        [DllImport("user32.dll")] private static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr module, WinEventProc proc, uint pid, uint tid, uint flags);
+        [DllImport("user32.dll")] private static extern bool UnhookWinEvent(IntPtr hook);
+
+        private const uint ForegroundEvent = 0x0003, MinimizeStart = 0x0016, MinimizeEnd = 0x0017;
+        private const uint ObjectDestroy = 0x8001, ObjectLocationChange = 0x800B;
+        private const uint OutOfContext = 0, SkipOwnProcess = 2;
+        private const int WindowObject = 0;
+        private readonly WinEventProc callback;
+        private readonly Action onChange;
+        private readonly Func<bool> shouldWatch;
+        private readonly List<IntPtr> hooks = new List<IntPtr>();
+
+        // shouldWatch keeps drag-time location events free while the wallpaper runs.
+        internal WindowChangeWatcher(Action onChange, Func<bool> shouldWatch)
+        {
+            this.onChange = onChange;
+            this.shouldWatch = shouldWatch;
+            callback = OnEvent;
+            Add(ForegroundEvent, ForegroundEvent);
+            Add(MinimizeStart, MinimizeEnd);
+            Add(ObjectDestroy, ObjectLocationChange);
+        }
+
+        private void Add(uint min, uint max)
+        {
+            IntPtr hook = SetWinEventHook(min, max, IntPtr.Zero, callback, 0, 0, OutOfContext | SkipOwnProcess);
+            if (hook != IntPtr.Zero) hooks.Add(hook);
+        }
+
+        private void OnEvent(IntPtr hook, uint evt, IntPtr hwnd, int idObject, int idChild, uint thread, uint time)
+        {
+            if (idObject != WindowObject || hwnd == IntPtr.Zero || !shouldWatch()) return;
+            onChange();
+        }
+
+        public void Dispose()
+        {
+            foreach (IntPtr hook in hooks) UnhookWinEvent(hook);
+            hooks.Clear();
+        }
+    }
+
     internal static class DesktopVisibility
     {
         private delegate bool EnumProc(IntPtr hwnd, IntPtr data);

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-12 — 1.0.29.0
+
+- Reprise déclenchée par les événements Windows (premier plan, déplacement, minimisation, fermeture de fenêtre) : tant que le bureau est couvert, un changement de fenêtre relance la vérification en 40 ms au lieu d'attendre le prochain sondage. Aucun coût lorsque le fond d'écran est visible.
+
 ## 2026-10-12 — 1.0.28.0
 
 - Correction de l'affichage « Données périmées » et des tirets qui apparaissaient à la reprise après une pause : la durée de la pause n'est plus comptée comme une panne de télémétrie, les dernières valeurs restent affichées jusqu'à la première mesure fraîche.

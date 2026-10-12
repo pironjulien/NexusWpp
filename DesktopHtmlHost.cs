@@ -268,6 +268,8 @@ namespace DesktopHtmlHost
         // Suspend only after the desktop stays covered; resume on the first visible poll.
         private const int SuspendConfirmTicks = 6;
         private int coveredTicks;
+        private WindowChangeWatcher windowWatcher;
+        private System.Windows.Forms.Timer windowChangeTimer;
         private bool sessionInactive = false;
         private int telemetryGeneration = 0;
         private string fullscreenReason = "";
@@ -744,6 +746,7 @@ namespace DesktopHtmlHost
             if (searchTimer != null) searchTimer.Stop();
             if (telemetryTimer != null) telemetryTimer.Stop();
             if (fullscreenTimer != null) fullscreenTimer.Stop();
+            StopWindowWatcher();
             StopMouseHook();
 
             if (webView != null)
@@ -969,7 +972,30 @@ namespace DesktopHtmlHost
             }
 
             fullscreenTimer.Start();
+            StartWindowWatcher();
             if (runtimeSuspended) ApplyWebViewRuntimeState();
+        }
+
+        // While covered, any window change re-checks the desktop within ~40 ms
+        // rather than waiting for the 250 ms poll.
+        private void StartWindowWatcher()
+        {
+            if (windowWatcher != null) return;
+            windowChangeTimer = new System.Windows.Forms.Timer { Interval = 40 };
+            windowChangeTimer.Tick += delegate
+            {
+                windowChangeTimer.Stop();
+                FullscreenTimer_Tick(null, null);
+            };
+            windowWatcher = new WindowChangeWatcher(
+                delegate { if (!windowChangeTimer.Enabled && !isClosing) windowChangeTimer.Start(); },
+                delegate { return runtimeSuspended && !isClosing; });
+        }
+
+        private void StopWindowWatcher()
+        {
+            if (windowWatcher != null) { windowWatcher.Dispose(); windowWatcher = null; }
+            if (windowChangeTimer != null) { windowChangeTimer.Dispose(); windowChangeTimer = null; }
         }
 
         private void QueueWebViewRecovery(string reason)
