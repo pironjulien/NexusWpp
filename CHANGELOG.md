@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-12 — 1.0.28.0
+
+- Correction de l'affichage « Données périmées » et des tirets qui apparaissaient à la reprise après une pause : la durée de la pause n'est plus comptée comme une panne de télémétrie, les dernières valeurs restent affichées jusqu'à la première mesure fraîche.
+- Test de régression ajouté (reprise après une longue pause).
+
 ## 2026-10-12 — 1.0.27.0
 
 - Reprise plus rapide du fond d'écran : détection du bureau visible toutes les 250 ms (au lieu de 500 ms) et première image dessinée immédiatement à la reprise.
