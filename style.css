@@ -488,7 +488,7 @@ body {
     border: 1px solid transparent;
     border-top: 1px solid rgba(48, 209, 88, 0.45);
     border-bottom: 1px solid rgba(48, 209, 88, 0.45);
-    animation: spin-eye 15s linear infinite;
+    animation: spin-eye 15s steps(180) infinite;
     pointer-events: none;
     will-change: transform;
     transform: translate3d(0, 0, 0);
@@ -502,7 +502,7 @@ body {
     border: 1px solid transparent;
     border-left: 1px solid rgba(0, 199, 190, 0.48);
     border-right: 1px solid rgba(100, 210, 255, 0.48);
-    animation: spin-eye 12s linear infinite reverse;
+    animation: spin-eye 12s steps(144) infinite reverse;
     pointer-events: none;
     will-change: transform;
     transform: translate3d(0, 0, 0);
