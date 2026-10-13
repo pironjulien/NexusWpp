@@ -52,6 +52,13 @@ foreach ($size in @(@(800,450),@(960,540),@(1280,720),@(1706,960),@(432,768),@(5
         }
     }
 }
+# Laptop on battery: the longest battery line (percent, source, power, time left) and an NPU client name.
+foreach ($size in @(@(800,450),@(432,768),@(1280,720),@(1920,1080),@(3840,2160))) {
+    foreach ($dpr in @(1, 1.5, 2)) {
+        $cases.Add(@{ id="battery-$($size[0])x$($size[1])-$([int]($dpr*100))pct"; width=$size[0]; height=$size[1]; dpr=$dpr; plans=3; hardware='full';
+            battery=@{ present=$true; percent=73; ac=$false; rateW=-12.4; minutesLeft=135 }; capture=($size[0] -eq 1920 -and $dpr -eq 1) })
+    }
+}
 # Multi-monitor desktops: the window spans every monitor, the cockpit stays on the primary one.
 # Window size, then primary monitor rectangle relative to the window (negative virtual origins
 # put the primary away from the window's top-left corner).

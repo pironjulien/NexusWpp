@@ -93,6 +93,20 @@ namespace DesktopHtmlHost
         // NVIDIA telemetry is queried out of process so a faulty display driver cannot corrupt
         // the wallpaper host. Windows performance counters remain the fast utilization source.
         private readonly NvidiaTelemetry nvidiaTelemetry = new NvidiaTelemetry();
+        private int cachedNpuTopPid = -1, cachedNpuTopPct = 0;
+        private readonly Dictionary<int, string> processNames = new Dictionary<int, string>();
+
+        // Process names for pids seen in GPU counters (pids are reused only after exit; the cache is pruned).
+        private string ProcessName(int pid)
+        {
+            string name;
+            if (processNames.TryGetValue(pid, out name)) return name;
+            try { using (var process = Process.GetProcessById(pid)) name = process.ProcessName; }
+            catch { name = ""; }
+            if (processNames.Count > 256) processNames.Clear();
+            processNames[pid] = name;
+            return name;
+        }
 
         // One persistent PDH query sampled once per collection (memory, system, CPU clock, GPU/NPU).
         private PdhQuery perf;
@@ -1141,6 +1155,8 @@ namespace DesktopHtmlHost
                 cachedDgpuUtil = dgpuUtil = counters[1].Utilization;
                 cachedDgpuMemBytes = counters[1].DedicatedBytes;
                 cachedNpuUtil = npuUtil = counters[2].Utilization;
+                cachedNpuTopPid = counters[2].TopPid;
+                cachedNpuTopPct = counters[2].TopPct;
                 cachedNpuMemBytes = npuMemBytes = counters[2].SharedBytes;
                 gpuCountersFresh = counters.Any(c => c.Utilization >= 0);
                 if (gpuCountersFresh) lastGpuPerfTime = DateTime.UtcNow;
@@ -1256,8 +1272,15 @@ namespace DesktopHtmlHost
 
             // npu
             long npuTotalMb = (long)(ramTotalPhys / 1024 / 1024 / 2);
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"npu\":{{\"detected\":{0},\"utilization\":{1},\"usedMb\":{2},\"totalMb\":{3},\"totalGb\":{4},\"name\":{5}}},",
-                NpuDetected ? "true" : "false", npuUtil, windowsGpuFresh && npuMemBytes >= 0 ? npuMemBytes / (1024 * 1024) : -1, npuTotalMb, npuTotalMb / 1024, JsonString(NpuName));
+            // Busiest NPU client: {"name","pct"}; {"name":"","pct":0} = measured, nothing running; null = no reading.
+            string npuTop = "null";
+            if (NpuDetected && windowsGpuFresh)
+            {
+                string topName = cachedNpuTopPid > 0 ? ProcessName(cachedNpuTopPid) : "";
+                npuTop = string.Format(CultureInfo.InvariantCulture, "{{\"name\":{0},\"pct\":{1}}}", JsonString(topName), topName.Length > 0 ? cachedNpuTopPct : 0);
+            }
+            sb.AppendFormat(CultureInfo.InvariantCulture, "\"npu\":{{\"detected\":{0},\"utilization\":{1},\"usedMb\":{2},\"totalMb\":{3},\"totalGb\":{4},\"name\":{5},\"topProcess\":{6}}},",
+                NpuDetected ? "true" : "false", npuUtil, windowsGpuFresh && npuMemBytes >= 0 ? npuMemBytes / (1024 * 1024) : -1, npuTotalMb, npuTotalMb / 1024, JsonString(NpuName), npuTop);
 
             // vram
             int vramPct = vramTotal > 0 ? (int)Math.Round(Math.Min(100.0, (double)vramUsed / vramTotal * 100)) : 0;
@@ -1289,8 +1312,22 @@ namespace DesktopHtmlHost
                 network.TxKBps, network.RxKBps, JsonString(network.Name), JsonString(network.Type), network.LinkSpeedMbps, wifiSignal);
 
             // battery
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"battery\":{{\"present\":{0},\"percent\":{1},\"ac\":{2}}},\"energySaver\":{3},",
-                batteryPresent ? "true" : "false", batteryPercent, acLine ? "true" : "false", energySaver ? "true" : "false");
+            // Charge/discharge power (W, + charging / - discharging) and Windows' remaining-time estimate.
+            string batteryRate = "null";
+            int batteryMinutes = -1;
+            if (batteryPresent)
+            {
+                BatteryState state;
+                if (BatteryState.TryRead(out state))
+                {
+                    if (state.RateMilliwatts != int.MinValue && state.RateMilliwatts != 0)
+                        batteryRate = (state.RateMilliwatts / 1000.0).ToString("F1", CultureInfo.InvariantCulture);
+                    if (!acLine && state.EstimatedSeconds > 0 && state.EstimatedSeconds < 7 * 24 * 3600)
+                        batteryMinutes = (int)(state.EstimatedSeconds / 60);
+                }
+            }
+            sb.AppendFormat(CultureInfo.InvariantCulture, "\"battery\":{{\"present\":{0},\"percent\":{1},\"ac\":{2},\"rateW\":{4},\"minutesLeft\":{5}}},\"energySaver\":{3},",
+                batteryPresent ? "true" : "false", batteryPercent, acLine ? "true" : "false", energySaver ? "true" : "false", batteryRate, batteryMinutes);
 
             // global/uptime/ping (real Windows uptime, not the process lifetime)
             sb.AppendFormat(CultureInfo.InvariantCulture, "\"uptime\":{0},\"ping\":{1},\"pingVia\":{4},\"totalProcesses\":{2},\"motherboard\":{3},",

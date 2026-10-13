@@ -864,6 +864,11 @@ body {
     color: var(--text-primary);
 }
 
+/* Values shortened by script to fit their slot: never wrap. */
+.sub-metric .val.fit-one-line {
+    white-space: nowrap;
+}
+
 /* Custom VRAM Progress Bars */
 .sub-progress-container {
     grid-column: span 2;

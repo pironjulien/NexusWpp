@@ -35,6 +35,29 @@ class FeatureRegression
             Check(WindowsGpuTelemetry.BusiestNpuEngine(idleNpu,"luid_NPU")==18,"Neural engine names are case insensitive");
             Check(WindowsGpuTelemetry.BusiestNpuEngine(npuEngines,"")==-1,"missing NPU adapter remains unavailable");
 
+            // Busiest NPU client process.
+            var npuClients=new[]{
+                new GpuEngineReading{Name="pid_10_luid_0x0_0xNPU_phys_0_eng_0_engtype_Neural",Utilization=20},
+                new GpuEngineReading{Name="pid_10_luid_0x0_0xNPU_phys_0_eng_0_engtype_Neural",Utilization=15},
+                new GpuEngineReading{Name="pid_22_luid_0x0_0xNPU_phys_0_eng_1_engtype_Compute",Utilization=30},
+                new GpuEngineReading{Name="pid_33_luid_0x0_0xGPU_phys_0_eng_0_engtype_3D",Utilization=90}};
+            int topPid,topPct;
+            WindowsGpuTelemetry.TopProcess(npuClients,"luid_0x0_0xNPU",new[]{"Neural","Compute"},out topPid,out topPct);
+            Check(topPid==10 && topPct==35,"top NPU process sums one process's instances on an engine and ignores other adapters");
+            WindowsGpuTelemetry.TopProcess(new[]{new GpuEngineReading{Name="pid_10_luid_0x0_0xNPU_phys_0_eng_0_engtype_Neural",Utilization=0}},"luid_0x0_0xNPU",new[]{"Neural"},out topPid,out topPct);
+            Check(topPid==-1 && topPct==0,"idle NPU has no top process");
+            WindowsGpuTelemetry.TopProcess(npuClients,"",new[]{"Neural"},out topPid,out topPct);
+            Check(topPid==-1,"no NPU adapter, no top process");
+
+            // Battery power flow (CallNtPowerInformation SystemBatteryState).
+            Check(System.Runtime.InteropServices.Marshal.SizeOf(typeof(BatteryState.SYSTEM_BATTERY_STATE))==32,"SYSTEM_BATTERY_STATE is 32 bytes");
+            var battery=BatteryState.FromRaw(new BatteryState.SYSTEM_BATTERY_STATE{BatteryPresent=1,Rate=unchecked((uint)-12400),EstimatedTime=5400});
+            Check(battery.RateMilliwatts==-12400 && battery.EstimatedSeconds==5400,"discharge rate is negative milliwatts with Windows' estimate");
+            battery=BatteryState.FromRaw(new BatteryState.SYSTEM_BATTERY_STATE{BatteryPresent=1,Rate=0x80000000,EstimatedTime=0xFFFFFFFF});
+            Check(battery.RateMilliwatts==int.MinValue && battery.EstimatedSeconds==-1,"unknown battery rate and time stay unknown");
+            BatteryState live;
+            Console.WriteLine("INFO battery state readable on this machine: "+BatteryState.TryRead(out live)+(live.RateMilliwatts!=int.MinValue?" rate "+live.RateMilliwatts+" mW":""));
+
             // Native performance counters (PDH) replacing WMI formatted-data queries.
             using(var perf=new PdhQuery()) {
                 Check(perf.IsOpen,"PDH query opens");

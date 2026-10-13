@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-13 — 1.0.41.0
+
+- Carte NPU : « Utilisé par » montre le programme qui utilise le NPU (lu dans les compteurs GPU de Windows, par processus) ; remplace « Mémoire partagée », qui répétait « Mémoire utilisée ». « AUCUN » quand rien ne l'utilise. Le nom est raccourci juste assez pour tenir dans la carte.
+- Batterie (portables) : sur batterie, la ligne du centre ajoute la consommation en watts et le temps restant estimé par Windows ; en charge, la puissance de charge. Lu par l'API d'alimentation de Windows, sans WMI. Rien d'inventé quand Windows ne fournit pas la valeur.
+- Tests : 45 cas de disposition « portable sur batterie », tests du programme NPU et de la batterie.
+
 ## 2026-10-13 — 1.0.40.0
 
 - Courbes d'historique sur toute la hauteur des cartes, en filigrane derrière les valeurs.

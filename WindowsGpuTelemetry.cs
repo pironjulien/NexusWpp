@@ -11,6 +11,7 @@ namespace DesktopHtmlHost
     {
         internal int Utilization=-1, Decode=-1;
         internal long SharedBytes=-1, DedicatedBytes=-1;
+        internal int TopPid=-1, TopPct=0; // busiest process on this adapter (NPU only)
     }
     internal static class WindowsGpuTelemetry
     {
@@ -25,6 +26,31 @@ namespace DesktopHtmlHost
             }
             return totals.Count==0?0:(int)Math.Min(100,totals.Values.Max());
         }
+        // Busiest process on an adapter: per process, its busiest engine of the given kinds
+        // (instances are "pid_<pid>_luid_..._engtype_<kind>"). pid -1 when nothing runs.
+        internal static void TopProcess(IEnumerable<GpuEngineReading> rows,string luid,string[] kinds,out int pid,out int pct) {
+            pid=-1;pct=0;
+            if(string.IsNullOrEmpty(luid))return;
+            var perEngine=new Dictionary<string,long>();
+            foreach(var row in rows) {
+                if(row.Name==null||row.Name.IndexOf(luid,StringComparison.OrdinalIgnoreCase)<0)continue;
+                bool kindMatch=false;
+                foreach(var kind in kinds) if(row.Name.IndexOf("engtype_"+kind,StringComparison.OrdinalIgnoreCase)>=0) kindMatch=true;
+                if(!kindMatch||!row.Name.StartsWith("pid_",StringComparison.OrdinalIgnoreCase))continue;
+                int end=row.Name.IndexOf('_',4);
+                int p;
+                if(end<0||!int.TryParse(row.Name.Substring(4,end-4),out p))continue;
+                string key=p+"|"+row.Name.Substring(row.Name.IndexOf(luid,StringComparison.OrdinalIgnoreCase));
+                long old;perEngine.TryGetValue(key,out old);perEngine[key]=old+Math.Max(0,row.Utilization);
+            }
+            foreach(var entry in perEngine) {
+                int p=int.Parse(entry.Key.Substring(0,entry.Key.IndexOf('|')));
+                int value=(int)Math.Min(100,entry.Value);
+                if(value>pct){pct=value;pid=p;}
+            }
+            if(pct<1){pid=-1;pct=0;}
+        }
+
         internal static int BusiestNpuEngine(IEnumerable<GpuEngineReading> rows,string luid) {
             // Intel exposes Neural engines; other NPU drivers expose Compute engines.
             // Separate engines run concurrently, so retain the busiest, not their sum.
@@ -44,6 +70,7 @@ namespace DesktopHtmlHost
                 var rows=new List<GpuEngineReading>(engines.Count);
                 foreach(var engine in engines) rows.Add(new GpuEngineReading {Name=engine.Key,Utilization=(int)Math.Round(Math.Max(0,engine.Value))});
                 for(int i=0;i<3;i++) {result[i].Utilization=i==2?BusiestNpuEngine(rows,luids[i]):BusiestEngine(rows,luids[i],"3D");result[i].Decode=BusiestEngine(rows,luids[i],"VideoDecode");}
+                TopProcess(rows,luids[2],new[]{"Neural","Compute"},out result[2].TopPid,out result[2].TopPct);
             }
             var shared=perf.Instances(SharedUsage);var dedicated=perf.Instances(DedicatedUsage);
             for(int i=0;i<3;i++) {
