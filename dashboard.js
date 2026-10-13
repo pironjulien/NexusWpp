@@ -76,6 +76,14 @@ function formatBattery(battery) {
     return text;
 }
 
+let lastGpuMemoryClock = 0;
+
+// Which program uses an adapter right now. null: no reading (last value kept); empty name: idle.
+function setTopProcess(element, top) {
+    if (!element) return;
+    setHeldText(element, top ? (top.name ? fitProcessName(element, top.name) : t("adapter.idle")) : null);
+}
+
 function setHeldText(element, text, placeholder = '—') {
     if (!element) return false;
     const held = text === null && element.dataset.seen === '1';
@@ -301,7 +309,11 @@ function updateDOM(stats) {
         track(gpuCard, dgpuVramUsed);
     }
     track(gpuCard, setSensorMetric(gpuCoreSub, t("label.gpuPower"), stats.gpu.powerW, "W", stats, "nvidia", "gpu.powerW"));
-    track(gpuCard, setSensorMetric(gpuMemClockSub, t("label.memoryClock"), stats.gpu.memoryClock, "MHz", stats, "nvidia", "gpu.memoryClock"));
+    setTopProcess(gpuTopProcSub, stats.gpu.topProcess);
+    // Memory clock lives in the card title, like the RAM speed; the last reading is kept when it drops out.
+    if (NexusTelemetry.sensorState(stats, "nvidia") === "fresh" && NexusTelemetry.valid(stats.gpu.memoryClock) && stats.gpu.memoryClock > 0) {
+        lastGpuMemoryClock = Math.round(stats.gpu.memoryClock);
+    }
     if (gpuVramBar && dgpuVramUsed.value !== null) {
         const gpuVramPct = stats.vram.totalMb > 0 ? Math.round((dgpuVramUsed.value / stats.vram.totalMb) * 100) : 0;
         setWidthIfChanged(gpuVramBar, gpuVramPct);
@@ -392,14 +404,16 @@ function updateDOM(stats) {
     const igpuUsedFresh = NexusTelemetry.valid(stats.igpu.usedMb);
     const usedVramGb = igpuUsed.value !== null ? num(igpuUsed.value / 1024, 1) : '—';
     const totalVramGb = num(stats.igpu.totalMb / 1024, 0);
-    setHeldText(vramUsedSub, igpuUsedFresh ? `${usedVramGb} ${GB}` : null);
-    setHeldText(vramFreeSub, igpuUsedFresh ? `${num(Math.max(0, stats.igpu.totalMb - stats.igpu.usedMb) / 1024, 1)} ${GB}` : null);
-    if (vramTotalSub) {
-        vramTotalSub.textContent = `${totalVramGb} ${GB}`;
-    }
+    // Same form as the GPU card: used / total.
+    setHeldText(vramUsedSub, igpuUsedFresh ? `${usedVramGb} / ${totalVramGb} ${GB}` : null);
+    setTopProcess(igpuTopProcSub, stats.igpu.topProcess);
     if (igpuDecodeSub) {
         const decodeFresh = NexusTelemetry.valid(stats.igpu.decodeUtil);
         if (setHeldText(igpuDecodeSub, decodeFresh ? `${Math.min(100, stats.igpu.decodeUtil)} %` : null)) held.add(vramCard);
+    }
+    if (igpuEncodeSub) {
+        const encodeFresh = NexusTelemetry.valid(stats.igpu.encodeUtil);
+        if (setHeldText(igpuEncodeSub, encodeFresh ? `${Math.min(100, stats.igpu.encodeUtil)} %` : null)) held.add(vramCard);
     }
     if (igpuVramBar && igpuUsed.value !== null) {
         const igpuVramPct = Math.round((igpuUsed.value / stats.igpu.totalMb) * 100) || 0;
@@ -412,8 +426,7 @@ function updateDOM(stats) {
     const npuTotalGb = npuTotalMb > 0 ? num(npuTotalMb / 1024, 0) : "0";
     setHeldText(npuUsedSub, npuUsedFresh ? `${npuUsedGb} ${GB}` : null);
     // Which program uses the NPU right now (null: no reading, empty name: measured idle).
-    const npuTop = npuStats.topProcess;
-    setHeldText(npuTopProcSub, npuTop ? (npuTop.name ? fitProcessName(npuTopProcSub, npuTop.name) : t("npu.idle")) : null);
+    setTopProcess(npuTopProcSub, npuStats.topProcess);
     setHeldText(npuFreeSub, npuUsedFresh && npuTotalMb > 0 ? `${num(Math.max(0, npuTotalMb - npuStats.usedMb) / 1024, 1)} ${GB}` : null);
     if (npuTotalSub) {
         npuTotalSub.textContent = `${npuTotalGb} ${GB}`;
@@ -431,7 +444,9 @@ function updateDOM(stats) {
         specNpuName.textContent = npuStats.name.startsWith("NPU") ? npuStats.name : "NPU " + npuStats.name;
     }
     if (stats.gpu.name && specGpuName) {
-        specGpuName.textContent = stats.gpu.name.startsWith("GPU") ? stats.gpu.name : "GPU " + stats.gpu.name;
+        const gpuTitle = (stats.gpu.name.startsWith("GPU") ? stats.gpu.name : "GPU " + stats.gpu.name)
+            + (lastGpuMemoryClock ? ` @ ${lastGpuMemoryClock} MHz` : "");
+        if (specGpuName.textContent !== gpuTitle) specGpuName.textContent = gpuTitle;
     }
     if (stats.ram.totalGb && specRamName) {
         const speed = stats.ram.speedMts ? ` @ ${stats.ram.speedMts} MT/s` : "";

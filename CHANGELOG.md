@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-13 — 1.0.42.0
+
+- Carte GPU : la fréquence mémoire passe dans le titre (« … @ 15001 MHz »), comme la vitesse de la RAM ; sa case montre « Utilisé par », le programme qui sollicite le plus la carte graphique (3D, calcul, vidéo). « AUCUN » quand la carte est au repos.
+- Carte iGPU : « VRAM 1,2 / 16 Go » en une seule case, comme sur la carte GPU ; « Encodage vidéo » (moteur VideoEncode de Windows) et « Utilisé par » remplacent « VRAM libre » et « VRAM totale », qui répétaient la même mesure.
+- Tests : programme utilisé par l'iGPU et le GPU, fréquence mémoire dans le titre, VRAM utilisée / totale et encodage vidéo.
+
 ## 2026-10-13 — 1.0.41.0
 
 - Carte NPU : « Utilisé par » montre le programme qui utilise le NPU (lu dans les compteurs GPU de Windows, par processus) ; remplace « Mémoire partagée », qui répétait « Mémoire utilisée ». « AUCUN » quand rien ne l'utilise. Le nom est raccourci juste assez pour tenir dans la carte.

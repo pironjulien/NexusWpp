@@ -9,9 +9,9 @@ namespace DesktopHtmlHost
     internal sealed class GpuEngineReading { internal string Name; internal int Utilization; }
     internal sealed class WindowsGpuSample
     {
-        internal int Utilization=-1, Decode=-1;
+        internal int Utilization=-1, Decode=-1, Encode=-1;
         internal long SharedBytes=-1, DedicatedBytes=-1;
-        internal int TopPid=-1, TopPct=0; // busiest process on this adapter (NPU only)
+        internal int TopPid=-1, TopPct=0; // busiest process on this adapter
     }
     internal static class WindowsGpuTelemetry
     {
@@ -69,7 +69,11 @@ namespace DesktopHtmlHost
             if(engines!=null) {
                 var rows=new List<GpuEngineReading>(engines.Count);
                 foreach(var engine in engines) rows.Add(new GpuEngineReading {Name=engine.Key,Utilization=(int)Math.Round(Math.Max(0,engine.Value))});
-                for(int i=0;i<3;i++) {result[i].Utilization=i==2?BusiestNpuEngine(rows,luids[i]):BusiestEngine(rows,luids[i],"3D");result[i].Decode=BusiestEngine(rows,luids[i],"VideoDecode");}
+                for(int i=0;i<3;i++) {result[i].Utilization=i==2?BusiestNpuEngine(rows,luids[i]):BusiestEngine(rows,luids[i],"3D");result[i].Decode=BusiestEngine(rows,luids[i],"VideoDecode");result[i].Encode=BusiestEngine(rows,luids[i],"VideoEncode");}
+                // Copy engines are left out: every desktop app (and dwm) uses them at a trickle.
+                var graphicsKinds=new[]{"3D","Compute","VideoDecode","VideoEncode"};
+                TopProcess(rows,luids[0],graphicsKinds,out result[0].TopPid,out result[0].TopPct);
+                TopProcess(rows,luids[1],graphicsKinds,out result[1].TopPid,out result[1].TopPct);
                 TopProcess(rows,luids[2],new[]{"Neural","Compute"},out result[2].TopPid,out result[2].TopPct);
             }
             var shared=perf.Instances(SharedUsage);var dedicated=perf.Instances(DedicatedUsage);

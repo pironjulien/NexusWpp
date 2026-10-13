@@ -94,6 +94,16 @@ namespace DesktopHtmlHost
         // the wallpaper host. Windows performance counters remain the fast utilization source.
         private readonly NvidiaTelemetry nvidiaTelemetry = new NvidiaTelemetry();
         private int cachedNpuTopPid = -1, cachedNpuTopPct = 0;
+        private int cachedIgpuEncodeUtil = -1;
+        private int cachedIgpuTopPid = -1, cachedIgpuTopPct = 0, cachedDgpuTopPid = -1, cachedDgpuTopPct = 0;
+
+        // Busiest client of an adapter: {"name","pct"}; empty name = measured idle; null = no reading.
+        private string TopProcessJson(bool detected, bool fresh, int pid, int pct)
+        {
+            if (!detected || !fresh) return "null";
+            string name = pid > 0 ? ProcessName(pid) : "";
+            return string.Format(CultureInfo.InvariantCulture, "{{\"name\":{0},\"pct\":{1}}}", JsonString(name), name.Length > 0 ? pct : 0);
+        }
         private readonly Dictionary<int, string> processNames = new Dictionary<int, string>();
 
         // Process names for pids seen in GPU counters (pids are reused only after exit; the cache is pruned).
@@ -1135,6 +1145,7 @@ namespace DesktopHtmlHost
             int igpuUtil = cachedIgpuUtil;
             long igpuMemBytes = cachedIgpuMemBytes;
             int igpuDecodeUtil = cachedIgpuDecodeUtil;
+            int igpuEncodeUtil = cachedIgpuEncodeUtil;
             int npuUtil = cachedNpuUtil;
             long npuMemBytes = cachedNpuMemBytes;
             int dgpuUtil = cachedDgpuUtil;
@@ -1151,11 +1162,14 @@ namespace DesktopHtmlHost
                 var counters = WindowsGpuTelemetry.Read(perf, igpuLuid, dgpuLuid, npuLuid);
                 cachedIgpuUtil = igpuUtil = counters[0].Utilization;
                 cachedIgpuDecodeUtil = igpuDecodeUtil = counters[0].Decode;
+                cachedIgpuEncodeUtil = igpuEncodeUtil = counters[0].Encode;
                 cachedIgpuMemBytes = igpuMemBytes = counters[0].SharedBytes;
                 cachedDgpuUtil = dgpuUtil = counters[1].Utilization;
                 cachedDgpuMemBytes = counters[1].DedicatedBytes;
                 cachedNpuUtil = npuUtil = counters[2].Utilization;
                 cachedNpuTopPid = counters[2].TopPid;
+                cachedIgpuTopPid = counters[0].TopPid; cachedIgpuTopPct = counters[0].TopPct;
+                cachedDgpuTopPid = counters[1].TopPid; cachedDgpuTopPct = counters[1].TopPct;
                 cachedNpuTopPct = counters[2].TopPct;
                 cachedNpuMemBytes = npuMemBytes = counters[2].SharedBytes;
                 gpuCountersFresh = counters.Any(c => c.Utilization >= 0);
@@ -1232,7 +1246,7 @@ namespace DesktopHtmlHost
             bool windowsGpuFresh = gpuCountersFresh && (DateTime.UtcNow - lastGpuPerfTime).TotalSeconds <= 6;
             bool vramFresh = (nv != null && nv.UsedMiB.HasValue) || (windowsGpuFresh && cachedDgpuMemBytes >= 0);
             if (!windowsGpuFresh) {
-                igpuUtil = npuUtil = igpuDecodeUtil = -1;
+                igpuUtil = npuUtil = igpuDecodeUtil = igpuEncodeUtil = -1;
                 if (nv == null || !nv.Utilization.HasValue) gpuUtil = -1;
             }
 
@@ -1267,18 +1281,12 @@ namespace DesktopHtmlHost
             // memory, as in Task Manager); Windows sets the shared part to half of the RAM, which
             // is the fallback when the registry value is missing.
             long igpuTotalMb = igpuMemoryBudgetBytes > 0 ? igpuMemoryBudgetBytes / (1024 * 1024) : (long)(ramTotalPhys / 1024 / 1024 / 2);
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"igpu\":{{\"detected\":{0},\"utilization\":{1},\"decodeUtil\":{2},\"usedMb\":{3},\"totalMb\":{4},\"totalGb\":{5},\"name\":{6},\"driver\":{7},\"driverDate\":{8}}},",
-                igpuDetected ? "true" : "false", igpuUtil, igpuDecodeUtil, windowsGpuFresh && igpuMemBytes >= 0 ? igpuMemBytes / (1024 * 1024) : -1, igpuTotalMb, igpuTotalMb / 1024, JsonString(IgpuInfo), JsonString(IgpuDriver), JsonString(IgpuDriverDate));
+            sb.AppendFormat(CultureInfo.InvariantCulture, "\"igpu\":{{\"detected\":{0},\"utilization\":{1},\"decodeUtil\":{2},\"usedMb\":{3},\"totalMb\":{4},\"totalGb\":{5},\"name\":{6},\"driver\":{7},\"driverDate\":{8},\"topProcess\":{9},\"encodeUtil\":{10}}},",
+                igpuDetected ? "true" : "false", igpuUtil, igpuDecodeUtil, windowsGpuFresh && igpuMemBytes >= 0 ? igpuMemBytes / (1024 * 1024) : -1, igpuTotalMb, igpuTotalMb / 1024, JsonString(IgpuInfo), JsonString(IgpuDriver), JsonString(IgpuDriverDate), TopProcessJson(igpuDetected, windowsGpuFresh, cachedIgpuTopPid, cachedIgpuTopPct), igpuEncodeUtil);
 
             // npu
             long npuTotalMb = (long)(ramTotalPhys / 1024 / 1024 / 2);
-            // Busiest NPU client: {"name","pct"}; {"name":"","pct":0} = measured, nothing running; null = no reading.
-            string npuTop = "null";
-            if (NpuDetected && windowsGpuFresh)
-            {
-                string topName = cachedNpuTopPid > 0 ? ProcessName(cachedNpuTopPid) : "";
-                npuTop = string.Format(CultureInfo.InvariantCulture, "{{\"name\":{0},\"pct\":{1}}}", JsonString(topName), topName.Length > 0 ? cachedNpuTopPct : 0);
-            }
+            string npuTop = TopProcessJson(NpuDetected, windowsGpuFresh, cachedNpuTopPid, cachedNpuTopPct);
             sb.AppendFormat(CultureInfo.InvariantCulture, "\"npu\":{{\"detected\":{0},\"utilization\":{1},\"usedMb\":{2},\"totalMb\":{3},\"totalGb\":{4},\"name\":{5},\"topProcess\":{6}}},",
                 NpuDetected ? "true" : "false", npuUtil, windowsGpuFresh && npuMemBytes >= 0 ? npuMemBytes / (1024 * 1024) : -1, npuTotalMb, npuTotalMb / 1024, JsonString(NpuName), npuTop);
 
@@ -1288,8 +1296,8 @@ namespace DesktopHtmlHost
                 vramFresh ? vramPct : -1, vramFresh ? (long)(vramUsed / (1024 * 1024)) : -1, vramTotal / (1024 * 1024), vramTotal / 1024 / 1024 / 1024);
 
             // gpu
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"gpu\":{{\"detected\":{0},\"utilization\":{1},\"temp\":{2},\"coreClock\":{3},\"memoryClock\":{4},\"powerW\":{5},\"name\":{6},\"driver\":{7},\"driverDate\":{8},\"fanRpm\":{9}}},",
-                dgpuDetected ? "true" : "false", gpuUtil, gpuTemp, gpuCoreClock, gpuMemClock, gpuPowerW, JsonString(GpuName), JsonString(DgpuDriver), JsonString(DgpuDriverDate), gpuFanRpm);
+            sb.AppendFormat(CultureInfo.InvariantCulture, "\"gpu\":{{\"detected\":{0},\"utilization\":{1},\"temp\":{2},\"coreClock\":{3},\"memoryClock\":{4},\"powerW\":{5},\"name\":{6},\"driver\":{7},\"driverDate\":{8},\"fanRpm\":{9},\"topProcess\":{10}}},",
+                dgpuDetected ? "true" : "false", gpuUtil, gpuTemp, gpuCoreClock, gpuMemClock, gpuPowerW, JsonString(GpuName), JsonString(DgpuDriver), JsonString(DgpuDriverDate), gpuFanRpm, TopProcessJson(dgpuDetected, windowsGpuFresh, cachedDgpuTopPid, cachedDgpuTopPct));
 
             // ram
             string commitUsedGbStr = (commitUsedBytes / (1024.0 * 1024.0 * 1024.0)).ToString("F1", CultureInfo.InvariantCulture);

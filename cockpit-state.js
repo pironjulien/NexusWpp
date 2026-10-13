@@ -28,7 +28,7 @@ const acceleratorRow = document.querySelector(".accelerator-row");
 const ramCard = document.getElementById("ram-card");
 const ssdCard = document.getElementById("ssd-card");
 const vramCard = document.getElementById("vram-card");
-const vramTotalSub = document.getElementById("vram-total-sub");
+const igpuEncodeSub = document.getElementById("igpu-encode-sub");
 const igpuDecodeSub = document.getElementById("igpu-decode-sub");
 
 // Sub-metrics DOM bindings
@@ -40,7 +40,7 @@ const cpuProcThreadsSub = document.getElementById("cpu-proc-threads-sub");
 const gpuTempSub = document.getElementById("gpu-temp-sub");
 const gpuVramSub = document.getElementById("gpu-vram-sub");
 const gpuCoreSub = document.getElementById("gpu-core-sub");
-const gpuMemClockSub = document.getElementById("gpu-mem-clock-sub");
+const gpuTopProcSub = document.getElementById("gpu-top-proc-sub");
 
 // Right Column DOM Elements
 const ramVal = document.getElementById("ram-val");
@@ -75,7 +75,7 @@ const specNetMode = document.getElementById("spec-net-mode");
 const specVramName = document.getElementById("spec-vram-name");
 const specSsdName = document.getElementById("spec-ssd-name");
 const vramUsedSub = document.getElementById("vram-used-sub");
-const vramFreeSub = document.getElementById("vram-free-sub");
+const igpuTopProcSub = document.getElementById("igpu-top-proc-sub");
 const igpuVramBar = document.getElementById("igpu-vram-bar");
 const npuUsedSub = document.getElementById("npu-used-sub");
 const npuTopProcSub = document.getElementById("npu-top-proc-sub");
