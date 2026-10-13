@@ -25,7 +25,7 @@ graph TD
 3. WebView2 starts immediately off screen and loads `http://nexuswpp.local/index.html` through a virtual host folder mapping.
 4. A 100 ms timer asks Explorer to create the wallpaper layer and searches for `WorkerW`.
 5. If `WorkerW` is not ready after 800 ms, the host temporarily attaches to `Progman` so the wallpaper appears sooner.
-6. Once attached, the host covers the virtual screen and keeps listening for display changes.
+6. Once attached, the host covers the virtual screen (mapped into the parent's client coordinates, so monitors left of or above the primary work) and keeps listening for display changes. It sends `{"control":"LAYOUT","window":{w,h},"primary":{x,y,w,h}}` (window pixels); the page lays the cockpit out in the primary monitor (.layout-frame, a size container whose --lvw/--lvh units replace w/h) while the background spans every monitor. With one monitor the frame is the whole window.. `DesktopHostContext` owns the message loop: if Explorer exits and destroys WorkerW with our window, a new wallpaper form is created. `TaskbarCreated` and a periodic parent check re-attach after an Explorer restart.. WebView2 self-heals: a suppressed lifecycle exception, a disposed core or 5 failed posts in a row recreate the control (back-off 1 s to 60 s); a renderer exit or hang reloads the page; a GPU/utility process exit is only logged; a browser process exit recreates the environment.
 
 ## Telemetry
 
@@ -54,7 +54,7 @@ A tray icon (`NotifyIcon`) opens the settings window (`SettingsForm.cs`) and qui
 
 ## Interaction
 
-The injected WebView2 window lives below desktop icons, so normal mouse delivery is unreliable. The frontend reports the bounds of the power-plan panel with `BOUNDS:left,top,right,bottom`. The host installs a low-level mouse hook and forwards clicks inside that rectangle to Chromium, then swallows those clicks so Windows does not select desktop icons behind the UI.
+The injected WebView2 window lives below desktop icons, so normal mouse delivery is unreliable. The frontend reports the bounds of the power-plan panel with `BOUNDS:left,top,right,bottom`. The host installs a low-level mouse hook and forwards clicks inside that rectangle to Chromium, then swallows those clicks so Windows does not select desktop icons behind the UI. Only clicks landing on the wallpaper or the desktop layers (Progman, WorkerW, SHELLDLL_DefView, SysListView32) are forwarded; other windows, including the settings window, keep theirs. A button-up follows its button-down.
 
 ## Performance Choices
 
@@ -65,6 +65,6 @@ The injected WebView2 window lives below desktop icons, so normal mouse delivery
 - Top-process ranking uses its own PDH query sampled every 4 s (CPU averaged over that window) and is protected against overlapping calls.
 - A discarded warm-up collection at startup makes the first visible frame show fresh values even after a covered start.
 - GPU routing is left to Windows; NexusWpp does not write DirectX GPU preferences.
-- A 250 ms coverage check pauses work only when all monitor work areas stay covered for 1.5 s (or the session is inactive). While paused, a WinEvent hook (foreground, move/size end, minimize, show/hide/destroy of top-level windows) re-checks within about 60 ms; the hook exists only while paused. WebView2 stays visible and is never suspended for occlusion; the real composed scene remains available before animation resumes.
+- A 250 ms coverage check (per-monitor-v2 DPI context, monitors from `EnumDisplayMonitors`) pauses work only when all monitor work areas stay covered for 1.5 s, or at once when the session is inactive or the console display is off (`GUID_CONSOLE_DISPLAY_STATE`). The mouse hook is uninstalled while paused and reinstalled on resume. While paused, a WinEvent hook (foreground, move/size end, minimize, show/hide/destroy of top-level windows) re-checks within about 60 ms; the hook exists only while paused. WebView2 stays visible and is never suspended for occlusion; the real composed scene remains available before animation resumes.
 - Canvas pixels, particles and critical-state styling survive pause. CSS animations and in-flight transitions pause, clock callbacks stop, and stale asynchronous telemetry is discarded. The page requests runtime state after its listener is ready, including recovery/navigation.
 - The mouse hook runs on its own message-pump thread, consuming immutable routing snapshots from the UI thread.

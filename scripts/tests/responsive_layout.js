@@ -31,6 +31,10 @@ window.layoutFixture = function (test) {
         stats.gpu.temp = stats.gpu.powerW = stats.gpu.memoryClock = -1;
     }
     updateDOM(stats);
+    // Multi-monitor topologies: the host's LAYOUT rectangle (window pixels; the fixture uses CSS pixels).
+    applyHostLayout(test.layout || null);
+    window.layoutExpectedRect = test.layout ? { left: test.layout.primary.x, top: test.layout.primary.y,
+        right: test.layout.primary.x + test.layout.primary.w, bottom: test.layout.primary.y + test.layout.primary.h } : null;
     if (typeof loadAlerts !== 'undefined') {
         loadAlerts.forEach(alert => alert.reset());
         updateLoadAlerts(stats, 1000);
@@ -49,10 +53,15 @@ window.inspectLayout = function () {
     const rect = element => element.getBoundingClientRect();
     const name = element => element.id || element.className;
     const inside = (a, b, tolerance = 1.5) => a.left >= b.left - tolerance && a.top >= b.top - tolerance && a.right <= b.right + tolerance && a.bottom <= b.bottom + tolerance;
-    const viewport = { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+    const screenArea = { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+    // The cockpit lives on the primary monitor; the background spans the whole window.
+    const viewport = window.layoutExpectedRect || screenArea;
     const dashboard = rect(document.querySelector('.dashboard'));
     // Room for desktop icon labels above and a 48 CSS px taskbar plus clearance below.
-    if (dashboard.top < 96 - 1 || innerHeight - dashboard.bottom < 60 - 1) issues.push('missing desktop icon/taskbar safe area');
+    if (dashboard.top - viewport.top < 96 - 1 || viewport.bottom - dashboard.bottom < 60 - 1) issues.push('missing desktop icon/taskbar safe area');
+    if (!inside(dashboard, viewport)) issues.push('dashboard outside the primary monitor');
+    const background = rect(document.querySelector('.cosmos-bg'));
+    if (Math.abs(background.left) > 1 || Math.abs(background.top) > 1 || Math.abs(background.right - innerWidth) > 1 || Math.abs(background.bottom - innerHeight) > 1) issues.push('background does not cover every monitor');
     const cards = [...document.querySelectorAll('.gauge-card, .column-center')].filter(visible);
     if (cards.length !== window.layoutExpectedCards + 1) issues.push('missing hardware cards');
     for (const element of cards) {
@@ -128,7 +137,7 @@ window.inspectLayout = function () {
     if (innerWidth !== screen.width || Math.abs(devicePixelRatio - window.layoutExpectedDpr) > .01) issues.push('unexpected emulation metrics');
     if (!runtimeSuspended || canvasFrameTimer || canvasAnimationFrame) issues.push('resize restarted paused animation');
     return { issues: [...new Set(issues)], viewport: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio },
-        desktopInsets: { top: dashboard.top, bottom: innerHeight - dashboard.bottom },
+        desktopInsets: { top: dashboard.top - viewport.top, bottom: viewport.bottom - dashboard.bottom },
         cards: cards.map(element => ({ id: name(element), bounds: rect(element).toJSON() })),
         remoteBounds: rect(document.querySelector('.remote-sub-panel')).toJSON(),
         overflowDetails: issues.length ? [...document.querySelectorAll('#gpu-card, #ssd-card, #gpu-card > *, #ssd-card > *, #gpu-card .sub-progress-container, #ssd-card .sub-metric')].filter(visible).map(element => ({

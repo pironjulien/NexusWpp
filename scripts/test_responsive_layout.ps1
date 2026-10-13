@@ -52,6 +52,26 @@ foreach ($size in @(@(800,450),@(960,540),@(1280,720),@(1706,960),@(432,768),@(5
         }
     }
 }
+# Multi-monitor desktops: the window spans every monitor, the cockpit stays on the primary one.
+# Window size, then primary monitor rectangle relative to the window (negative virtual origins
+# put the primary away from the window's top-left corner).
+$topologies = @(
+    @{ id='side-by-side-primary-right'; w=3840; h=1080; p=@(1920,0,1920,1080) },
+    @{ id='side-by-side-primary-left';  w=3840; h=1080; p=@(0,0,1920,1080) },
+    @{ id='stacked-primary-below';      w=1920; h=2160; p=@(0,1080,1920,1080) },
+    @{ id='l-shape-portrait-left';      w=3000; h=1920; p=@(1080,420,1920,1080) },
+    @{ id='mixed-sizes-primary-right';  w=3584; h=1440; p=@(1024,0,2560,1440) },
+    @{ id='three-monitors-middle';      w=5760; h=1080; p=@(1920,0,1920,1080) },
+    @{ id='portrait-primary';           w=3000; h=1920; p=@(0,0,1080,1920) }
+)
+foreach ($topology in $topologies) {
+    foreach ($dpr in @(1, 1.25)) {
+        $w = [int][math]::Floor($topology.w / $dpr); $h = [int][math]::Floor($topology.h / $dpr)
+        $primary = @{ x=$topology.p[0] / $dpr; y=$topology.p[1] / $dpr; w=$topology.p[2] / $dpr; h=$topology.p[3] / $dpr }
+        $cases.Add(@{ id="monitors-$($topology.id)-$([int]($dpr*100))pct"; width=$w; height=$h; dpr=$dpr; plans=4; hardware='full';
+            layout=@{ control='LAYOUT'; window=@{ w=$w; h=$h }; primary=$primary }; capture=($dpr -eq 1) })
+    }
+}
 $expanded = foreach ($item in $cases) {
     foreach ($state in @('normal','high','stale')) {
         $variant=$item.Clone(); $variant.state=$state; $variant.id=$item.id+'-'+$state; $variant
