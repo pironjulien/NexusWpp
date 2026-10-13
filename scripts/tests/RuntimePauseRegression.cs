@@ -196,6 +196,9 @@ class RuntimePauseRegression : Form
             await Check("gpuVal.querySelector('span').textContent==='%' && gpuVal.textContent==='73%'", "recovered gauge restores both real value and unit");
             await Check("telemetryNodeList.every(n=>!n.stale) && ![...document.querySelectorAll('[role=progressbar]')].some(g=>g.hasAttribute('aria-valuetext'))", "fresh stream clears the stale radar and accessible values");
 
+            // The test machine's own "Animation effects" setting must not decide the result
+            // (CI runners on Windows Server have it off): pin motion to "allowed" here.
+            await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Emulation.setEmulatedMedia", "{\"features\":[{\"name\":\"prefers-reduced-motion\",\"value\":\"no-preference\"}]}");
             // One 12 Hz clock: the logo rings step every 83 ms from script, with no CSS animation.
             // The layout fixture freezes the page; release it to observe live motion.
             const string spinnerState = "logoSpinners.map(s => s.element.style.transform).join(',')";
@@ -235,7 +238,7 @@ class RuntimePauseRegression : Form
             await Check("reducedMotionQuery.matches && !runtimeSuspended && " + spinnerState + "===spinHeld", "reduced motion holds the logo rings still");
             await Check("(setCircularProgress(cpuRing,10), Math.abs(parseFloat(cpuRing.style.strokeDashoffset)-RING_CIRCUMFERENCE*0.9)<0.01) && getComputedStyle(igpuVramBar).transitionDuration==='0s'", "reduced motion shows new gauge values at once");
             await Check("gpuVal.textContent==='73%' && clockTimer !== 0", "reduced motion keeps values and clock live");
-            await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Emulation.setEmulatedMedia", "{\"features\":[]}");
+            await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Emulation.setEmulatedMedia", "{\"features\":[{\"name\":\"prefers-reduced-motion\",\"value\":\"no-preference\"}]}");
             await Task.Delay(100);
             await view.CoreWebView2.ExecuteScriptAsync("window.spinHeld=" + spinnerState + ";");
             await Task.Delay(600);
