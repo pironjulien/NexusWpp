@@ -110,6 +110,7 @@ namespace DesktopHtmlHost
                                 FullscreenTimer_Tick(null, null);
                                 ApplyWebViewRuntimeState();
                                 PostSettings();
+                                PostLayout();
                             }
                             else if (msg == "REQUEST_TELEMETRY")
                             {
@@ -146,7 +147,7 @@ namespace DesktopHtmlHost
                 webView.Source = new Uri("http://nexuswpp.local/index.html");
 
                 StartRuntimeServices();
-                webViewRecoveryPending = false;
+                webViewStartedOnce = true;
 
                 if (!telemetryReady || telemetryCollector == null)
                 {
@@ -183,10 +184,18 @@ namespace DesktopHtmlHost
             }
             catch (Exception ex)
             {
-                webViewRecoveryPending = false;
                 if (isClosing || IsDisposed) return;
 
                 Program.LogDebug("WebView2 Runtime failed to initialize: " + ex.ToString());
+                if (webViewStartedOnce)
+                {
+                    // A recovery (browser process restart) can fail transiently: retry with back-off.
+                    webViewEnvironment = null;
+                    webViewRecoveryPending = false;
+                    QueueWebViewRecovery("failed WebView2 re-initialization");
+                    recoveryRetryQueued = webViewRecoveryPending;
+                    return;
+                }
                 if (IsWebView2RuntimeMissing(ex)) ShowWebView2RuntimeMissing();
                 BeginCleanShutdown();
                 // Without WebView2 the form would cover the desktop in grey and hold the
@@ -196,6 +205,31 @@ namespace DesktopHtmlHost
             finally
             {
                 webViewInitializing = false;
+                // A retry queued from the catch above owns the flag again.
+                if (!recoveryRetryQueued) webViewRecoveryPending = false;
+                recoveryRetryQueued = false;
+            }
+        }
+
+        private bool webViewStartedOnce;
+        private bool recoveryRetryQueued;
+
+        internal enum ProcessFailureAction { LogOnly, Reload, RecreateEnvironment }
+
+        // Only a lost browser process needs a new environment. GPU/utility helpers are
+        // restarted by WebView2 itself: recreating the control there would discard the
+        // scene and the 60 s histories for nothing.
+        internal static ProcessFailureAction ClassifyProcessFailure(CoreWebView2ProcessFailedKind kind)
+        {
+            switch (kind)
+            {
+                case CoreWebView2ProcessFailedKind.BrowserProcessExited:
+                    return ProcessFailureAction.RecreateEnvironment;
+                case CoreWebView2ProcessFailedKind.RenderProcessExited:
+                case CoreWebView2ProcessFailedKind.RenderProcessUnresponsive:
+                    return ProcessFailureAction.Reload;
+                default:
+                    return ProcessFailureAction.LogOnly;
             }
         }
 
@@ -268,9 +302,30 @@ namespace DesktopHtmlHost
 
         private void CoreWebView2_ProcessFailed(object sender, CoreWebView2ProcessFailedEventArgs e)
         {
-            string kind = e != null ? e.ProcessFailedKind.ToString() : "unknown failure";
-            Program.LogDebug("WebView2 process failed: " + kind + ".");
-            QueueWebViewRecovery("process failure (" + kind + ")");
+            if (isClosing || IsDisposed || e == null) return;
+            CoreWebView2ProcessFailedKind kind = e.ProcessFailedKind;
+            ProcessFailureAction action = ClassifyProcessFailure(kind);
+            Program.LogDebug("WebView2 process failed: " + kind + " (" + action + ").");
+
+            if (action == ProcessFailureAction.Reload)
+            {
+                try
+                {
+                    CoreWebView2 core = sender as CoreWebView2;
+                    if (core == null) { TryGetCoreWebView2(out core); }
+                    if (core != null) { core.Reload(); return; }
+                }
+                catch (Exception ex)
+                {
+                    Program.LogDebug("WebView2 reload after renderer failure failed: " + ex.Message);
+                }
+                QueueWebViewRecovery("renderer failure (" + kind + ")");
+            }
+            else if (action == ProcessFailureAction.RecreateEnvironment)
+            {
+                webViewEnvironment = null;
+                QueueWebViewRecovery("process failure (" + kind + ")");
+            }
         }
     }
 }

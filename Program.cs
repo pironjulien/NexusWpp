@@ -38,8 +38,12 @@ namespace DesktopHtmlHost
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
         private static extern int GetCurrentPackageFamilyName(ref int packageFamilyNameLength, StringBuilder packageFamilyName);
 
-        [DllImport("user32.dll")]
+        [DllImport("user32.dll", SetLastError = true)]
         private static extern bool AllowSetForegroundWindow(int processId);
+
+        private const int ASFW_ANY = -1;
+        // Startup already relaunches the app after a reboot (Run key or Store startup task).
+        private const int RESTART_NO_REBOOT = 8;
 
         [STAThread]
         static void Main(string[] args)
@@ -54,8 +58,7 @@ namespace DesktopHtmlHost
                     EventWaitHandle showSettings;
                     if (EventWaitHandle.TryOpenExisting(ShowSettingsEventName, out showSettings))
                     {
-                        // This launch owns the foreground: let the running instance bring its window forward.
-                        const int ASFW_ANY = -1;
+                        // This launch owns the foreground right: let the running instance bring Settings to front.
                         try { AllowSetForegroundWindow(ASFW_ANY); } catch { }
                         using (showSettings) showSettings.Set();
                     }
@@ -65,7 +68,7 @@ namespace DesktopHtmlHost
                 // Read before anything creates the data folder: a profile without WebView2 data is a first launch.
                 FirstLaunch = !File.Exists(WelcomeFlagPath) && !Directory.Exists(GetWebViewUserDataFolder());
                 if (!FirstLaunch) MarkWelcomeShown();
-                LogDebug("NexusWpp " + NexusWpp.ReleaseVersion.Value + (IsPackaged ? " (Store)" : " (EXE)") + " starting on Windows " + Environment.OSVersion.Version + ".");
+                LogDebug("NexusWpp " + NexusWpp.ReleaseVersion.Value + (IsPackaged ? " (Store)" : " (EXE)") + " starting on Windows " + Environment.OSVersion.Version + " (" + Application.ExecutablePath + ").");
 
                 // Force Process DPI Awareness to prevent Windows from virtualizing coordinates
                 SetProcessDPIAware();
@@ -86,7 +89,10 @@ namespace DesktopHtmlHost
                 string defaultHtml = GetDefaultHtmlPath();
                 string htmlPath = args.Length > 0 ? args[0] : defaultHtml;
 
-                Application.Run(new DesktopForm(htmlPath));
+                using (var context = new DesktopHostContext(() => new DesktopForm(htmlPath)))
+                {
+                    Application.Run(context);
+                }
                 if (QuitRequestedByUser) RestoreDesktopWallpaper();
             }
             catch (Exception ex)
@@ -165,7 +171,7 @@ namespace DesktopHtmlHost
             try
             {
                 string restartArgs = BuildRestartCommandLine(args);
-                int result = RegisterApplicationRestart(restartArgs, 0);
+                int result = RegisterApplicationRestart(restartArgs, RESTART_NO_REBOOT);
                 if (result != 0)
                 {
                     LogDebug("Application restart registration returned 0x" + result.ToString("X8", CultureInfo.InvariantCulture));
@@ -320,10 +326,13 @@ namespace DesktopHtmlHost
             catch { }
         }
 
+        // Tests that compile the host sources log to their own folder, never the user's log.
+        internal static string LogPathOverride = null;
+
         internal static void LogDebug(string message)
         {
             string line = string.Format("[{0}] {1}\r\n", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), message);
-            AppendLog(Path.Combine(GetAppDataFolder(), "webview_debug.log"), line);
+            AppendLog(LogPathOverride ?? Path.Combine(GetAppDataFolder(), "webview_debug.log"), line);
         }
 
         private static void CleanupStaleWebView2Processes()

@@ -266,6 +266,17 @@ class RuntimePauseRegression : Form
             view.CoreWebView2.PostWebMessageAsJson("{\"control\":\"SETTINGS\",\"logo\":null}");
             await Task.Delay(300);
             await Check("logoImg.getAttribute('src') === DEFAULT_LOGO && logoLoaded", "reset restores the brand logo");
+            // Multi-monitor: the host LAYOUT message keeps the cockpit on the primary monitor.
+            await view.CoreWebView2.ExecuteScriptAsync("window.singleRect = JSON.stringify(document.querySelector('.dashboard').getBoundingClientRect());");
+            view.CoreWebView2.PostWebMessageAsJson("{\"control\":\"LAYOUT\",\"window\":{\"w\":2560,\"h\":800},\"primary\":{\"x\":1280,\"y\":0,\"w\":1280,\"h\":800}}");
+            await Task.Delay(300);
+            await Check("(() => { const d = document.querySelector('.dashboard').getBoundingClientRect(), x = innerWidth / 2; return d.left >= x - 1 && d.right <= innerWidth + 1 && d.top >= 0 && d.bottom <= innerHeight + 1; })()", "dashboard stays inside the primary monitor rectangle");
+            await Check("(() => { const b = document.querySelector('.cosmos-bg').getBoundingClientRect(); return b.left === 0 && b.top === 0 && b.width === innerWidth && b.height === innerHeight; })()", "background still covers every monitor");
+            await Check("getComputedStyle(document.querySelector('.workspace')).gridTemplateColumns.split(' ').length === 2", "a narrow primary monitor gets the portrait layout");
+            await Check("(() => { const p = document.querySelector('.remote-sub-panel').getBoundingClientRect(); return lastRemoteBoundsMsg === 'BOUNDS:' + Math.round(p.left) + ',' + Math.round(p.top) + ',' + Math.round(p.right) + ',' + Math.round(p.bottom) + ',' + (devicePixelRatio || 1).toFixed(4); })()", "power panel bounds follow the moved cockpit");
+            view.CoreWebView2.PostWebMessageAsJson("{\"control\":\"LAYOUT\",\"window\":{\"w\":2560,\"h\":1600},\"primary\":{\"x\":0,\"y\":0,\"w\":2560,\"h\":1600}}");
+            await Task.Delay(300);
+            await Check("JSON.stringify(document.querySelector('.dashboard').getBoundingClientRect()) === singleRect && document.querySelector('.layout-frame').style.width === ''", "single monitor layout is the unchanged full-window layout");
             // 60 s history behind each card: drawn under the content, gaps for missing readings, clamped values.
             await Check("document.querySelectorAll('.gauge-card > svg.history-line').length === 7 && [...document.querySelectorAll('.history-line')].every(s => getComputedStyle(s).zIndex === '-1' && getComputedStyle(s).pointerEvents === 'none')", "every card has a history line behind its content");
             await Check("cardHistories.every(h => h.values.length > 0 && h.values.length <= HISTORY_LENGTH)", "history keeps at most 60 samples");
