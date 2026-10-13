@@ -53,7 +53,20 @@ namespace DesktopHtmlHost
             }
         }
 
+        // First launch: once the wallpaper is in place, open the settings with a short explanation.
+        private void ShowWelcome()
+        {
+            Program.MarkWelcomeShown();
+            Program.LogDebug("First launch: showing the welcome message.");
+            TryBeginInvoke((MethodInvoker)delegate { ShowSettings(true); });
+        }
+
         private void ShowSettings()
+        {
+            ShowSettings(false);
+        }
+
+        private void ShowSettings(bool welcome)
         {
             if (isClosing) return;
             if (settingsForm != null && !settingsForm.IsDisposed)
@@ -64,7 +77,7 @@ namespace DesktopHtmlHost
             }
             string directory = Path.GetDirectoryName(htmlPath);
             if (string.IsNullOrEmpty(directory)) directory = AppDomain.CurrentDomain.BaseDirectory;
-            settingsForm = new SettingsForm(Path.Combine(directory, "julienpiron.png"), PostSettings, QuitFromUser);
+            settingsForm = new SettingsForm(Path.Combine(directory, "julienpiron.png"), PostSettings, QuitFromUser, welcome);
             settingsForm.FormClosed += delegate { settingsForm = null; };
             settingsForm.Show();
             settingsForm.Activate();

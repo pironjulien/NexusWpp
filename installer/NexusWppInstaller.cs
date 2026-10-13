@@ -6,8 +6,11 @@ using System.IO.Compression;
 using System.Management;
 using System.Net;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Security.AccessControl;
+using System.Security.Cryptography.X509Certificates;
 using System.Security.Principal;
+using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
@@ -60,16 +63,23 @@ namespace NexusWppInstaller
                     return 0;
                 }
 
-                Install(new NullProgressReporter());
-                Show(silent, ProductName + " " + ProductVersion + " is installed and running.");
+                bool launched = Install(new NullProgressReporter());
+                Show(silent, ProductName + " " + ProductVersion + (launched ? " is installed and running." : " is installed and will start at the next sign-in."));
                 return 0;
             }
             catch (Exception ex)
             {
                 Log("Installation failed: " + ex);
-                Show(false, "NexusWpp installation failed:\r\n\r\n" + ex.Message + "\r\n\r\nLog: " + Path.Combine(InstallDir, "install.log"));
+                Show(false, "NexusWpp installation failed:\r\n\r\n" + ex.Message + "\r\n\r\nLog: " + LogPath);
                 return 1;
             }
+        }
+
+        private static string CompletionMessage(bool launched)
+        {
+            return launched
+                ? "NexusWpp " + ProductVersion + " est installe et lance."
+                : "NexusWpp " + ProductVersion + " est installe. Il demarrera a la prochaine ouverture de session.";
         }
 
         private static int RunWithProgressWindow(bool uninstall)
@@ -92,14 +102,14 @@ namespace NexusWppInstaller
                             }
                             else
                             {
-                                Install(form);
-                                form.Complete(true, "NexusWpp " + ProductVersion + " est installe et lance.", 0);
+                                bool launched = Install(form);
+                                form.Complete(true, CompletionMessage(launched), 0);
                             }
                         }
                         catch (Exception ex)
                         {
                             Log((uninstall ? "Uninstall" : "Installation") + " failed: " + ex);
-                            form.Complete(false, ex.Message + "\r\n\r\nLog: " + Path.Combine(InstallDir, "install.log"), 1);
+                            form.Complete(false, ex.Message + "\r\n\r\nLog: " + LogPath, 1);
                         }
                     });
                 };
@@ -109,15 +119,14 @@ namespace NexusWppInstaller
             }
         }
 
-        private static void Install(IProgressReporter progress)
+        private static bool Install(IProgressReporter progress)
         {
             Log("Starting NexusWpp " + ProductVersion + " installation.");
             progress.Report(5, "Preparation de l'installation " + ProductVersion + "...");
 
             progress.Report(12, "Arret de l'ancienne version...");
             StopRunningWallpaper();
-            Directory.CreateDirectory(InstallDir);
-            SecureInstallDir();
+            PrepareInstallDir();
 
             progress.Report(24, "Verification du runtime WebView2...");
             if (!IsWebView2RuntimeInstalled())
@@ -128,6 +137,7 @@ namespace NexusWppInstaller
 
             progress.Report(48, "Copie des fichiers NexusWpp...");
             ExtractPayload();
+            VerifyInstallDirSecurity();
 
             progress.Report(64, "Configuration du demarrage Windows...");
             RegisterStartup();
@@ -140,17 +150,23 @@ namespace NexusWppInstaller
             PersistInstallerForUninstall();
 
             progress.Report(94, "Lancement du fond d'ecran...");
-            StartWallpaper();
+            bool launched = StartWallpaper();
 
             progress.Report(100, "Installation terminee.");
-            Log("NexusWpp " + ProductVersion + " installation completed.");
+            Log("NexusWpp " + ProductVersion + " installation completed" + (launched ? "." : "; it starts at the next sign-in."));
+            return launched;
         }
 
         private static void Uninstall(IProgressReporter progress)
         {
+            installDirReady = IsTrustedInstallDir();
             Log("Starting NexusWpp " + ProductVersion + " uninstall.");
             progress.Report(10, "Arret de NexusWpp...");
             StopRunningWallpaper();
+            // Explorer may keep the last frame of the wallpaper window: repaint the user's own wallpaper.
+            RepaintUserWallpaper();
+            progress.Report(25, "Suppression des donnees utilisateur...");
+            RemoveInteractiveUserData();
             progress.Report(35, "Nettoyage du demarrage Windows...");
             CleanupStartupEntries();
             progress.Report(55, "Suppression du menu Demarrer...");
@@ -168,7 +184,18 @@ namespace NexusWppInstaller
             }
             else if (Directory.Exists(InstallDir))
             {
-                Directory.Delete(InstallDir, true);
+                installDirReady = false; // the log folder is going away
+                if ((File.GetAttributes(InstallDir) & FileAttributes.ReparsePoint) != 0)
+                {
+                    // Never follow a link planted in place of the folder: remove the link only.
+                    Directory.Delete(InstallDir, false);
+                    Log("Install directory was a link: only the link was removed.");
+                }
+                else
+                {
+                    // Recursive delete removes inner links without following them.
+                    Directory.Delete(InstallDir, true);
+                }
             }
 
             progress.Report(100, "Desinstallation terminee.");
@@ -216,22 +243,127 @@ namespace NexusWppInstaller
             }
         }
 
+        private static readonly SecurityIdentifier AdministratorsSid = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+        private static readonly SecurityIdentifier SystemSid = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
+
         // C:\ grants "Modify" to Authenticated Users and children inherit it. The folder
         // holds an exe run at every logon (HKLM Run) and the elevated uninstaller, so only
-        // administrators and SYSTEM may write to it.
-        private static void SecureInstallDir()
+        // administrators and SYSTEM may write to it, and it is owned by Administrators.
+        private static DirectorySecurity BuildInstallDirSecurity()
         {
             var security = new DirectorySecurity();
+            security.SetOwner(AdministratorsSid);
             security.SetAccessRuleProtection(true, false);
             const InheritanceFlags inherit = InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit;
-            security.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null),
+            security.AddAccessRule(new FileSystemAccessRule(AdministratorsSid,
                 FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
-            security.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null),
+            security.AddAccessRule(new FileSystemAccessRule(SystemSid,
                 FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
             security.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null),
                 FileSystemRights.ReadAndExecute, inherit, PropagationFlags.None, AccessControlType.Allow));
-            Directory.SetAccessControl(InstallDir, security);
-            Log("Install directory ACL restricted to administrators and SYSTEM.");
+            return security;
+        }
+
+        private static bool IsTrustedOwner(FileSystemSecurity security)
+        {
+            var owner = security.GetOwner(typeof(SecurityIdentifier)) as SecurityIdentifier;
+            // The administrator running this elevated installer may also own files it created
+            // (depends on the "default owner" policy); a standard user cannot plant those.
+            return owner != null && (owner.Equals(AdministratorsSid) || owner.Equals(SystemSid) || owner.Equals(WindowsIdentity.GetCurrent().User));
+        }
+
+        // True when every item under the install folder is a real file or folder owned by
+        // Administrators or SYSTEM: nothing a standard user could have planted or redirected.
+        private static bool IsTrustedInstallDir()
+        {
+            try
+            {
+                var root = new DirectoryInfo(InstallDir);
+                if (!root.Exists || (root.Attributes & FileAttributes.ReparsePoint) != 0) return false;
+                if (!IsTrustedOwner(root.GetAccessControl(AccessControlSections.Owner))) return false;
+                var pending = new System.Collections.Generic.Stack<DirectoryInfo>();
+                pending.Push(root);
+                while (pending.Count > 0)
+                {
+                    foreach (FileSystemInfo item in pending.Pop().EnumerateFileSystemInfos())
+                    {
+                        if ((item.Attributes & FileAttributes.ReparsePoint) != 0) return false;
+                        var directory = item as DirectoryInfo;
+                        FileSystemSecurity security = directory != null
+                            ? (FileSystemSecurity)directory.GetAccessControl(AccessControlSections.Owner)
+                            : ((FileInfo)item).GetAccessControl(AccessControlSections.Owner);
+                        if (!IsTrustedOwner(security)) return false;
+                        if (directory != null) pending.Push(directory);
+                    }
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log("Install directory check failed: " + ex.Message);
+                return false;
+            }
+        }
+
+        // Creates C:\nexuswpp with its restricted ACL from the start. A reparse point is refused;
+        // a folder (or content) owned by someone else is removed first, so no planted file survives.
+        private static void PrepareInstallDir()
+        {
+            var info = new DirectoryInfo(InstallDir);
+            if (info.Exists || File.Exists(InstallDir))
+            {
+                if ((info.Attributes & FileAttributes.ReparsePoint) != 0)
+                {
+                    throw new InvalidOperationException(InstallDir + " is a link (reparse point). Remove it, then run the installer again.");
+                }
+                if (!info.Exists)
+                {
+                    throw new InvalidOperationException(InstallDir + " is a file. Remove it, then run the installer again.");
+                }
+                if (!IsTrustedInstallDir())
+                {
+                    string self = Path.GetFullPath(Assembly.GetExecutingAssembly().Location);
+                    if (self.StartsWith(Path.GetFullPath(InstallDir) + "\\", StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidOperationException(InstallDir + " is not owned by administrators. Run the installer from another folder.");
+                    }
+                    Log("Install directory has a foreign owner or a link inside: removing it before installation.");
+                    Directory.Delete(InstallDir, true);
+                }
+            }
+
+            if (!Directory.Exists(InstallDir))
+            {
+                Directory.CreateDirectory(InstallDir, BuildInstallDirSecurity());
+            }
+            else
+            {
+                Directory.SetAccessControl(InstallDir, BuildInstallDirSecurity());
+            }
+
+            installDirReady = true;
+            Log("Install directory owned by Administrators, ACL restricted to administrators and SYSTEM.");
+        }
+
+        private static void VerifyInstallDirSecurity()
+        {
+            DirectorySecurity security = Directory.GetAccessControl(InstallDir);
+            if (!IsTrustedInstallDir() || !security.AreAccessRulesProtected)
+            {
+                throw new InvalidOperationException("The security of " + InstallDir + " could not be verified after installation.");
+            }
+            foreach (FileSystemAccessRule rule in security.GetAccessRules(true, true, typeof(SecurityIdentifier)))
+            {
+                var sid = (SecurityIdentifier)rule.IdentityReference;
+                const FileSystemRights write = FileSystemRights.WriteData | FileSystemRights.AppendData | FileSystemRights.Delete |
+                    FileSystemRights.ChangePermissions | FileSystemRights.TakeOwnership | FileSystemRights.WriteAttributes;
+                if (rule.AccessControlType == AccessControlType.Allow && (rule.FileSystemRights & write) != 0 &&
+                    !sid.Equals(AdministratorsSid) && !sid.Equals(SystemSid))
+                {
+                    throw new InvalidOperationException(InstallDir + " grants write access to " + sid.Value + ".");
+                }
+            }
+            Log("Install directory owner and ACL verified.");
         }
 
         private static void KillOwnedWebView2Processes()
@@ -303,23 +435,42 @@ namespace NexusWppInstaller
         private static void InstallWebView2Runtime()
         {
             Log("WebView2 Runtime missing. Downloading Evergreen Bootstrapper.");
-            string bootstrapper = Path.Combine(Path.GetTempPath(), "MicrosoftEdgeWebview2Setup.exe");
-            using (WebClient client = new WebClient())
+            // Downloaded inside the administrators-only install folder (not %TEMP%), so no
+            // standard user can swap the file between the signature check and its launch.
+            string downloadDir = Path.Combine(InstallDir, "webview2-setup");
+            if (Directory.Exists(downloadDir)) Directory.Delete(downloadDir, true);
+            Directory.CreateDirectory(downloadDir);
+            string bootstrapper = Path.Combine(downloadDir, "MicrosoftEdgeWebview2Setup.exe");
+            try
             {
-                client.DownloadFile(WebView2BootstrapperUrl, bootstrapper);
-            }
-
-            ProcessStartInfo psi = new ProcessStartInfo();
-            psi.FileName = bootstrapper;
-            psi.Arguments = "/silent /install";
-            psi.UseShellExecute = false;
-            using (Process process = Process.Start(psi))
-            {
-                process.WaitForExit();
-                if (process.ExitCode != 0 && process.ExitCode != 1638)
+                using (WebClient client = new WebClient())
                 {
-                    throw new InvalidOperationException("WebView2 Runtime installer failed with exit code " + process.ExitCode + ".");
+                    client.DownloadFile(WebView2BootstrapperUrl, bootstrapper);
                 }
+
+                string signer;
+                if (!IsSignedByMicrosoft(bootstrapper, out signer))
+                {
+                    throw new InvalidOperationException("The downloaded WebView2 installer is not validly signed by Microsoft (" + signer + "). It was not run.");
+                }
+                Log("WebView2 bootstrapper signature verified: " + signer);
+
+                ProcessStartInfo psi = new ProcessStartInfo();
+                psi.FileName = bootstrapper;
+                psi.Arguments = "/silent /install";
+                psi.UseShellExecute = false;
+                using (Process process = Process.Start(psi))
+                {
+                    process.WaitForExit();
+                    if (process.ExitCode != 0 && process.ExitCode != 1638)
+                    {
+                        throw new InvalidOperationException("WebView2 Runtime installer failed with exit code " + process.ExitCode + ".");
+                    }
+                }
+            }
+            finally
+            {
+                try { Directory.Delete(downloadDir, true); } catch (Exception ex) { Log("WebView2 download cleanup failed: " + ex.Message); }
             }
 
             if (!IsWebView2RuntimeInstalled())
@@ -381,15 +532,6 @@ namespace NexusWppInstaller
                 run.SetValue("NexusWpp", command, RegistryValueKind.String);
             }
 
-            try
-            {
-                using (RegistryKey serialize = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize"))
-                {
-                    serialize.SetValue("StartupDelayInMSec", 0, RegistryValueKind.DWord);
-                }
-            }
-            catch { }
-
             Log("Startup registered through HKLM Run only.");
         }
 
@@ -425,7 +567,7 @@ namespace NexusWppInstaller
             try
             {
                 ProcessStartInfo psi = new ProcessStartInfo();
-                psi.FileName = "schtasks.exe";
+                psi.FileName = Path.Combine(Environment.SystemDirectory, "schtasks.exe");
                 psi.Arguments = "/Delete /TN NexusWpp /F";
                 psi.UseShellExecute = false;
                 psi.CreateNoWindow = true;
@@ -594,36 +736,156 @@ namespace NexusWppInstaller
         {
             string cmd = "/c timeout /t 2 /nobreak >nul & rmdir /s /q \"" + InstallDir + "\"";
             ProcessStartInfo psi = new ProcessStartInfo();
-            psi.FileName = "cmd.exe";
+            psi.FileName = Path.Combine(Environment.SystemDirectory, "cmd.exe");
             psi.Arguments = cmd;
             psi.CreateNoWindow = true;
             psi.UseShellExecute = false;
             try { Process.Start(psi); } catch { }
         }
 
-        private static void StartWallpaper()
+        // The installer is elevated: starting the wallpaper directly would give it (and its WebView2
+        // and file dialogs) the administrator token until sign-out. Ask the desktop shell, which runs
+        // as the signed-in user without elevation, to start it instead. No fallback to an elevated
+        // launch: if the shell is unavailable, the HKLM Run entry starts it at the next sign-in.
+        private static bool StartWallpaper()
         {
             string exe = Path.Combine(InstallDir, "nexuswpp.exe");
-            ProcessStartInfo psi = new ProcessStartInfo();
-            psi.FileName = exe;
-            psi.WorkingDirectory = InstallDir;
-            psi.UseShellExecute = true;
-            Process.Start(psi);
+            try
+            {
+                UnelevatedShell.Execute(exe, "", InstallDir, UnelevatedShell.SW_SHOWNORMAL);
+                Log("Wallpaper started through the desktop shell (not elevated).");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log("Wallpaper not started (desktop shell unavailable): " + ex.Message + ". It starts at the next sign-in.");
+                return false;
+            }
         }
 
-        private static void Log(string message)
+        // After the process is stopped, Explorer may still show the wallpaper window's last frame.
+        // Repaint the interactive user's own wallpaper (same path, setting not written).
+        private static void RepaintUserWallpaper()
         {
             try
             {
-                Directory.CreateDirectory(InstallDir);
-                File.AppendAllText(Path.Combine(InstallDir, "install.log"), "[" + DateTime.Now.ToString("s") + "] " + message + Environment.NewLine);
+                const int SPI_GETDESKWALLPAPER = 0x0073, SPI_SETDESKWALLPAPER = 0x0014;
+                string wallpaper = null;
+                string sid = GetInteractiveUserSid();
+                if (sid != null)
+                {
+                    using (RegistryKey desktop = Registry.Users.OpenSubKey(sid + @"\Control Panel\Desktop", false))
+                    {
+                        if (desktop != null) wallpaper = Convert.ToString(desktop.GetValue("Wallpaper"));
+                    }
+                }
+                StringBuilder current = new StringBuilder(1024);
+                if (wallpaper == null && SystemParametersInfo(SPI_GETDESKWALLPAPER, current.Capacity, current, 0))
+                {
+                    wallpaper = current.ToString();
+                }
+                if (wallpaper != null)
+                {
+                    SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, new StringBuilder(wallpaper), 0);
+                    Log("Desktop wallpaper repainted.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("Wallpaper repaint failed: " + ex.Message);
+            }
+        }
+
+        // %LOCALAPPDATA%\NexusWpp of the signed-in user (custom logo, logs, WebView2 cache). It is a
+        // user-writable folder, so it is removed by the user's own unelevated shell: an elevated
+        // delete there could be redirected elsewhere through links.
+        private static void RemoveInteractiveUserData()
+        {
+            try
+            {
+                UnelevatedShell.Execute(Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                    "/d /c rmdir /s /q \"%LOCALAPPDATA%\\NexusWpp\"", Environment.SystemDirectory, UnelevatedShell.SW_HIDE);
+                Log("User data removal requested through the desktop shell.");
+            }
+            catch (Exception ex)
+            {
+                Log("User data not removed (desktop shell unavailable): " + ex.Message);
+            }
+        }
+
+        // Owner of the Explorer shell in this session: the person signed in at this desktop.
+        private static string GetInteractiveUserSid()
+        {
+            try
+            {
+                int session = Process.GetCurrentProcess().SessionId;
+                using (ManagementObjectSearcher searcher = new ManagementObjectSearcher(
+                    "SELECT Handle, SessionId FROM Win32_Process WHERE Name = 'explorer.exe' AND SessionId = " + session.ToString(System.Globalization.CultureInfo.InvariantCulture)))
+                {
+                    foreach (ManagementObject item in searcher.Get())
+                    {
+                        ManagementBaseObject result = item.InvokeMethod("GetOwnerSid", null, null);
+                        string sid = result != null ? Convert.ToString(result["Sid"]) : null;
+                        if (!string.IsNullOrEmpty(sid)) return sid;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("Interactive user lookup failed: " + ex.Message);
+            }
+            return null;
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+        private static extern bool SystemParametersInfo(int action, int param, StringBuilder value, int winIni);
+
+        // Authenticode check of a downloaded file: a valid, trusted signature (WinVerifyTrust)
+        // whose signer certificate belongs to Microsoft Corporation.
+        internal static bool IsSignedByMicrosoft(string path, out string signer)
+        {
+            signer = "unsigned";
+            if (!WinTrust.Verify(path)) return false;
+            try
+            {
+                using (var certificate = new X509Certificate2(X509Certificate.CreateFromSignedFile(path)))
+                {
+                    signer = certificate.Subject;
+                    string commonName = certificate.GetNameInfo(X509NameType.SimpleName, false);
+                    return string.Equals(commonName, "Microsoft Corporation", StringComparison.Ordinal) &&
+                        certificate.Subject.IndexOf("O=Microsoft Corporation", StringComparison.Ordinal) >= 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                signer = ex.Message;
+                return false;
+            }
+        }
+
+        private static bool installDirReady;
+
+        private static string LogPath
+        {
+            get
+            {
+                return installDirReady
+                    ? Path.Combine(InstallDir, "install.log")
+                    : Path.Combine(Path.GetTempPath(), "NexusWppInstall.log");
+            }
+        }
+
+        // Never creates C:\nexuswpp: until the folder is prepared with its secure ACL, the log goes to %TEMP%.
+        private static void Log(string message)
+        {
+            string line = "[" + DateTime.Now.ToString("s") + "] " + message + Environment.NewLine;
+            try
+            {
+                File.AppendAllText(LogPath, line);
             }
             catch
             {
-                try
-                {
-                    File.AppendAllText(Path.Combine(Path.GetTempPath(), "NexusWppInstall.log"), "[" + DateTime.Now.ToString("s") + "] " + message + Environment.NewLine);
-                }
+                try { File.AppendAllText(Path.Combine(Path.GetTempPath(), "NexusWppInstall.log"), line); }
                 catch { }
             }
         }
@@ -634,6 +896,174 @@ namespace NexusWppInstaller
             {
                 MessageBox.Show(message, "NexusWpp Installer", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
+        }
+    }
+
+    // WinVerifyTrust with the generic Authenticode policy: the file carries an embedded signature
+    // that is intact and chains to a trusted root.
+    internal static class WinTrust
+    {
+        private static readonly Guid GenericVerifyV2 = new Guid("00AAC56B-CD44-11d0-8CC2-00C04FC295EE");
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct WINTRUST_FILE_INFO
+        {
+            public uint cbStruct;
+            [MarshalAs(UnmanagedType.LPWStr)] public string pcwszFilePath;
+            public IntPtr hFile;
+            public IntPtr pgKnownSubject;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct WINTRUST_DATA
+        {
+            public uint cbStruct;
+            public IntPtr pPolicyCallbackData;
+            public IntPtr pSIPClientData;
+            public uint dwUIChoice;
+            public uint fdwRevocationChecks;
+            public uint dwUnionChoice;
+            public IntPtr pFile;
+            public uint dwStateAction;
+            public IntPtr hWVTStateData;
+            public IntPtr pwszURLReference;
+            public uint dwProvFlags;
+            public uint dwUIContext;
+            public IntPtr pSignatureSettings;
+        }
+
+        [DllImport("wintrust.dll", CharSet = CharSet.Unicode)]
+        private static extern int WinVerifyTrust(IntPtr hwnd, [MarshalAs(UnmanagedType.LPStruct)] Guid action, ref WINTRUST_DATA data);
+
+        internal static bool Verify(string path)
+        {
+            const uint WTD_UI_NONE = 2, WTD_REVOKE_NONE = 0, WTD_CHOICE_FILE = 1, WTD_STATEACTION_VERIFY = 1, WTD_STATEACTION_CLOSE = 2;
+            var file = new WINTRUST_FILE_INFO { cbStruct = (uint)Marshal.SizeOf(typeof(WINTRUST_FILE_INFO)), pcwszFilePath = path };
+            IntPtr filePointer = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(WINTRUST_FILE_INFO)));
+            try
+            {
+                Marshal.StructureToPtr(file, filePointer, false);
+                var data = new WINTRUST_DATA
+                {
+                    cbStruct = (uint)Marshal.SizeOf(typeof(WINTRUST_DATA)),
+                    dwUIChoice = WTD_UI_NONE,
+                    fdwRevocationChecks = WTD_REVOKE_NONE, // offline CRL servers must not block the install
+                    dwUnionChoice = WTD_CHOICE_FILE,
+                    pFile = filePointer,
+                    dwStateAction = WTD_STATEACTION_VERIFY
+                };
+                int result = WinVerifyTrust(IntPtr.Zero, GenericVerifyV2, ref data);
+                data.dwStateAction = WTD_STATEACTION_CLOSE;
+                WinVerifyTrust(IntPtr.Zero, GenericVerifyV2, ref data);
+                return result == 0;
+            }
+            finally
+            {
+                Marshal.DestroyStructure(filePointer, typeof(WINTRUST_FILE_INFO));
+                Marshal.FreeHGlobal(filePointer);
+            }
+        }
+    }
+
+    // Runs a program through the desktop Explorer (IShellWindows -> desktop view -> Shell.Application
+    // ShellExecute), so it starts as the signed-in user without the installer's administrator token.
+    internal static class UnelevatedShell
+    {
+        internal const int SW_HIDE = 0, SW_SHOWNORMAL = 1;
+        private const int SWC_DESKTOP = 8, SWFO_NEEDDISPATCH = 1, SVGIO_BACKGROUND = 0;
+        private static readonly Guid SID_STopLevelBrowser = new Guid("4C96BE40-915C-11CF-99D3-00AA004AE837");
+
+        [ComImport, Guid("85CB6900-4D95-11CF-960C-0080C7F4EE85"), InterfaceType(ComInterfaceType.InterfaceIsDual)]
+        private interface IShellWindows
+        {
+            int Count { get; }
+            [return: MarshalAs(UnmanagedType.IDispatch)] object Item([MarshalAs(UnmanagedType.Struct)] object index);
+            [return: MarshalAs(UnmanagedType.IUnknown)] object _NewEnum();
+            void Register();
+            void RegisterPending();
+            void Revoke();
+            void OnNavigate();
+            void OnActivated();
+            [return: MarshalAs(UnmanagedType.IDispatch)]
+            object FindWindowSW([MarshalAs(UnmanagedType.Struct)] ref object pvarLoc, [MarshalAs(UnmanagedType.Struct)] ref object pvarLocRoot,
+                int swClass, out int phwnd, int swfwOptions);
+        }
+
+        [ComImport, Guid("6D5140C1-7436-11CE-8034-00AA006009FA"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface IServiceProvider
+        {
+            [return: MarshalAs(UnmanagedType.IUnknown)]
+            object QueryService([MarshalAs(UnmanagedType.LPStruct)] Guid service, [MarshalAs(UnmanagedType.LPStruct)] Guid riid);
+        }
+
+        [ComImport, Guid("000214E2-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface IShellBrowser
+        {
+            void GetWindow();
+            void ContextSensitiveHelp();
+            void InsertMenusSB();
+            void SetMenuSB();
+            void RemoveMenusSB();
+            void SetStatusTextSB();
+            void EnableModelessSB();
+            void TranslateAcceleratorSB();
+            void BrowseObject();
+            void GetViewStateStream();
+            void GetControlWindow();
+            void SendControlMsg();
+            IShellView QueryActiveShellView();
+        }
+
+        [ComImport, Guid("000214E3-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface IShellView
+        {
+            void GetWindow();
+            void ContextSensitiveHelp();
+            void TranslateAccelerator();
+            void EnableModeless();
+            void UIActivate();
+            void Refresh();
+            void CreateViewWindow();
+            void DestroyViewWindow();
+            void GetCurrentInfo();
+            void AddPropertySheetPages();
+            void SaveViewState();
+            void SelectItem();
+            [return: MarshalAs(UnmanagedType.Interface)]
+            object GetItemObject(uint uItem, [MarshalAs(UnmanagedType.LPStruct)] Guid riid);
+        }
+
+        internal static void Execute(string file, string arguments, string directory, int show)
+        {
+            Exception failure = null;
+            // Shell COM objects expect a single-threaded apartment; bound the wait if Explorer hangs.
+            var thread = new Thread(() =>
+            {
+                try { ExecuteOnSta(file, arguments, directory, show); }
+                catch (Exception ex) { failure = ex; }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.IsBackground = true;
+            thread.Start();
+            if (!thread.Join(15000)) throw new TimeoutException("The desktop shell did not respond.");
+            if (failure != null) throw failure;
+        }
+
+        private static void ExecuteOnSta(string file, string arguments, string directory, int show)
+        {
+            Type shellWindowsType = Type.GetTypeFromCLSID(new Guid("9BA05972-F6A8-11CF-A442-00A0C90A8F39"), true);
+            var shellWindows = (IShellWindows)Activator.CreateInstance(shellWindowsType);
+            object location = 0; // CSIDL_DESKTOP
+            object root = null;
+            int hwnd;
+            object desktop = shellWindows.FindWindowSW(ref location, ref root, SWC_DESKTOP, out hwnd, SWFO_NEEDDISPATCH);
+            if (desktop == null) throw new InvalidOperationException("No desktop shell window.");
+            var browser = (IShellBrowser)((IServiceProvider)desktop).QueryService(SID_STopLevelBrowser, typeof(IShellBrowser).GUID);
+            IShellView view = browser.QueryActiveShellView();
+            object folderView = view.GetItemObject(SVGIO_BACKGROUND, new Guid("00020400-0000-0000-C000-000000000046")); // IDispatch
+            object application = folderView.GetType().InvokeMember("Application", BindingFlags.GetProperty, null, folderView, null);
+            application.GetType().InvokeMember("ShellExecute", BindingFlags.InvokeMethod, null, application,
+                new object[] { file, arguments, directory, "open", show });
         }
     }
 

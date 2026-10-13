@@ -118,7 +118,7 @@ function dimGauges() {
         clockMb.textContent = "--";
     }
     if (clockBattery) {
-        clockBattery.style.display = "none";
+        clockBattery.hidden = true;
     }
 
     // Await real readings; a missing measurement is not an idle component.
