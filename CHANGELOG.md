@@ -1,11 +1,12 @@
 # Changelog
 
-## 2026-10-13 — 1.0.36.0
+## 2026-10-13 — 1.0.37.0
 
 - Réglages : icône NexusWpp dans la zone de notification (clic : réglages ; menu : réglages, quitter). Relancer NexusWpp depuis le menu Démarrer ouvre aussi les réglages. Il est enfin possible de quitter l'application sans le Gestionnaire des tâches ; le fond d'écran Windows est alors redessiné.
 - Logo central personnalisable : n'importe quelle image (PNG, JPEG, BMP, GIF, TIFF) est recadrée en carré au centre, normalisée en 512 px et appliquée en direct ; retour au logo d'origine en un clic. Une image illisible revient au logo d'origine.
 - Télémétrie beaucoup plus légère : mémoire, système, fréquence CPU, GPU/NPU et classement des processus passent des requêtes WMI aux compteurs natifs Windows (PDH). Une collecte prend environ 50 ms au lieu d'environ 1,4 s ; l'hôte passe d'environ 15,6 % à 2,4 % d'un cœur (bureau visible, mesure A/B sur 20 s), et le service WMI n'apparaît plus comme processus le plus actif.
 - Premier affichage plus rapide : une collecte d'échauffement au démarrage donne des valeurs dès la première image, même quand l'application démarre derrière des fenêtres ; le classement des processus est disponible dès la deuxième seconde.
+- Package Store : l'anglais est déclaré en plus du français (langues prises en charge affichées par le Store).
 - Tests : import du logo (recadrage, formats, rejets), fenêtre de réglages, logo côté page et compteurs PDH.
 
 ## 2026-10-13 — 1.0.35.0
