@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
     <title>JULIENPIRON.FR - Control Cockpit</title>
     <link rel="stylesheet" href="style.css?v=23">
 </head>
@@ -204,7 +205,7 @@
                     </div>
                     <div class="clock-date" id="clock-date">-- -- ----</div>
                     <div class="clock-mb" id="clock-mb">--</div>
-                    <div class="clock-battery" id="clock-battery" style="display:none">--</div>
+                    <div class="clock-battery" id="clock-battery" hidden>--</div>
                 </div>
 
                 <!-- SOTA Holographic Neural Telemetry Map Canvas -->

@@ -15,6 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Required check (branch protection): keep the job id "compile".
   compile:
     runs-on: windows-latest
     steps:
@@ -24,6 +25,38 @@ jobs:
         shell: pwsh
         run: .\compile.ps1
 
-      - name: Sensor and alert rules
+      - name: Sensor and alert rules (native + telemetry_state.test.js)
         shell: pwsh
         run: .\scripts\test_features.ps1
+
+  # Off-screen WinForms and WebView2 suites: no desktop attachment, no user data touched.
+  ui-tests:
+    runs-on: windows-latest
+    needs: compile
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Compile NexusWpp
+        shell: pwsh
+        run: .\compile.ps1
+
+      - name: Settings window and custom logo
+        shell: pwsh
+        run: .\scripts\test_settings.ps1
+
+      - name: Runtime pause and Content-Security-Policy
+        shell: pwsh
+        run: .\scripts\test_runtime_pause.ps1
+
+      - name: Responsive layout (quick, FR and EN)
+        shell: pwsh
+        run: .\scripts\test_responsive_layout.ps1 -Quick -Label ci
+
+      - name: Keep test output on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-output
+          path: work/
+          if-no-files-found: ignore

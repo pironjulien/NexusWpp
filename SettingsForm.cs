@@ -32,7 +32,9 @@ namespace DesktopHtmlHost
         [DllImport("dwmapi.dll")]
         static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 
-        public SettingsForm(string defaultLogoPath, Action logoChanged, Action quitRequested)
+        const string StoreProductId = "9N2VCVDH7QDX";
+
+        public SettingsForm(string defaultLogoPath, Action logoChanged, Action quitRequested, bool welcome = false)
         {
             this.defaultLogoPath = defaultLogoPath;
             this.logoChanged = logoChanged;
@@ -62,7 +64,19 @@ namespace DesktopHtmlHost
             var subtitle = new Label { Text = L("Réglages", "Settings"), ForeColor = Muted, AutoSize = true, Margin = new Padding(2, 2, 0, 0) };
             var section = new Label { Text = L("LOGO CENTRAL", "CENTER LOGO"), Font = new Font("Bahnschrift", 10F, FontStyle.Bold), ForeColor = Accent, AutoSize = true, Margin = new Padding(2, 22, 0, 0) };
 
-            preview.Size = new Size(180, 180);
+            // First launch only: the wallpaper sits behind the desktop icons, so explain where it is.
+            Label welcomeLabel = null;
+            if (welcome)
+            {
+                welcomeLabel = new Label { Name = "welcome", BackColor = Panel, ForeColor = Ink, AutoSize = true, Dock = DockStyle.Fill,
+                    Margin = new Padding(0, 22, 0, 0), Padding = new Padding(12, 10, 12, 10),
+                    Text = L("Bienvenue ! NexusWpp tourne derrière vos icônes de bureau : Win+D pour le voir. " +
+                             "Relancez NexusWpp depuis Démarrer pour revenir ici.",
+                             "Welcome! NexusWpp runs behind your desktop icons: press Win+D to see it. " +
+                             "Launch NexusWpp again from Start to come back here.") };
+            }
+
+            preview.Size = new Size(160, 160);
             preview.Anchor = AnchorStyles.None; // centered in its row
             preview.Margin = new Padding(0, 12, 0, 18);
             preview.AccessibleRole = AccessibleRole.Graphic;
@@ -76,9 +90,33 @@ namespace DesktopHtmlHost
             resetButton.Click += ResetLogo;
 
             // Wraps to as many lines as the text needs within the column width.
-            status = new Label { ForeColor = Muted, AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 12, 0, 16),
-                Text = L("L'image est recadrée en carré au centre, puis affichée dans le rond du radar.",
-                         "The image is cropped to a centered square, then shown in the radar circle.") };
+            status = new Label { Name = "status", ForeColor = Muted, AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 12, 0, 16),
+                Text = L("L'image (PNG, JPEG ou BMP) est recadrée en carré au centre, puis affichée dans le rond du radar.",
+                         "The image (PNG, JPEG or BMP) is cropped to a centered square, then shown in the radar circle.") };
+            // Screen readers announce import results without moving the focus.
+            try { status.LiveSetting = System.Windows.Forms.Automation.AutomationLiveSetting.Polite; } catch { }
+
+            // Application column: version, startup, rating and logs.
+            var appSection = new Label { Text = L("APPLICATION", "APPLICATION"), Font = new Font("Bahnschrift", 10F, FontStyle.Bold), ForeColor = Accent, AutoSize = true, Margin = new Padding(2, 22, 0, 0) };
+            var versionLabel = new Label { Name = "version", Text = "Version " + NexusWpp.ReleaseVersion.Value + (Program.IsPackaged ? " · Microsoft Store" : ""),
+                ForeColor = Ink, AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(2, 12, 0, 0) };
+            var startupNote = new Label { Name = "startupNote", ForeColor = Muted, AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(2, 8, 0, 10),
+                Text = L("NexusWpp démarre avec Windows, réglable dans Paramètres > Applications > Démarrage.",
+                         "NexusWpp starts with Windows; change it in Settings > Apps > Startup.") };
+            var startupButton = MakeButton(L("Démarrage avec Windows…", "Startup settings…"), Panel, Ink, 36);
+            startupButton.Name = "startup";
+            startupButton.FlatAppearance.BorderColor = Line;
+            startupButton.Click += delegate { OpenUri("ms-settings:startupapps"); };
+            var rateButton = MakeButton(L("Noter NexusWpp", "Rate NexusWpp"), Panel, Ink, 36);
+            rateButton.Name = "rate";
+            rateButton.Margin = new Padding(0, 10, 0, 0);
+            rateButton.FlatAppearance.BorderColor = Line;
+            rateButton.Click += delegate { OpenUri(RatingUri(Program.IsPackaged)); };
+            var logsButton = MakeButton(L("Dossier des journaux", "Open logs folder"), Panel, Ink, 36);
+            logsButton.Name = "logs";
+            logsButton.Margin = new Padding(0, 10, 0, 16);
+            logsButton.FlatAppearance.BorderColor = Line;
+            logsButton.Click += OpenLogsFolder;
 
             var quitButton = MakeButton(L("Quitter NexusWpp", "Quit NexusWpp"), Back, Danger, 34);
             quitButton.Anchor = AnchorStyles.Left;
@@ -98,8 +136,19 @@ namespace DesktopHtmlHost
             footer.Controls.Add(quitButton, 0, 0);
             footer.Controls.Add(closeButton, 1, 0);
 
-            foreach (Control control in new Control[] { title, subtitle, section, preview, chooseButton, resetButton, status, footer })
+            // Two columns side by side keep the window short enough for 1080p screens at 150 %.
+            var logoColumn = Column(LogoColumnWidth, new Padding(0), section, preview, chooseButton, resetButton, status);
+            var appColumn = Column(AppColumnWidth, new Padding(ColumnGap, 0, 0, 0), welcomeLabel, appSection, versionLabel, startupNote, startupButton, rateButton, logsButton);
+            var body = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty, BackColor = Back };
+            body.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            body.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            body.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            body.Controls.Add(logoColumn, 0, 0);
+            body.Controls.Add(appColumn, 1, 0);
+
+            foreach (Control control in new Control[] { title, subtitle, body, footer })
             {
+                if (control == null) continue;
                 layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
                 layout.Controls.Add(control);
             }
@@ -111,8 +160,60 @@ namespace DesktopHtmlHost
             RefreshPreview();
         }
 
-        // Logical width of the content column (scaled with the DPI like everything else).
-        const float ContentWidth = 384F;
+        // Logical widths of the columns (scaled with the DPI like everything else).
+        const int LogoColumnWidth = 384, AppColumnWidth = 320, ColumnGap = 32;
+        const float ContentWidth = LogoColumnWidth + ColumnGap + AppColumnWidth;
+
+        static TableLayoutPanel Column(int width, Padding margin, params Control[] controls)
+        {
+            var column = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = margin, BackColor = Back, Anchor = AnchorStyles.Top | AnchorStyles.Left };
+            column.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, width));
+            foreach (Control control in controls)
+            {
+                if (control == null) continue;
+                column.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                column.Controls.Add(control);
+            }
+            return column;
+        }
+
+        internal static string RatingUri(bool packaged)
+        {
+            return packaged ? "ms-windows-store://review/?ProductId=" + StoreProductId
+                            : "https://apps.microsoft.com/detail/" + StoreProductId;
+        }
+
+        void OpenUri(string uri)
+        {
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(uri) { UseShellExecute = true }); }
+            catch (Exception ex)
+            {
+                Program.LogDebug("Opening " + uri + " failed: " + ex.Message);
+                SetStatus(L("Windows n'a pas pu ouvrir cette page.", "Windows could not open this page."), Danger);
+            }
+        }
+
+        void OpenLogsFolder(object sender, EventArgs e)
+        {
+            string folder = Program.GetLogsFolderForShell();
+            try
+            {
+                Directory.CreateDirectory(folder);
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(folder) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                Program.LogDebug("Opening the logs folder failed: " + ex.Message);
+                SetStatus(L("Le dossier des journaux n'a pas pu être ouvert : ", "The logs folder could not be opened: ") + folder, Danger);
+            }
+        }
+
+        void SetStatus(string text, Color color)
+        {
+            status.ForeColor = color;
+            status.Text = text;
+            try { status.AccessibilityObject.RaiseLiveRegionChanged(); } catch { }
+        }
 
         protected override void OnHandleCreated(EventArgs e)
         {
@@ -140,28 +241,38 @@ namespace DesktopHtmlHost
             resetButton.ForeColor = custom ? Ink : Muted;
         }
 
-        void ChooseImage(object sender, EventArgs e)
+        async void ChooseImage(object sender, EventArgs e)
         {
+            string fileName;
             using (var dialog = new OpenFileDialog())
             {
                 dialog.Title = L("Choisir le logo central", "Choose the center logo");
-                dialog.Filter = L("Images", "Images") + " (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff)|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff";
+                dialog.Filter = L("Images", "Images") + " (*.png;*.jpg;*.jpeg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp";
                 if (dialog.ShowDialog(this) != DialogResult.OK) return;
-                try
-                {
-                    UserSettings.ImportLogo(dialog.FileName);
-                    status.ForeColor = Accent;
-                    status.Text = L("Logo appliqué au fond d'écran.", "Logo applied to the wallpaper.");
-                    RefreshPreview();
-                    logoChanged();
-                }
-                catch (Exception ex)
-                {
-                    Program.LogDebug("Custom logo import failed: " + ex.Message);
-                    status.ForeColor = Danger;
-                    status.Text = L("Cette image n'a pas pu être lue. Essayez un fichier PNG ou JPEG.",
-                                    "This image could not be read. Try a PNG or JPEG file.");
-                }
+                fileName = dialog.FileName;
+            }
+
+            // Decoding a large photo takes a moment: keep the window responsive meanwhile.
+            chooseButton.Enabled = false;
+            resetButton.Enabled = false;
+            SetStatus(L("Import de l'image…", "Importing the image…"), Muted);
+            Exception failure = null;
+            try { await System.Threading.Tasks.Task.Run(() => UserSettings.ImportLogo(fileName)); }
+            catch (Exception ex) { failure = ex; }
+            if (IsDisposed) return;
+            chooseButton.Enabled = true;
+            if (failure == null)
+            {
+                SetStatus(L("Logo appliqué au fond d'écran.", "Logo applied to the wallpaper."), Accent);
+                RefreshPreview();
+                logoChanged();
+            }
+            else
+            {
+                Program.LogDebug("Custom logo import failed: " + failure.Message);
+                RefreshPreview();
+                SetStatus(L("Cette image n'a pas pu être utilisée. Choisissez un PNG, JPEG ou BMP de moins de 40 mégapixels.",
+                            "This image could not be used. Choose a PNG, JPEG or BMP under 40 megapixels."), Danger);
             }
         }
 
@@ -170,8 +281,7 @@ namespace DesktopHtmlHost
             try
             {
                 UserSettings.ResetLogo();
-                status.ForeColor = Muted;
-                status.Text = L("Logo d'origine rétabli.", "Original logo restored.");
+                SetStatus(L("Logo d'origine rétabli.", "Original logo restored."), Muted);
                 RefreshPreview();
                 logoChanged();
             }
@@ -195,6 +305,9 @@ namespace DesktopHtmlHost
             public LogoPreview()
             {
                 SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+                // A picture, not an input: keyboard focus starts on the first button instead.
+                SetStyle(ControlStyles.Selectable, false);
+                TabStop = false;
                 BackColor = Back;
             }
 

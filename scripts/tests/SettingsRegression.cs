@@ -81,6 +81,48 @@ static class SettingsRegression
         using (var result = new Bitmap(stream))
             Check(result.GetPixel(256, 256).R > 200 && result.GetPixel(256, 256).B < 60, "importing again replaces the previous logo");
 
+        // Camera photo stored sideways with EXIF orientation 6 (rotate 90 degrees clockwise to display):
+        // stored left half red, right half blue -> displayed top red, bottom blue.
+        string rotated = Path.Combine(output, "rotated.jpg");
+        using (var bitmap = new Bitmap(400, 200))
+        {
+            using (var g = Graphics.FromImage(bitmap))
+            {
+                g.FillRectangle(Brushes.Red, 0, 0, 200, 200);
+                g.FillRectangle(Brushes.Blue, 200, 0, 200, 200);
+            }
+            var orientation = (PropertyItem)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof(PropertyItem));
+            orientation.Id = 0x0112; orientation.Type = 3; orientation.Len = 2; orientation.Value = new byte[] { 6, 0 };
+            bitmap.SetPropertyItem(orientation);
+            bitmap.Save(rotated, ImageFormat.Jpeg);
+        }
+        string logoRotated = Path.Combine(output, "custom-logo-rotated.png");
+        UserSettings.ImportLogo(rotated, logoRotated);
+        using (var stream = new MemoryStream(File.ReadAllBytes(logoRotated)))
+        using (var result = new Bitmap(stream))
+        {
+            Color top = result.GetPixel(256, 60), bottom = result.GetPixel(256, 450);
+            Check(top.R > 200 && top.B < 60 && bottom.B > 200 && bottom.R < 60, "EXIF orientation is applied before cropping");
+        }
+
+        // Oversized images are refused from their header, before decoding (1 bit per pixel keeps the test light).
+        string tooWide = Path.Combine(output, "too-wide.png");
+        using (var bitmap = new Bitmap(UserSettings.MaxLogoSide + 1, 32, PixelFormat.Format1bppIndexed)) bitmap.Save(tooWide, ImageFormat.Png);
+        Check(Throws(() => UserSettings.ImportLogo(tooWide, Path.Combine(output, "rejected-wide.png"))), "image wider than 16384 px is rejected");
+        string tooMany = Path.Combine(output, "too-many-pixels.png");
+        using (var bitmap = new Bitmap(7000, 6000, PixelFormat.Format1bppIndexed)) bitmap.Save(tooMany, ImageFormat.Png);
+        Check(Throws(() => UserSettings.ImportLogo(tooMany, Path.Combine(output, "rejected-many.png"))), "image above 40 megapixels is rejected");
+        Check(!File.Exists(Path.Combine(output, "rejected-wide.png")) && !File.Exists(Path.Combine(output, "rejected-many.png")), "oversized images write no logo");
+        string gif = Path.Combine(output, "animated.gif");
+        using (var bitmap = new Bitmap(64, 64)) bitmap.Save(gif, ImageFormat.Gif);
+        Check(Throws(() => UserSettings.ImportLogo(gif, Path.Combine(output, "rejected-gif.png"))), "formats other than PNG, JPEG and BMP are rejected");
+        string bmp = Path.Combine(output, "plain.bmp");
+        using (var bitmap = new Bitmap(64, 64)) bitmap.Save(bmp, ImageFormat.Bmp);
+        UserSettings.ImportLogo(bmp, Path.Combine(output, "custom-logo-bmp.png"));
+        Check(File.Exists(Path.Combine(output, "custom-logo-bmp.png")), "BMP image is accepted");
+
+        Check(SettingsForm.RatingUri(true) == "ms-windows-store://review/?ProductId=9N2VCVDH7QDX" &&
+              SettingsForm.RatingUri(false) == "https://apps.microsoft.com/detail/9N2VCVDH7QDX", "rating opens the Store review page or the web listing");
         string message = UserSettings.BuildSettingsMessage(logo);
         Check(message.StartsWith("{\"control\":\"SETTINGS\",\"logo\":\"data:image/png;base64,") && message.EndsWith("\"}"), "settings message carries the logo as a PNG data URL");
         Check(UserSettings.BuildSettingsMessage(null) == "{\"control\":\"SETTINGS\",\"logo\":null}", "default logo is sent as null");
@@ -99,15 +141,22 @@ static class SettingsRegression
                 snapshot.Save(Path.Combine(output, "settings-window.png"), ImageFormat.Png);
             }
             Check(AllControls(form).Count(c => c is Button || c is Label) >= 7, "settings window builds its controls");
+            var named = AllControls(form).ToDictionary(c => c.Name.Length > 0 ? c.Name : Guid.NewGuid().ToString());
+            Check(new[] { "version", "rate", "startup", "startupNote", "logs", "status" }.All(named.ContainsKey), "version, rating, startup and logs controls are present");
+            Check(named["version"].Text.Contains(NexusWpp.ReleaseVersion.Value), "version line shows the release version");
+            Check(!named.ContainsKey("welcome"), "welcome message is hidden by default");
+            Check(AllControls(form).Where(c => c.GetType().Name == "LogoPreview").All(c => !c.CanSelect && !c.TabStop), "logo preview takes no keyboard focus");
+            Check(((Label)named["status"]).LiveSetting == System.Windows.Forms.Automation.AutomationLiveSetting.Polite, "status is a polite live region");
             form.Close();
         }
 
         // Windows display scaling: fonts grow in pixels and layout is scaled. No text may be clipped or covered,
         // even if the layout is not scaled at all (fonts only), which is what clipped the text in 1.0.37.
+        foreach (bool welcome in new[] { false, true })
         foreach (bool scaleLayout in new[] { true, false })
         foreach (float scale in new[] { 1f, 1.25f, 1.5f, 1.75f, 2f })
         {
-            using (var form = new SettingsForm(Path.Combine(project, "julienpiron.png"), () => { }, () => { }))
+            using (var form = new SettingsForm(Path.Combine(project, "julienpiron.png"), () => { }, () => { }, welcome))
             {
                 form.StartPosition = FormStartPosition.Manual;
                 form.Location = new Point(-20000, -20000);
@@ -117,12 +166,21 @@ static class SettingsRegression
                 if (scaleLayout) form.Scale(new SizeF(scale, scale));
                 form.Show();
                 Application.DoEvents();
-                string label = " at " + (int)(scale * 100) + " %" + (scaleLayout ? "" : " (fonts only)");
+                string label = " at " + (int)(scale * 100) + " %" + (scaleLayout ? "" : " (fonts only)") + (welcome ? " with welcome" : "");
+                if (welcome) Check(AllControls(form).Any(c => c.Name == "welcome" && c.Visible), "welcome message is shown" + label);
                 var texts = AllControls(form).Where(c => (c is Label || c is Button) && c.Visible).ToList();
                 Check(texts.All(c => c.GetPreferredSize(new Size(c.Width, 0)).Height <= c.Height + 1 || c is Button && c.PreferredSize.Width <= c.Width + 1),
                     "every text fits its control" + label);
                 var client = form.RectangleToScreen(form.ClientRectangle);
-                Check(texts.All(c => client.Contains(c.RectangleToScreen(c.ClientRectangle))), "every text stays inside the window" + label);
+                // Windows caps a window at about the screen size: on a small test screen (CI runners use
+                // 1024x768) the largest scales cannot fit, which says nothing about the layout itself.
+                var maxTrack = SystemInformation.MaxWindowTrackSize;
+                var content = form.Controls[0].Bounds;
+                bool capped = form.Height >= maxTrack.Height - 2 || form.Width >= maxTrack.Width - 2;
+                if (capped && (content.Bottom > form.ClientSize.Height || content.Right > form.ClientSize.Width))
+                    Console.WriteLine("SKIP every text stays inside the window" + label + " (window capped by a " + maxTrack.Width + "x" + maxTrack.Height + " screen)");
+                else
+                    Check(texts.All(c => client.Contains(c.RectangleToScreen(c.ClientRectangle))), "every text stays inside the window" + label);
                 bool overlap = false;
                 for (int i = 0; i < texts.Count; i++)
                     for (int j = i + 1; j < texts.Count; j++)
@@ -132,7 +190,7 @@ static class SettingsRegression
                     using (var snapshot = new Bitmap(form.Width, form.Height))
                     {
                         form.DrawToBitmap(snapshot, new Rectangle(0, 0, form.Width, form.Height));
-                        snapshot.Save(Path.Combine(output, "settings-window-150.png"), ImageFormat.Png);
+                        snapshot.Save(Path.Combine(output, welcome ? "settings-welcome-150.png" : "settings-window-150.png"), ImageFormat.Png);
                     }
                 form.Close();
             }

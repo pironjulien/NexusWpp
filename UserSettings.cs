@@ -12,6 +12,8 @@ namespace DesktopHtmlHost
     {
         public const int LogoSize = 512;
         public const long MaxLogoSourceBytes = 25L * 1024 * 1024;
+        public const int MaxLogoSide = 16384;
+        public const long MaxLogoPixels = 40L * 1000 * 1000;
         private const string CustomLogoFileName = "custom-logo.png";
 
         public static string CustomLogoPath
@@ -37,9 +39,16 @@ namespace DesktopHtmlHost
             if (info.Length > MaxLogoSourceBytes) throw new InvalidDataException("Image larger than 25 MB.");
 
             using (var stream = new MemoryStream(File.ReadAllBytes(sourcePath)))
-            using (var source = Image.FromStream(stream, true, true))
+            // Header only: the dimensions are checked before any pixel is decoded.
+            using (var source = Image.FromStream(stream, false, false))
             using (var square = new Bitmap(LogoSize, LogoSize, PixelFormat.Format32bppArgb))
             {
+                Guid format = source.RawFormat.Guid;
+                if (format != ImageFormat.Png.Guid && format != ImageFormat.Jpeg.Guid && format != ImageFormat.Bmp.Guid)
+                    throw new InvalidDataException("Only PNG, JPEG and BMP images are accepted.");
+                if (source.Width > MaxLogoSide || source.Height > MaxLogoSide || (long)source.Width * source.Height > MaxLogoPixels)
+                    throw new InvalidDataException("Image larger than 40 megapixels or 16384 pixels per side.");
+                ApplyExifOrientation(source);
                 int side = Math.Min(source.Width, source.Height);
                 if (side < 16) throw new InvalidDataException("Image too small.");
                 var crop = new Rectangle((source.Width - side) / 2, (source.Height - side) / 2, side, side);
@@ -54,9 +63,33 @@ namespace DesktopHtmlHost
                 Directory.CreateDirectory(Path.GetDirectoryName(destinationPath));
                 string temporary = destinationPath + ".tmp";
                 square.Save(temporary, ImageFormat.Png);
-                if (File.Exists(destinationPath)) File.Delete(destinationPath);
-                File.Move(temporary, destinationPath);
+                // Atomic swap: a crash or a concurrent read never sees a missing or half-written logo.
+                if (File.Exists(destinationPath)) File.Replace(temporary, destinationPath, null, true);
+                else File.Move(temporary, destinationPath);
             }
+        }
+
+        // Camera photos store their rotation in EXIF tag 0x0112 instead of rotating the pixels.
+        static void ApplyExifOrientation(Image image)
+        {
+            const int OrientationTag = 0x0112;
+            if (Array.IndexOf(image.PropertyIdList, OrientationTag) < 0) return;
+            PropertyItem item = image.GetPropertyItem(OrientationTag);
+            if (item.Value == null || item.Value.Length < 2) return;
+            int orientation = BitConverter.ToUInt16(item.Value, 0);
+            RotateFlipType rotation;
+            switch (orientation)
+            {
+                case 2: rotation = RotateFlipType.RotateNoneFlipX; break;
+                case 3: rotation = RotateFlipType.Rotate180FlipNone; break;
+                case 4: rotation = RotateFlipType.Rotate180FlipX; break;
+                case 5: rotation = RotateFlipType.Rotate90FlipX; break;
+                case 6: rotation = RotateFlipType.Rotate90FlipNone; break;
+                case 7: rotation = RotateFlipType.Rotate270FlipX; break;
+                case 8: rotation = RotateFlipType.Rotate270FlipNone; break;
+                default: return;
+            }
+            image.RotateFlip(rotation);
         }
 
         public static void ResetLogo()
