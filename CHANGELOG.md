@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-14 — Automatisations GitHub allégées
+
+- Mises à jour Dependabot automatiques retirées (`.github/dependabot.yml`) ; les alertes de faille
+  GitHub restent actives. Dépôt public : ses workflows ne consomment pas de minutes et restent inchangés.
+
 ## 2026-10-13 — 1.0.42.0
 
 - Carte GPU : la fréquence mémoire passe dans le titre (« … @ 15001 MHz »), comme la vitesse de la RAM ; sa case montre « Utilisé par », le programme qui sollicite le plus la carte graphique (3D, calcul, vidéo). « AUCUN » quand la carte est au repos.
