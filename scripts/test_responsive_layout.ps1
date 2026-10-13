@@ -13,7 +13,7 @@ foreach ($dll in @('Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.Wi
 $binary = Join-Path $testDir 'ResponsiveLayout.exe'
 $refs = @('/reference:System.Windows.Forms.dll', '/reference:System.Drawing.dll', '/reference:System.Web.Extensions.dll',
     "/reference:$testDir\Microsoft.Web.WebView2.Core.dll", "/reference:$testDir\Microsoft.Web.WebView2.WinForms.dll")
-& "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /target:exe "/out:$binary" @refs (Join-Path $PSScriptRoot 'tests\ResponsiveLayout.cs')
+& (Join-Path $PSScriptRoot 'csc.ps1') /nologo /target:exe "/out:$binary" @refs (Join-Path $PSScriptRoot 'tests\ResponsiveLayout.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Responsive test compilation failed.' }
 $resolutions = @(
     @(1280,720), @(1280,800), @(1366,768), @(1440,900), @(1600,900), @(1920,1080), @(1920,1200),

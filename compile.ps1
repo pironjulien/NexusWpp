@@ -1,99 +1,29 @@
-﻿$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Stop"
 
 $binDir = Join-Path $PSScriptRoot "bin"
-$buildTempDir = Join-Path $PSScriptRoot "work\webview2-build"
-if (-not [IO.Path]::GetFullPath($buildTempDir).StartsWith([IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'work')) + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid build directory.' }
-$nugetUrl = "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/1.0.2592.51/microsoft.web.webview2.1.0.2592.51.nupkg"
-$zipPath = Join-Path $buildTempDir "webview2.zip"
-$extractPath = Join-Path $buildTempDir "webview2_package"
+$project = Join-Path $PSScriptRoot "NexusWpp.csproj"
+$outputExe = Join-Path $binDir "nexuswpp.exe"
 
-# Check if DLLs already exist
-$coreDllDest = Join-Path $binDir "Microsoft.Web.WebView2.Core.dll"
-$winFormsDllDest = Join-Path $binDir "Microsoft.Web.WebView2.WinForms.dll"
-$loaderDllDest = Join-Path $binDir "WebView2Loader.dll"
-
-$hasDlls = (Test-Path $coreDllDest) -and (Test-Path $winFormsDllDest) -and (Test-Path $loaderDllDest)
-
-if (-not $hasDlls) {
-    # 1. Ensure clean build environment
-    if (!(Test-Path $binDir)) { New-Item -ItemType Directory -Path $binDir -Force | Out-Null }
-    if (Test-Path $buildTempDir) {
-        try {
-            Remove-Item $buildTempDir -Recurse -Force
-        } catch {
-            Write-Host "Warning: Could not clean temp_build: $_" -ForegroundColor Yellow
-        }
-    }
-    if (!(Test-Path $buildTempDir)) { New-Item -ItemType Directory -Path $buildTempDir -Force | Out-Null }
-
-    # 2. Download WebView2 NuGet Package
-    Write-Host "Downloading Microsoft.Web.WebView2 NuGet package from official v3 flatcontainer..." -ForegroundColor Cyan
-    Invoke-WebRequest -Uri $nugetUrl -OutFile $zipPath
-
-    # 3. Extract Package
-    Write-Host "Extracting WebView2 package..." -ForegroundColor Cyan
-    Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
-
-    # 4. stage references to output binary directory
-    Write-Host "Staging build references and DLLs..." -ForegroundColor Cyan
-    $coreDll = Join-Path $extractPath "lib\net462\Microsoft.Web.WebView2.Core.dll"
-    $winFormsDll = Join-Path $extractPath "lib\net462\Microsoft.Web.WebView2.WinForms.dll"
-    $loaderDll = Join-Path $extractPath "build\native\x64\WebView2Loader.dll"
-
-    Copy-Item $coreDll -Destination $binDir -Force
-    Copy-Item $winFormsDll -Destination $binDir -Force
-    Copy-Item $loaderDll -Destination $binDir -Force
-    
-    try {
-        Remove-Item $buildTempDir -Recurse -Force -ErrorAction SilentlyContinue | Out-Null
-    } catch {}
-} else {
-    Write-Host "WebView2 DLLs already present in bin/. Skipping NuGet package download and extraction." -ForegroundColor Green
+if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
+    throw "The .NET SDK (8 or later) is required: https://dotnet.microsoft.com/download"
 }
 
-# 5. Compile C# Host code using system csc.exe
-Write-Host "Compiling DesktopHtmlHost.cs into nexuswpp.exe..." -ForegroundColor Cyan
-$cscPath = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
-$sourceFile = Join-Path $PSScriptRoot "DesktopHtmlHost.cs"
-$outputExe = Join-Path $binDir "nexuswpp.exe"
+# Version stamped from the VERSION file.
 $version = & (Join-Path $PSScriptRoot 'scripts\read_version.ps1')
-$versionSource = Join-Path $binDir 'ReleaseVersion.cs'
+$versionDir = Join-Path $PSScriptRoot 'work\obj'
+if (!(Test-Path $versionDir)) { New-Item -ItemType Directory -Path $versionDir -Force | Out-Null }
 @"
 using System.Reflection;
 [assembly: AssemblyVersion("$version")]
 [assembly: AssemblyFileVersion("$version")]
 namespace NexusWpp { internal static class ReleaseVersion { internal const string Value = "$version"; } }
-"@ | Set-Content -LiteralPath $versionSource -Encoding UTF8
+"@ | Set-Content -LiteralPath (Join-Path $versionDir 'ReleaseVersion.cs') -Encoding UTF8
 
-$compilerArgs = @(
-    "/target:winexe",
-    "/platform:x64",
-    "/out:$outputExe",
-    "/win32icon:$(Join-Path $PSScriptRoot "icon.ico")",
-    "/reference:$(Join-Path $binDir Microsoft.Web.WebView2.Core.dll)",
-    "/reference:$(Join-Path $binDir Microsoft.Web.WebView2.WinForms.dll)",
-    "/reference:System.Management.dll",
-    (Join-Path $PSScriptRoot "NvidiaTelemetry.cs"),
-    (Join-Path $PSScriptRoot "TelemetryCollector.cs"),
-    (Join-Path $PSScriptRoot "WindowsGpuTelemetry.cs"),
-    $sourceFile,
-    $versionSource,
-    (Join-Path $PSScriptRoot "DesktopVisibility.cs")
-)
-
-$process = Start-Process -FilePath $cscPath -ArgumentList $compilerArgs -NoNewWindow -Wait -PassThru
-
-if ($process.ExitCode -eq 0 -and (Test-Path $outputExe)) {
-    Write-Host "`n[SUCCESS] nexuswpp.exe has been compiled successfully!" -ForegroundColor Green
-    Write-Host "Location: $outputExe" -ForegroundColor Green
-    
-    # 6. Clean up temporary package folder
-    if (Test-Path $buildTempDir) {
-        Remove-Item $buildTempDir -Recurse -Force | Out-Null
-    }
-} else {
-    if (Test-Path $buildTempDir) {
-        Remove-Item $buildTempDir -Recurse -Force -ErrorAction SilentlyContinue | Out-Null
-    }
-    Write-Error "Compilation failed. csc.exe exited with code $($process.ExitCode)."
+Write-Host "Building NexusWpp.csproj into bin\nexuswpp.exe..." -ForegroundColor Cyan
+& dotnet build $project -c Release -o $binDir --nologo -v quiet -clp:ErrorsOnly
+if ($LASTEXITCODE -ne 0 -or !(Test-Path $outputExe)) {
+    Write-Error "Compilation failed. dotnet build exited with code $LASTEXITCODE."
 }
+
+Write-Host "`n[SUCCESS] nexuswpp.exe has been compiled successfully!" -ForegroundColor Green
+Write-Host "Location: $outputExe" -ForegroundColor Green

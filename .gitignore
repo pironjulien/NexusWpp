@@ -1,4 +1,5 @@
 bin/
+obj/
 scripts/bin/
 dist/
 work/

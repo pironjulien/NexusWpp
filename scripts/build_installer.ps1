@@ -7,7 +7,7 @@ $payloadZip = Join-Path $distDir "NexusWppPayload.zip"
 $installerExe = Join-Path $distDir "NexusWppSetup.exe"
 $installerSource = Join-Path $projectRoot "installer\NexusWppInstaller.cs"
 $installerManifest = Join-Path $projectRoot "installer\NexusWppInstaller.manifest"
-$cscPath = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+$cscScript = Join-Path $PSScriptRoot "csc.ps1"
 
 function Get-SignToolPath {
     $command = Get-Command signtool.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source
@@ -50,10 +50,6 @@ function Get-LocalCodeSigningCert {
 }
 
 $signToolPath = Get-SignToolPath
-
-if (!(Test-Path -LiteralPath $cscPath)) {
-    throw "C# compiler not found at $cscPath"
-}
 
 & (Join-Path $projectRoot "compile.ps1")
 
@@ -98,12 +94,12 @@ $compilerArgs = @(
     "/reference:System.Management.dll",
     "/reference:System.Windows.Forms.dll",
     $installerSource,
-    (Join-Path $projectRoot 'bin\ReleaseVersion.cs')
+    (Join-Path $projectRoot 'work\obj\ReleaseVersion.cs')
 )
 
-$process = Start-Process -FilePath $cscPath -ArgumentList $compilerArgs -NoNewWindow -Wait -PassThru
-if ($process.ExitCode -ne 0 -or !(Test-Path -LiteralPath $installerExe)) {
-    throw "Installer compilation failed with exit code $($process.ExitCode)."
+& $cscScript /nologo @compilerArgs
+if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $installerExe)) {
+    throw "Installer compilation failed with exit code $LASTEXITCODE."
 }
 
 if (!$signToolPath) {

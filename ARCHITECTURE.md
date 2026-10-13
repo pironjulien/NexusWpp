@@ -51,7 +51,7 @@ The injected WebView2 window lives below desktop icons, so normal mouse delivery
 ## Performance Choices
 
 - WebView2 is warmed before `WorkerW` is found.
-- The Canvas loop sleeps when particles/interactions stop. The two logo spin rings use `steps()` at 12 frames/s instead of a 60 frames/s compositor animation.
+- The Canvas loop sleeps when particles/interactions stop. The two logo spin rings use `steps()` at 12 frames/s instead of a 60 frames/s compositor animation. When Windows energy saver is on (`SystemStatusFlag`), the rings hold still; values, clock and data packets keep updating.
 - Top-process WMI collection is throttled and protected against overlapping calls.
 - GPU routing is left to Windows; NexusWpp does not write DirectX GPU preferences.
 - A 250 ms coverage check pauses work only when all monitor work areas stay covered for 1.5 s (or the session is inactive). While paused, a WinEvent hook (foreground, move/size end, minimize, show/hide/destroy of top-level windows) re-checks within about 60 ms; the hook exists only while paused. WebView2 stays visible and is never suspended for occlusion; the real composed scene remains available before animation resumes.

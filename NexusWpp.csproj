@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- .NET Framework 4.8 is part of Windows: no runtime to ship, small package.
+       The SDK still compiles with the current C# compiler. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <AssemblyName>nexuswpp</AssemblyName>
+    <RootNamespace>NexusWpp</RootNamespace>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <DebugType>none</DebugType>
+    <Optimize>true</Optimize>
+    <Deterministic>true</Deterministic>
+    <ReleaseVersionSource>work\obj\ReleaseVersion.cs</ReleaseVersionSource>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="DesktopHtmlHost.cs" />
+    <Compile Include="DesktopVisibility.cs" />
+    <Compile Include="NvidiaTelemetry.cs" />
+    <Compile Include="TelemetryCollector.cs" />
+    <Compile Include="WindowsGpuTelemetry.cs" />
+    <Compile Include="$(ReleaseVersionSource)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Management" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
+  </ItemGroup>
+
+  <!-- Ship only what the WinForms host loads: no WPF control, no duplicate loader tree, no .config. -->
+  <PropertyGroup>
+    <GenerateSupportedRuntime>false</GenerateSupportedRuntime>
+  </PropertyGroup>
+  <Target Name="TrimWebView2Output" AfterTargets="ResolvePackageAssets;ResolveAssemblyReferences">
+    <ItemGroup>
+      <ReferenceCopyLocalPaths Remove="@(ReferenceCopyLocalPaths)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+      <RuntimeCopyLocalItems Remove="@(RuntimeCopyLocalItems)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
+  <Target Name="RemoveDuplicateLoaderTree" AfterTargets="Build">
+    <RemoveDir Directories="$(OutDir)runtimes" />
+  </Target>
+
+</Project>

@@ -11,7 +11,7 @@ foreach ($dll in @('Microsoft.Web.WebView2.Core.dll','Microsoft.Web.WebView2.Win
 $binary = Join-Path $testDir 'GraphicsProfile.exe'
 $refs = @('/reference:System.Windows.Forms.dll','/reference:System.Drawing.dll','/reference:System.Management.dll','/reference:System.Web.Extensions.dll',
     "/reference:$testDir\Microsoft.Web.WebView2.Core.dll", "/reference:$testDir\Microsoft.Web.WebView2.WinForms.dll")
-& "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /target:exe "/out:$binary" @refs (Join-Path $PSScriptRoot 'tests\GraphicsProfile.cs')
+& (Join-Path $PSScriptRoot 'csc.ps1') /nologo /target:exe "/out:$binary" @refs (Join-Path $PSScriptRoot 'tests\GraphicsProfile.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Graphics profile compilation failed.' }
 & $binary $project $Assets $output
 if ($LASTEXITCODE -ne 0) { throw 'Graphics profile failed.' }

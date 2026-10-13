@@ -19,7 +19,7 @@ $binaryDirectory = Join-Path $dataRoot 'bin'
 New-Item -ItemType Directory -Path $binaryDirectory -Force | Out-Null
 $binary = Join-Path $binaryDirectory 'DesktopVisualResume.exe'
 $source = Join-Path $PSScriptRoot 'tests\DesktopVisualResume.cs'
-& "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /target:winexe /platform:x64 /unsafe /optimize+ ("/out:" + $binary) /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Web.Extensions.dll $source
+& (Join-Path $PSScriptRoot 'csc.ps1') /nologo /target:winexe /platform:x64 /unsafe /optimize+ ("/out:" + $binary) /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Web.Extensions.dll $source
 if ($LASTEXITCODE -ne 0) { throw 'Visual measurement harness compilation failed.' }
 if ($BuildOnly) {
     Write-Output "Compiled without opening a window or capturing the desktop: $binary"

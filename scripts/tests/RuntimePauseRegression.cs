@@ -158,6 +158,13 @@ class RuntimePauseRegression : Form
                 ctx.fillText=function(text,...args){drawnLabels.push(String(text));originalText.call(this,text,...args);};
                 telemetryNodes.cpu.value=-1;telemetryNodes.gpu.value=null;redrawCanvas();ctx.fillText=originalText;");
             await Check("drawnLabels.filter(text=>text==='—').length>=2 && !drawnLabels.some(text=>text==='-1%' || text==='null%')", "radar marks unavailable readings instead of negative or fabricated percentages");
+            // Windows energy saver holds the logo rings still while visible, and releases them when it ends.
+            // The layout fixture freezes the page; release it to observe live motion.
+            await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal',energySaver:true});setRuntimeSuspended(false);");
+            await Check("document.body.classList.contains('energy-saver') && !runtimeSuspended && document.getAnimations().filter(a => a.animationName === 'spin-eye').length === 2 && document.getAnimations().filter(a => a.animationName === 'spin-eye').every(a => a.playState === 'paused')", "energy saver pauses the logo rings");
+            await Check("gpuVal.textContent==='73%' && clockTimer !== 0", "energy saver keeps values and clock live");
+            await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal'});setRuntimeSuspended(false);");
+            await Check("!document.body.classList.contains('energy-saver') && document.getAnimations().filter(a => a.animationName === 'spin-eye').every(a => a.playState === 'running')", "leaving energy saver restarts the logo rings");
             exitCode = 0;
         }
         catch (Exception error) { Console.Error.WriteLine("FAIL " + error); }

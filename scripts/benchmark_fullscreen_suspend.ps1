@@ -147,7 +147,7 @@ public class FullscreenProbe {
     $src = Join-Path $env:TEMP "NexusFullscreenProbe.cs"
     $exe = Join-Path $env:TEMP "NexusFullscreenProbe.exe"
     Set-Content -Path $src -Value $code -Encoding ASCII
-    & C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /target:winexe /out:$exe /reference:System.Drawing.dll /reference:System.Windows.Forms.dll $src | Out-Null
+    & (Join-Path $PSScriptRoot 'csc.ps1') /target:winexe /out:$exe /reference:System.Drawing.dll /reference:System.Windows.Forms.dll $src | Out-Null
     return $exe
 }
 

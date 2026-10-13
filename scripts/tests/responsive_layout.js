@@ -18,6 +18,7 @@ window.layoutFixture = function (test) {
         network: { name: 'Realtek Gaming 2.5GbE Family Controller', type: 'Ethernet', lan: 32768, wifi: 262144, linkSpeedMbps: 2500 },
         motherboard: 'ASUSTeK ROG MAXIMUS Z890 HERO',
         battery: { present: full, percent: 100, ac: true },
+        energySaver: test.energySaver === true,
         topProcesses: [{ Name: 'ApplicationFrameHost', PercentProcessorTime: 456 }],
         topRamProcess: { name: 'ApplicationFrameHost', ramMb: 12288 },
         totalProcesses: 456, ping: 124,
