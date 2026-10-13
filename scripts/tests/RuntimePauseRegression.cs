@@ -74,8 +74,12 @@ class RuntimePauseRegression : Form
                     pageReady = true;
                 }
             };
+            // Records any resource or inline code blocked by the page's Content-Security-Policy.
+            await view.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                "window.cspViolations=[];document.addEventListener('securitypolicyviolation',e=>cspViolations.push(e.violatedDirective+' '+e.blockedURI));");
             view.Source = new Uri("http://nexuswpp.local/index.html");
             await Ready();
+            await Check("document.querySelector('meta[http-equiv=\"Content-Security-Policy\"]') !== null", "page declares a Content-Security-Policy");
             await Check("runtimeSuspended && hostRuntimeSuspended && telemetryNodesInitialized", "startup covered paints real canvas and receives host pause");
             await Check("ctx.getImageData(0,0,width,height).data.some((v,i) => i % 4 === 3 && v > 0)", "startup covered contains painted scene pixels before resume");
             await Check("getComputedStyle(document.querySelector('.dashboard')).opacity === '1'", "startup covered keeps dashboard readable");
@@ -186,6 +190,7 @@ class RuntimePauseRegression : Form
             await Check("cardHistories.every(h => h.values.length > 0 && h.values.length <= HISTORY_LENGTH)", "history keeps at most 60 samples");
             await Check("historyPaths([10, null, 20, 30]).line.split('M').length - 1 === 2 && historyPaths([null, null]).line === ''", "missing readings break the line instead of drawing zero");
             await Check("historyPaths([150]).line === 'M59 8.0' && historyPaths([-5]).line === 'M59 100.0'", "history values are clamped to the card");
+            await Check("cspViolations.length === 0", "page runs under its Content-Security-Policy without blocked content");
             exitCode = 0;
         }
         catch (Exception error) { Console.Error.WriteLine("FAIL " + error); }

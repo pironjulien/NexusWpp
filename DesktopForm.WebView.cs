@@ -49,6 +49,7 @@ namespace DesktopHtmlHost
 
                 webView.DefaultBackgroundColor = System.Drawing.Color.Transparent;
                 webView.CoreWebView2.ProcessFailed += CoreWebView2_ProcessFailed;
+                HardenWebView(webView.CoreWebView2);
 
                 // Configure virtual host mapping to serve files from local directory without HTTP server
                 string directory = Path.GetDirectoryName(htmlPath);
@@ -56,7 +57,7 @@ namespace DesktopHtmlHost
                 webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                     "nexuswpp.local",
                     directory,
-                    CoreWebView2HostResourceAccessKind.Allow
+                    CoreWebView2HostResourceAccessKind.DenyCors
                 );
 
                 webView.CoreWebView2.WebMessageReceived += (s, ev) =>
@@ -186,6 +187,7 @@ namespace DesktopHtmlHost
                 if (isClosing || IsDisposed) return;
 
                 Program.LogDebug("WebView2 Runtime failed to initialize: " + ex.ToString());
+                if (IsWebView2RuntimeMissing(ex)) ShowWebView2RuntimeMissing();
                 BeginCleanShutdown();
                 // Without WebView2 the form would cover the desktop in grey and hold the
                 // single-instance mutex, blocking any relaunch: exit instead.
@@ -194,6 +196,73 @@ namespace DesktopHtmlHost
             finally
             {
                 webViewInitializing = false;
+            }
+        }
+
+        // The page is a local, read-only dashboard: no browser UI, no downloads, no permissions,
+        // no external schemes, no sub-frames and no form or password memory.
+        private static void HardenWebView(CoreWebView2 core)
+        {
+            CoreWebView2Settings settings = core.Settings;
+            TrySetting(() => settings.AreDefaultContextMenusEnabled = false);
+#if DEBUG
+            TrySetting(() => settings.AreDevToolsEnabled = true);
+#else
+            TrySetting(() => settings.AreDevToolsEnabled = false);
+#endif
+            TrySetting(() => settings.AreBrowserAcceleratorKeysEnabled = false);
+            TrySetting(() => settings.IsStatusBarEnabled = false);
+            TrySetting(() => settings.IsZoomControlEnabled = false);
+            TrySetting(() => settings.IsPinchZoomEnabled = false);
+            TrySetting(() => settings.IsSwipeNavigationEnabled = false);
+            TrySetting(() => settings.IsGeneralAutofillEnabled = false);
+            TrySetting(() => settings.IsPasswordAutosaveEnabled = false);
+            TrySetting(() => settings.AreHostObjectsAllowed = false);
+
+            core.PermissionRequested += (sender, e) => { e.State = CoreWebView2PermissionState.Deny; e.Handled = true; };
+            core.DownloadStarting += (sender, e) => { e.Cancel = true; e.Handled = true; };
+            core.FrameNavigationStarting += (sender, e) => { e.Cancel = true; };
+            try { core.LaunchingExternalUriScheme += (sender, e) => { e.Cancel = true; }; }
+            catch (Exception ex) { Program.LogDebug("External scheme guard unavailable: " + ex.Message); }
+        }
+
+        // Older runtimes lack some settings interfaces: skip those instead of failing startup.
+        private static void TrySetting(Action apply)
+        {
+            try { apply(); }
+            catch (Exception ex) { Program.LogDebug("WebView2 setting unavailable: " + ex.Message); }
+        }
+
+        private static bool IsWebView2RuntimeMissing(Exception ex)
+        {
+            for (Exception current = ex; current != null; current = current.InnerException)
+            {
+                if (current is WebView2RuntimeNotFoundException) return true;
+            }
+            return false;
+        }
+
+        private const string WebView2DownloadUrl = "https://developer.microsoft.com/microsoft-edge/webview2/";
+
+        // Without the runtime, nothing can be drawn: say so instead of exiting silently.
+        private static void ShowWebView2RuntimeMissing()
+        {
+            bool french = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "fr";
+            string text = french
+                ? "NexusWpp a besoin de Microsoft Edge WebView2 Runtime, qui n'est pas installé ou ne démarre pas.\r\n\r\n" +
+                  "Ce composant Microsoft est gratuit (version « Evergreen »). Ouvrir la page de téléchargement ?\r\n\r\n" + WebView2DownloadUrl
+                : "NexusWpp needs the Microsoft Edge WebView2 Runtime, which is missing or cannot start.\r\n\r\n" +
+                  "This Microsoft component is free (\"Evergreen\" version). Open the download page?\r\n\r\n" + WebView2DownloadUrl;
+            try
+            {
+                if (MessageBox.Show(text, "NexusWpp", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+                {
+                    Process.Start(new ProcessStartInfo(WebView2DownloadUrl) { UseShellExecute = true });
+                }
+            }
+            catch (Exception ex)
+            {
+                Program.LogDebug("WebView2 runtime message failed: " + ex.Message);
             }
         }
 

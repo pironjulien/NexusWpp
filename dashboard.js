@@ -347,9 +347,9 @@ function updateDOM(stats) {
             if (clockBattery.textContent !== batteryText) {
                 clockBattery.textContent = batteryText;
             }
-            clockBattery.style.display = "";
+            clockBattery.hidden = false;
         } else {
-            clockBattery.style.display = "none";
+            clockBattery.hidden = true;
         }
     }
     // Windows energy saver: hold decorative motion still; values keep updating.

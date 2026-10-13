@@ -120,7 +120,7 @@ namespace DesktopHtmlHost
                             }
                             catch (Exception ex)
                             {
-                                Program.LogDebug("Telemetry post error: " + ex.Message + " | JSON: " + statsJson);
+                                Program.LogDebug("Telemetry post error: " + ex.Message + " | JSON length: " + (statsJson == null ? 0 : statsJson.Length));
                             }
                             finally
                             {
@@ -135,7 +135,7 @@ namespace DesktopHtmlHost
                     }
                     catch (Exception ex)
                     {
-                        Program.LogDebug("Telemetry collect error: " + ex.Message + " | JSON: " + statsJson);
+                        Program.LogDebug("Telemetry collect error: " + ex.Message + " | JSON length: " + (statsJson == null ? 0 : statsJson.Length));
                         try
                         {
                             if (!TryBeginInvoke((MethodInvoker)delegate
