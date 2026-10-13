@@ -26,10 +26,14 @@
     --font-body: 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
 }
 
-/* Pause compositor animations as well as the canvas while the desktop is hidden. */
+/* Pause compositor animations as well as the canvas while the desktop is hidden.
+   Windows energy saver holds the same decorative motion still while visible. */
 .runtime-suspended *,
 .runtime-suspended *::before,
-.runtime-suspended *::after {
+.runtime-suspended *::after,
+.energy-saver *,
+.energy-saver *::before,
+.energy-saver *::after {
     animation-play-state: paused !important;
 }
 

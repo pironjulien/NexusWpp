@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-13 — 1.0.34.0
+
+- Économiseur d'énergie Windows : quand il est activé, les deux anneaux du logo s'immobilisent (c'est l'animation qui coûte le plus) ; valeurs, horloge et paquets de données continuent de se mettre à jour. Aucun changement visuel le reste du temps.
+- Compilation modernisée : projet `NexusWpp.csproj` compilé par le SDK .NET (C# récent) au lieu du `csc.exe` C# 5 de Windows. L'application cible toujours .NET Framework 4.8, intégré à Windows : même taille, aucun runtime à installer.
+- WebView2 SDK mis à jour de 1.0.2592.51 à 1.0.4258.31, récupéré par NuGet.
+- Tests et installeur compilés avec le même compilateur moderne (`scripts\csc.ps1`).
+
 ## 2026-10-12 — 1.0.33.0
 
 Revue complète du code, corrections vérifiées :

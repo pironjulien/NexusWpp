@@ -1379,11 +1379,14 @@ namespace DesktopHtmlHost
             bool batteryPresent = false;
             int batteryPercent = -1;
             bool acLine = true;
+            // Windows energy saver (battery saver), also available on desktops since Windows 11 24H2.
+            bool energySaver = false;
             try
             {
                 SYSTEM_POWER_STATUS sps = new SYSTEM_POWER_STATUS();
                 if (Win32.GetSystemPowerStatus(sps))
                 {
+                    energySaver = sps.SystemStatusFlag == 1;
                     batteryPresent = (sps.BatteryFlag & 128) == 0 && sps.BatteryFlag != 255;
                     acLine = sps.ACLineStatus == 1;
                     batteryPercent = sps.BatteryLifePercent <= 100 ? sps.BatteryLifePercent : -1;
@@ -1455,8 +1458,8 @@ namespace DesktopHtmlHost
                 cachedNetTxRate, cachedNetRxRate, JsonString(cachedActiveIp), JsonString(cachedActiveIpv6), JsonString(cachedActiveNetName), JsonString(cachedNetType), cachedNetLinkSpeedMbps, wifiSignal);
 
             // battery
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"battery\":{{\"present\":{0},\"percent\":{1},\"ac\":{2}}},",
-                batteryPresent ? "true" : "false", batteryPercent, acLine ? "true" : "false");
+            sb.AppendFormat(CultureInfo.InvariantCulture, "\"battery\":{{\"present\":{0},\"percent\":{1},\"ac\":{2}}},\"energySaver\":{3},",
+                batteryPresent ? "true" : "false", batteryPercent, acLine ? "true" : "false", energySaver ? "true" : "false");
 
             // global/uptime/ping (real Windows uptime, not the process lifetime)
             sb.AppendFormat(CultureInfo.InvariantCulture, "\"uptime\":{0},\"ping\":{1},\"pingVia\":{4},\"totalProcesses\":{2},\"motherboard\":{3},",

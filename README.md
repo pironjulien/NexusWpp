@@ -29,7 +29,7 @@ NexusWpp affiche un cockpit matériel dynamique directement dans le bureau Windo
 Prérequis:
 
 - Windows 10/11.
-- Microsoft .NET Framework 4.x avec `csc.exe`.
+- SDK .NET 8 ou plus récent (gratuit) pour compiler : `NexusWpp.csproj` utilise le compilateur C# actuel mais cible .NET Framework 4.8, intégré à Windows, donc aucun runtime à installer pour les utilisateurs.
 - Microsoft Edge WebView2 Runtime.
 - NVIDIA est optionnel; les mesures détaillées utilisent le processus isolé `nvidia-smi`, avec les compteurs Windows lorsque cette source est indisponible.
 

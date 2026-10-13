@@ -1334,6 +1334,8 @@ function updateDOM(stats) {
             clockBattery.style.display = "none";
         }
     }
+    // Windows energy saver: hold decorative motion still; values keep updating.
+    document.body.classList.toggle("energy-saver", stats.energySaver === true);
     // 7. Update Holographic Neural Telemetry Map live parameters
     if (telemetryNodes.npu) {
         telemetryNodes.npu.value = stats.totalProcesses;
