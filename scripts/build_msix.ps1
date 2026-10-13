@@ -154,6 +154,25 @@ New-ScaledLogoSet -Name "Square44x44Logo" -BaseWidth 44 -BaseHeight 44
 New-ScaledLogoSet -Name "Square150x150Logo" -BaseWidth 150 -BaseHeight 150
 New-AppIconTargetAssets
 
+# Store name per language (names reserved in Partner Center). The Start menu keeps "NexusWpp".
+$storeNames = @{ 'fr-FR' = "NexusWpp – Fond d'écran moniteur système"; 'en-US' = 'NexusWpp – Live System Monitor Wallpaper' }
+foreach ($language in $storeNames.Keys) {
+    $stringsDir = Join-Path $packageDir "Strings\$language"
+    New-Item -ItemType Directory -Path $stringsDir -Force | Out-Null
+    $escaped = [System.Security.SecurityElement]::Escape($storeNames[$language])
+    $resw = @"
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="StoreName" xml:space="preserve"><value>$escaped</value></data>
+</root>
+"@
+    [System.IO.File]::WriteAllText((Join-Path $stringsDir 'resources.resw'), $resw, (New-Object System.Text.UTF8Encoding($true)))
+}
+
 $manifest = @"
 <?xml version="1.0" encoding="utf-8"?>
 <Package
@@ -165,7 +184,7 @@ $manifest = @"
   IgnorableNamespaces="uap uap10 desktop rescap">
   <Identity Name="$identityName" Publisher="$publisher" Version="$version" ProcessorArchitecture="x64" />
   <Properties>
-    <DisplayName>NexusWpp</DisplayName>
+    <DisplayName>ms-resource:StoreName</DisplayName>
     <PublisherDisplayName>$publisherDisplayName</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>

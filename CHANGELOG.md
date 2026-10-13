@@ -21,6 +21,7 @@ Audit complet sur 8 axes (86 constats vérifiés) et corrections :
 - Sécurité : WebView2 verrouillé (menus, outils de développement, zoom, téléchargements, permissions) et politique de sécurité du contenu stricte ; adresses IP retirées des données envoyées à la page.
 - Diagnostics : version et vraie version de Windows dans le journal, journal limité à 1 Mo, vrais plantages remontés à Windows.
 - CI : nouvelles suites d'interface lancées sur GitHub ; script `scripts	ag_release.ps1` pour étiqueter chaque version.
+- Store : nom de fiche avec mots-clés, « NexusWpp – Fond d'écran moniteur système » et « NexusWpp – Live System Monitor Wallpaper » (noms réservés, déclarés par langue dans le paquet) ; le menu Démarrer garde « NexusWpp ».
 
 - Fenêtre de réglages : le texte d'aide n'est plus coupé avec une mise à l'échelle Windows de 125 % ou plus. La mise à l'échelle automatique n'était pas appliquée (construction sans `SuspendLayout`/`ResumeLayout`) et les textes avaient des tailles fixes ; la fenêtre utilise maintenant une mise en page automatique qui s'adapte au texte, à la langue et au DPI.
 - Test : la fenêtre de réglages est vérifiée de 100 % à 200 %, avec et sans mise à l'échelle de la mise en page (aucun texte coupé, hors de la fenêtre ou superposé). Ce test échoue sur la version 1.0.37.
