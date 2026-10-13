@@ -41,7 +41,7 @@ namespace DesktopHtmlHost
             Text = L("NexusWpp — Réglages", "NexusWpp — Settings");
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(440, 520);
+            ClientSize = new Size(440, 548);
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
@@ -65,14 +65,14 @@ namespace DesktopHtmlHost
             resetButton.FlatAppearance.BorderColor = Line;
             resetButton.Click += ResetLogo;
 
-            status = new Label { ForeColor = Muted, Location = new Point(30, 424), Size = new Size(380, 40),
+            status = new Label { ForeColor = Muted, Location = new Point(30, 426), Size = new Size(380, 56),
                 Text = L("L'image est recadrée en carré au centre, puis affichée dans le rond du radar.",
                          "The image is cropped to a centered square, then shown in the radar circle.") };
 
-            var quitButton = MakeButton(L("Quitter NexusWpp", "Quit NexusWpp"), Back, Danger, new Point(30, 470), new Size(170, 34));
+            var quitButton = MakeButton(L("Quitter NexusWpp", "Quit NexusWpp"), Back, Danger, new Point(30, 494), new Size(170, 34));
             quitButton.FlatAppearance.BorderColor = Danger;
             quitButton.Click += delegate { Close(); quitRequested(); };
-            var closeButton = MakeButton(L("Fermer", "Close"), Panel, Ink, new Point(300, 470), new Size(110, 34));
+            var closeButton = MakeButton(L("Fermer", "Close"), Panel, Ink, new Point(300, 494), new Size(110, 34));
             closeButton.FlatAppearance.BorderColor = Line;
             closeButton.Click += delegate { Close(); };
             CancelButton = closeButton;

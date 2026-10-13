@@ -1,7 +1,7 @@
 # Fiche Microsoft Store — NexusWpp
 
 Textes à coller dans Partner Center (Descriptions dans le Store). Chaque fonction citée existe dans l'application.
-Captures : `.\scripts\store_screenshots.ps1` (rendu réel avec la télémétrie réelle du PC) → `dist\store-screenshots\`.
+Captures : `.\scripts\store_screenshots.ps1` (rendu réel avec la télémétrie réelle du PC) → `dist\store-screenshots\`. Ordre conseillé : cockpit 4K, réglages, logo personnalisé, ultra-large, portrait.
 
 ---
 
@@ -40,6 +40,7 @@ Confidentialité : tout est mesuré localement. Pas de compte, pas de publicité
 - Animations immobilisées quand l'économiseur d'énergie de Windows est actif
 - Changement du mode d'alimentation Windows d'un clic sur le fond d'écran
 - Logo central personnalisable avec votre propre image
+- Historique des 60 dernières secondes en filigrane dans chaque carte
 - S'adapte à toutes les résolutions, à la mise à l'échelle et au mode portrait
 - Démarre avec Windows ; pas de compte, pas de publicité, aucune donnée envoyée
 - Interface en français ou en anglais, selon la langue de Windows
@@ -48,9 +49,9 @@ Confidentialité : tout est mesuré localement. Pas de compte, pas de publicité
 
 fond d'écran animé, moniteur système, cockpit, CPU GPU, température, NPU, widget bureau
 
-### Nouveautés de cette version (1.0.37.0)
+### Nouveautés de cette version (1.0.38.0)
 
-Réglages depuis l'icône de la zone de notification : logo central personnalisable et bouton Quitter. Télémétrie environ 28 fois plus rapide grâce aux compteurs natifs de Windows, pour une consommation nettement réduite. Interface disponible en anglais, selon la langue de Windows. Économiseur d'énergie : quand il est activé dans Windows, les anneaux du logo s'immobilisent pour économiser la batterie ; les valeurs continuent de se mettre à jour. Moteur d'affichage WebView2 mis à jour. Mesures du disque et du ping corrigées, démarrage et reprise plus fiables.
+Historique des 60 dernières secondes dans chaque carte. Réglages depuis l'icône de la zone de notification : logo central personnalisable et bouton Quitter. Télémétrie environ 28 fois plus rapide grâce aux compteurs natifs de Windows, pour une consommation nettement réduite. Interface disponible en anglais, selon la langue de Windows. Économiseur d'énergie : quand il est activé dans Windows, les anneaux du logo s'immobilisent pour économiser la batterie ; les valeurs continuent de se mettre à jour. Moteur d'affichage WebView2 mis à jour. Mesures du disque et du ping corrigées, démarrage et reprise plus fiables.
 
 ---
 
@@ -89,6 +90,7 @@ Privacy: everything is measured locally. No account, no ads, no data collected o
 - Animations hold still while Windows energy saver is on
 - Switch the Windows power mode with one click on the wallpaper
 - Customizable center logo with your own image
+- Last 60 seconds of history drawn faintly in every card
 - Adapts to every resolution, display scaling and portrait mode
 - Starts with Windows; no account, no ads, no data sent
 - English or French interface, following your Windows language
@@ -97,6 +99,6 @@ Privacy: everything is measured locally. No account, no ads, no data collected o
 
 live wallpaper, system monitor, hardware monitor, CPU GPU, temperature, NPU, desktop dashboard
 
-### What's new in this version (1.0.37.0)
+### What's new in this version (1.0.38.0)
 
-Settings from the notification area icon: customizable center logo and a Quit button. Telemetry about 28 times faster through native Windows performance counters, for much lower resource use. The interface is now available in English, following your Windows language. Energy saver: when it is on in Windows, the logo rings hold still to save battery; values keep updating. Updated WebView2 display engine. Fixed disk and ping readings, more reliable startup and resume.
+Last 60 seconds of history in every card. Settings from the notification area icon: customizable center logo and a Quit button. Telemetry about 28 times faster through native Windows performance counters, for much lower resource use. The interface is now available in English, following your Windows language. Energy saver: when it is on in Windows, the logo rings hold still to save battery; values keep updating. Updated WebView2 display engine. Fixed disk and ping readings, more reliable startup and resume.
