@@ -77,15 +77,39 @@ body {
     width: 100vw;
     height: 100vh;
     overflow: hidden;
+}
+
+/* Layout units of the cockpit: 1% of the layout frame, resolved to pixels where they are
+   declared so nested size containers (gauge cards) do not change their meaning. */
+@property --lvw { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --lvh { syntax: '<length>'; inherits: true; initial-value: 0px; }
+
+/* The cockpit is laid out in this frame. It is the whole window by default; on several
+   monitors the host's LAYOUT message moves it onto the primary monitor while the cosmic
+   background keeps covering every monitor. */
+.layout-frame {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
+    container: layout / size;
+}
+
+.layout-safe {
+    --lvw: 1cqw;
+    --lvh: 1cqh;
+    width: 100%;
+    height: 100%;
     display: flex;
     justify-content: center;
     align-items: center;
     /* Raise the golden-ratio layout by 8 CSS px (10 screen px at 125% DPI),
        keeping room for icon labels on short screens and unchanged card sizes. */
-    --desktop-safe-total: clamp(160px, 15.8vh, 288px);
+    --desktop-safe-total: clamp(160px, calc(15.8 * var(--lvh)), 288px);
     --desktop-safe-top: max(96px, calc(var(--desktop-safe-total) - var(--desktop-safe-total) / 2.618 - 8px));
     --desktop-safe-bottom: calc(var(--desktop-safe-total) - var(--desktop-safe-top));
-    padding: var(--desktop-safe-top) clamp(12px, 2.5vw, 96px) var(--desktop-safe-bottom);
+    padding: var(--desktop-safe-top) clamp(12px, calc(2.5 * var(--lvw)), 96px) var(--desktop-safe-bottom);
 }
 
 /* --- COSMIC BACKGROUND (SATURATED BOOSTER FOR APPLE GLASS) --- */
@@ -281,7 +305,7 @@ body {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.22fr) minmax(0, 1.12fr);
     grid-template-rows: minmax(0, 1fr);
-    gap: clamp(8px, 1.2vw, 32px);
+    gap: clamp(8px, calc(1.2 * var(--lvw)), 32px);
     min-height: 0; /* Flexbox containment to prevent overflowing parent padding */
     align-items: stretch;
     position: relative;
@@ -301,7 +325,7 @@ body {
 .column-left {
     display: flex;
     flex-direction: column;
-    gap: clamp(6px, 1.2vh, 24px);
+    gap: clamp(6px, calc(1.2 * var(--lvh)), 24px);
     height: 100%;
     justify-content: space-between;
 }
@@ -310,7 +334,7 @@ body {
     flex: 1;
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: clamp(6px, 0.8vw, 16px);
+    gap: clamp(6px, calc(0.8 * var(--lvw)), 16px);
     min-height: 0;
 }
 
@@ -359,7 +383,7 @@ body {
     flex: 1 1 0;
     min-width: 0;
     min-height: 0;
-    padding: clamp(5px, 0.8vh, 20px) clamp(6px, 0.8vw, 24px);
+    padding: clamp(5px, calc(0.8 * var(--lvh)), 20px) clamp(6px, calc(0.8 * var(--lvw)), 24px);
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
     grid-template-columns: minmax(0, 1fr);
@@ -375,7 +399,7 @@ body {
 .accelerator-card {
     min-width: 0;
     height: 100%;
-    padding: clamp(5px, 0.8vh, 16px) clamp(6px, 0.6vw, 18px);
+    padding: clamp(5px, calc(0.8 * var(--lvh)), 16px) clamp(6px, calc(0.6 * var(--lvw)), 18px);
 }
 
 .accelerator-card .gauge-label {
@@ -397,23 +421,23 @@ body {
 }
 
 .accelerator-card .card-sub-metrics {
-    gap: clamp(2px, 0.5vh, 7px);
+    gap: clamp(2px, calc(0.5 * var(--lvh)), 7px);
     margin-top: 0;
-    padding-top: clamp(2px, 0.5vh, 9px);
+    padding-top: clamp(2px, calc(0.5 * var(--lvh)), 9px);
 }
 
 .accelerator-card .sub-metric .lbl {
-    font-size: clamp(9px, 0.7vw, 10px);
+    font-size: clamp(9px, calc(0.7 * var(--lvw)), 10px);
     letter-spacing: 0.2px;
 }
 
 .accelerator-card .sub-metric .val {
-    font-size: clamp(11px, 1vw, 15px);
+    font-size: clamp(11px, calc(1 * var(--lvw)), 15px);
 }
 
 .gauge-label {
     font-family: var(--font-heading);
-    font-size: clamp(11px, 1vw, 18px);
+    font-size: clamp(11px, calc(1 * var(--lvw)), 18px);
     font-weight: 800;
     letter-spacing: 1.5px;
     color: var(--text-secondary);
@@ -542,8 +566,8 @@ body {
 .column-center {
     display: flex;
     flex-direction: column;
-    gap: clamp(6px, 1.4vh, 28px);
-    padding: clamp(8px, 1.4vh, 24px) clamp(8px, 1vw, 28px);
+    gap: clamp(6px, calc(1.4 * var(--lvh)), 28px);
+    padding: clamp(8px, calc(1.4 * var(--lvh)), 24px) clamp(8px, calc(1 * var(--lvw)), 28px);
     justify-content: space-between;
     height: 100%;
     position: relative;
@@ -604,7 +628,7 @@ body {
 .remote-grid.horizontal {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
-    gap: clamp(4px, 0.7vw, 12px);
+    gap: clamp(4px, calc(0.7 * var(--lvw)), 12px);
     align-items: stretch;
 }
 
@@ -635,7 +659,7 @@ body {
     justify-content: center;
     min-width: 0;
     min-height: 36px;
-    padding: clamp(4px, 0.7vh, 10px) clamp(4px, 0.5vw, 12px);
+    padding: clamp(4px, calc(0.7 * var(--lvh)), 10px) clamp(4px, calc(0.5 * var(--lvw)), 12px);
     gap: 5px;
     border-radius: 12px;
 }
@@ -647,7 +671,7 @@ body {
 .remote-grid.horizontal .remote-btn .btn-lbl {
     min-width: 0;
     display: block;
-    font-size: clamp(9px, 0.72vw, 14px);
+    font-size: clamp(9px, calc(0.72 * var(--lvw)), 14px);
     line-height: 1.15;
     letter-spacing: 0.3px;
     white-space: normal;
@@ -718,14 +742,14 @@ body {
 .column-right {
     display: flex;
     flex-direction: column;
-    gap: clamp(6px, 1.2vh, 24px);
+    gap: clamp(6px, calc(1.2 * var(--lvh)), 24px);
     height: 100%;
     justify-content: space-between;
 }
 
 /* Cyber-Clock Widget */
 .cyber-clock-card {
-    padding: clamp(2px, 0.8vh, 20px) 0;
+    padding: clamp(2px, calc(0.8 * var(--lvh)), 20px) 0;
     flex: 0 0 auto;
     min-width: 0;
     text-align: center;
@@ -739,7 +763,7 @@ body {
 
 .clock-time {
     font-family: var(--font-heading);
-    font-size: clamp(22px, 2.8vw, 48px);
+    font-size: clamp(22px, calc(2.8 * var(--lvw)), 48px);
     font-weight: 900;
     color: var(--text-primary);
     letter-spacing: 2px;
@@ -758,7 +782,7 @@ body {
 
 .clock-date {
     font-family: var(--font-body);
-    font-size: clamp(10px, 0.9vw, 15px);
+    font-size: clamp(10px, calc(0.9 * var(--lvw)), 15px);
     font-weight: 700;
     letter-spacing: 1px;
     color: var(--text-secondary);
@@ -769,7 +793,7 @@ body {
 
 .clock-battery {
     font-family: var(--font-heading);
-    font-size: clamp(9px, 0.7vw, 12px);
+    font-size: clamp(9px, calc(0.7 * var(--lvw)), 12px);
     font-weight: 700;
     letter-spacing: 0.8px;
     color: rgba(255, 255, 255, 0.55);
@@ -780,7 +804,7 @@ body {
 
 .clock-mb {
     font-family: var(--font-heading);
-    font-size: clamp(9px, 0.7vw, 12px);
+    font-size: clamp(9px, calc(0.7 * var(--lvw)), 12px);
     font-weight: 700;
     letter-spacing: 0.8px;
     color: var(--vram-glow);
@@ -806,11 +830,11 @@ body {
 .card-sub-metrics {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: clamp(2px, 0.5vh, 10px);
+    gap: clamp(2px, calc(0.5 * var(--lvh)), 10px);
     width: 100%;
     margin-top: 0;
     border-top: 1px dashed rgba(255, 255, 255, 0.08);
-    padding-top: clamp(2px, 0.5vh, 12px);
+    padding-top: clamp(2px, calc(0.5 * var(--lvh)), 12px);
 }
 
 .sub-metric {
@@ -832,7 +856,7 @@ body {
 
 .sub-metric .lbl {
     font-family: var(--font-body);
-    font-size: clamp(9px, 0.7vw, 12px);
+    font-size: clamp(9px, calc(0.7 * var(--lvw)), 12px);
     font-weight: 700;
     color: var(--text-dark);
     letter-spacing: 0.3px;
@@ -842,7 +866,7 @@ body {
 
 .sub-metric .val {
     font-family: var(--font-heading);
-    font-size: clamp(11px, 1vw, 18px);
+    font-size: clamp(11px, calc(1 * var(--lvw)), 18px);
     line-height: 1.2;
     font-weight: 700;
     color: var(--text-primary);
@@ -852,7 +876,7 @@ body {
 .sub-progress-container {
     grid-column: span 2;
     width: 100%;
-    height: clamp(3px, 0.5vh, 7px);
+    height: clamp(3px, calc(0.5 * var(--lvh)), 7px);
     background: rgba(255, 255, 255, 0.03);
     border-radius: 4px;
     overflow: hidden;
@@ -931,7 +955,7 @@ body {
 
 /* Tall/narrow screens keep the clock and controls above a two-column set of
    cards. The hardware cards flow naturally when an accelerator is absent. */
-@media (max-aspect-ratio: 6/5) {
+@container layout (max-aspect-ratio: 6/5) {
     .workspace {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         grid-template-rows: minmax(min-content, 1.618fr);
@@ -957,17 +981,17 @@ body {
     .hologram-sub-panel { grid-column: 2; grid-row: 1 / -1; height: 100%; }
     .cyber-clock-card { grid-column: 1; grid-row: 1; }
     .remote-sub-panel { grid-column: 1; grid-row: 2; }
-    .clock-time { font-size: clamp(20px, 4vw, 40px); }
+    .clock-time { font-size: clamp(20px, calc(4 * var(--lvw)), 40px); }
     .remote-grid.horizontal[data-plan-count="3"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .remote-grid.horizontal[data-plan-count="3"] .remote-btn:last-child { grid-column: 1 / -1; }
 }
 
-@media (max-height: 600px) and (min-aspect-ratio: 6/5) {
+@container layout (max-height: 600px) and (min-aspect-ratio: 6/5) {
     /* Two accelerators share a row and need more height than a full-width card. */
     .accelerator-row { flex: 1.618; }
     .gauge-card { padding: 4px 6px; gap: 2px; }
 }
 
-@media (max-height: 900px) and (max-aspect-ratio: 6/5) {
+@container layout (max-height: 900px) and (max-aspect-ratio: 6/5) {
     .gauge-card { padding: 4px 6px; gap: 2px; }
 }

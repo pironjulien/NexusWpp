@@ -11,6 +11,8 @@ function connectStream() {
                     if (stats.control === "SUSPEND" || stats.control === "RESUME") {
                         hostRuntimeSuspended = stats.control === "SUSPEND";
                         setRuntimeSuspended(hostRuntimeSuspended || document.hidden);
+                    } else if (stats.control === "LAYOUT") {
+                        applyHostLayout(stats);
                     } else if (stats.control === "SETTINGS") {
                         setCenterLogo(stats.logo);
                     } else if (stats.control === "POWER_RESULT") {
@@ -167,7 +169,43 @@ function sendRemoteBounds(force = false) {
     }
 }
 
-window.addEventListener("resize", () => sendRemoteBounds(true));
+// Primary monitor rectangle sent by the host, in window pixels. On several monitors the
+// cockpit is laid out on the primary one only, so no seam cuts it in two; the cosmic
+// background still covers every monitor. With one monitor the rectangle is the whole
+// window and the default full-viewport frame is kept untouched.
+let hostLayout = null;
+function primaryLayoutRect(layout, viewportWidth, viewportHeight) {
+    const win = layout && layout.window, primary = layout && layout.primary;
+    if (!win || !primary || !(win.w > 0) || !(win.h > 0) || !(primary.w > 0) || !(primary.h > 0)) return null;
+    if (primary.x <= 0 && primary.y <= 0 && primary.x + primary.w >= win.w && primary.y + primary.h >= win.h) return null;
+    const scaleX = viewportWidth / win.w, scaleY = viewportHeight / win.h;
+    const left = Math.max(0, primary.x * scaleX), top = Math.max(0, primary.y * scaleY);
+    const right = Math.min(viewportWidth, (primary.x + primary.w) * scaleX);
+    const bottom = Math.min(viewportHeight, (primary.y + primary.h) * scaleY);
+    if (right - left < 1 || bottom - top < 1) return null;
+    return { left, top, width: right - left, height: bottom - top };
+}
+
+function applyHostLayout(layout) {
+    if (layout !== undefined) hostLayout = layout;
+    const frame = document.querySelector('.layout-frame');
+    if (!frame) return;
+    const rect = primaryLayoutRect(hostLayout, window.innerWidth, window.innerHeight);
+    const next = rect ? [rect.left, rect.top, rect.width, rect.height].map(value => value + 'px') : ['', '', '', ''];
+    const style = frame.style;
+    if (style.left === next[0] && style.top === next[1] && style.width === next[2] && style.height === next[3]) return;
+    style.left = next[0];
+    style.top = next[1];
+    style.width = next[2];
+    style.height = next[3];
+    // The power panel moved on screen: refresh the click-forwarding rectangle.
+    requestAnimationFrame(() => sendRemoteBounds(true));
+}
+
+window.addEventListener("resize", () => {
+    if (hostLayout) applyHostLayout();
+    sendRemoteBounds(true);
+});
 
 window.addEventListener("load", () => {
     resizeCanvas();
@@ -180,6 +218,7 @@ if (typeof module !== 'undefined' && module.exports) {
         setCircularProgress,
         animateTextValue,
         formatNetSpeed,
-        updateClock
+        updateClock,
+        primaryLayoutRect
     };
 }
