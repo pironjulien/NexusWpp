@@ -10,8 +10,7 @@ Revue complète du code, corrections vérifiées :
 - Démarrage : si WebView2 ne peut pas démarrer, l'application se ferme au lieu de laisser un bureau gris et de bloquer toute relance.
 - Robustesse matérielle : lectures WMI tolérantes aux valeurs absentes (machines virtuelles, ARM), VRAM bornée à 100 %, volume de taille nulle, erreurs WMI GPU contenues, `powercfg` bloqué interrompu après 3 s.
 - Interface : les jauges ne rejouent plus d'animation depuis d'anciennes valeurs même si la première mesure tarde ; particules sans flash opaque ; barres remises à zéro quand les données expirent ; alertes accessibles réécrites seulement quand elles changent ; un ancien résultat de changement de mode d'alimentation n'annule plus un clic plus récent.
-- Installation EXE : le dossier `C:
-exuswpp` n'est plus modifiable par les comptes standard ; l'installation n'arrête plus les processus WebView2 d'autres applications ; exécutable compilé en x64 explicite.
+- Installation EXE : le dossier `C:\nexuswpp` n'est plus modifiable par les comptes standard ; l'installation n'arrête plus les processus WebView2 d'autres applications ; exécutable compilé en x64 explicite.
 - Test de reprise visuelle : option `-DevBuild` pour mesurer la version de développement.
 
 ## 2026-10-12 — 1.0.32.0
