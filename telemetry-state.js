@@ -26,7 +26,17 @@
         const value = stats[component] && stats[component][field];
         return (!source || sensorState(stats, source) === 'fresh') && valid(value) ? value : null;
     }
-    const api = { valid, SustainedLoad, sensorState, reading };
+    // Remembers the last usable value of each reading. A missing or stale sample
+    // keeps that value on screen, flagged stale; a reading never seen stays null.
+    class LastValues {
+        constructor() { this.values = new Map(); }
+        take(key, value, usable = true) {
+            if (usable && valid(value)) { this.values.set(key, value); return { value, stale: false }; }
+            return this.values.has(key) ? { value: this.values.get(key), stale: true } : { value: null, stale: false };
+        }
+        has(key) { return this.values.has(key); }
+    }
+    const api = { valid, SustainedLoad, sensorState, reading, LastValues };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.NexusTelemetry = api;
 })(typeof window !== 'undefined' ? window : globalThis);

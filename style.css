@@ -26,14 +26,12 @@
     --font-body: 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
 }
 
-/* Pause compositor animations as well as the canvas while the desktop is hidden.
-   Windows energy saver holds the same decorative motion still while visible. */
+/* Pause any CSS animation as well as the canvas while the desktop is hidden.
+   Continuous decorative motion runs on the 12 Hz script clock (radar.js), which
+   also holds it still under Windows energy saver or reduced motion. */
 .runtime-suspended *,
 .runtime-suspended *::before,
-.runtime-suspended *::after,
-.energy-saver *,
-.energy-saver *::before,
-.energy-saver *::after {
+.runtime-suspended *::after {
     animation-play-state: paused !important;
 }
 
@@ -466,9 +464,8 @@ body {
     stroke-linecap: round;
     stroke-dasharray: 477.5; /* 2 * PI * 76 = 477.5 */
     stroke-dashoffset: 477.5;
-    /* Complete each interpolation before the next sample instead of repainting
-       filtered SVG rings for most of the sampling interval. Profiled in WebView2. */
-    transition: stroke-dashoffset 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+    /* No CSS transition: dashboard.js eases the offset over 0.18 s on the shared
+       12 Hz animation clock instead of repainting filtered rings at the display rate. */
     
     /* Optimize stroke animation and prepare layer promotion */
     will-change: stroke-dashoffset, filter;
@@ -513,7 +510,7 @@ body {
     border: 1px solid transparent;
     border-top: 1px solid rgba(48, 209, 88, 0.45);
     border-bottom: 1px solid rgba(48, 209, 88, 0.45);
-    animation: spin-eye 15s steps(180) infinite;
+    /* Turned by radar.js on the shared 12 Hz clock (180 steps per 15 s). */
     pointer-events: none;
     will-change: transform;
     transform: translate3d(0, 0, 0);
@@ -527,15 +524,10 @@ body {
     border: 1px solid transparent;
     border-left: 1px solid rgba(0, 199, 190, 0.48);
     border-right: 1px solid rgba(100, 210, 255, 0.48);
-    animation: spin-eye 12s steps(144) infinite reverse;
+    /* Turned by radar.js on the shared 12 Hz clock (144 steps per 12 s, reversed). */
     pointer-events: none;
     will-change: transform;
     transform: translate3d(0, 0, 0);
-}
-
-@keyframes spin-eye {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
 }
 
 /* --- COLUMN CENTER: SOTA Physics Engine + Power Controller --- */
@@ -970,4 +962,10 @@ body {
 
 @media (max-height: 900px) and (max-aspect-ratio: 6/5) {
     .gauge-card { padding: 4px 6px; gap: 2px; }
+}
+
+/* Windows "Animation effects" off: bars take their new size at once. The spinners and
+   the gauge rings are held or snapped by script (see decorativeMotionHeld). */
+@media (prefers-reduced-motion: reduce) {
+    .sub-progress-fill { transition: none; }
 }

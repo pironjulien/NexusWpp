@@ -26,6 +26,7 @@ const gpuCard = document.getElementById("gpu-card");
 const npuCard = document.getElementById("npu-card");
 const acceleratorRow = document.querySelector(".accelerator-row");
 const ramCard = document.getElementById("ram-card");
+const ssdCard = document.getElementById("ssd-card");
 const vramCard = document.getElementById("vram-card");
 const vramTotalSub = document.getElementById("vram-total-sub");
 const igpuDecodeSub = document.getElementById("igpu-decode-sub");
@@ -91,6 +92,7 @@ const powerPlansContainer = document.getElementById("power-plans-container");
 // Local state
 let currentPowerPlan = "";
 const loadAlerts = new Map();
+let heldReadingCards = new Set(); // cards currently showing a held (stale) reading
 let lastTelemetry = null;
 let lastTelemetryReceived = 0;
 let telemetryExpired = false;
@@ -109,7 +111,12 @@ const MAX_DATA_PACKETS = 72;
 
 // --- 🕰️ CYBER-CLOCK WIDGET ENGINE ---
 const t = NexusI18n.t;
+const num = NexusI18n.num;
 const GB = NexusI18n.unit("GB"), MB = NexusI18n.unit("MB"), KB = NexusI18n.unit("KB");
+// Last valid value of every displayed reading (see NexusTelemetry.LastValues).
+const lastValues = new NexusTelemetry.LastValues();
+// Windows "Animation effects" off: hold decorative motion still, like energy saver.
+const reducedMotionQuery = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : { matches: false };
 NexusI18n.applyStatic();
 
 function updateClock() {
