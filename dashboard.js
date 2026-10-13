@@ -42,6 +42,40 @@ function setGauge(key, ring, valueElement, container, value) {
 
 // Sub-metric text: `text` is null when the sample is missing. The last text then
 // stays, greyed as stale; a reading never seen shows the placeholder.
+function shortProcessName(name, max) {
+    return name.length > max ? name.slice(0, max - 1) + "…" : name;
+}
+
+// Longest form of a process name that fits on one line of its slot (narrow cards on small screens),
+// measured on the element itself (the slot does not wrap, see .fit-one-line).
+function fitProcessName(element, name) {
+    const width = element.parentElement ? element.parentElement.clientWidth : 0;
+    let candidate = shortProcessName(name, 16);
+    if (!width) return candidate;
+    const previous = element.textContent;
+    for (let max = candidate.length; max >= 4; max--) {
+        candidate = shortProcessName(name, max);
+        element.textContent = candidate;
+        if (element.scrollWidth <= width) break;
+    }
+    element.textContent = previous;
+    return candidate;
+}
+
+// "BATTERIE 73 % · SUR BATTERIE · 12,4 W · 2 H 15 RESTANTES", "BATTERIE 82 % · EN CHARGE · 25,3 W".
+function formatBattery(battery) {
+    const rate = Number(battery.rateW);
+    const charging = battery.ac && rate > 0;
+    let text = t("battery.status", { pct: battery.percent, source: t(charging ? "battery.charging" : battery.ac ? "battery.ac" : "battery.dc") });
+    if (battery.rateW !== null && battery.rateW !== undefined && rate !== 0 && (charging || !battery.ac)) text += ` · ${num(Math.abs(rate), 1)} W`;
+    const minutes = Number(battery.minutesLeft);
+    if (!battery.ac && minutes > 0) {
+        const time = minutes >= 60 ? `${Math.floor(minutes / 60)} H ${String(minutes % 60).padStart(2, "0")}` : `${minutes} MIN`;
+        text += ` · ${t("battery.left", { time })}`;
+    }
+    return text;
+}
+
 function setHeldText(element, text, placeholder = '—') {
     if (!element) return false;
     const held = text === null && element.dataset.seen === '1';
@@ -377,7 +411,9 @@ function updateDOM(stats) {
     const npuTotalMb = Number(npuStats.totalMb) || 0;
     const npuTotalGb = npuTotalMb > 0 ? num(npuTotalMb / 1024, 0) : "0";
     setHeldText(npuUsedSub, npuUsedFresh ? `${npuUsedGb} ${GB}` : null);
-    setHeldText(npuSharedSub, npuUsedFresh ? `${npuUsedGb} ${GB}` : null);
+    // Which program uses the NPU right now (null: no reading, empty name: measured idle).
+    const npuTop = npuStats.topProcess;
+    setHeldText(npuTopProcSub, npuTop ? (npuTop.name ? fitProcessName(npuTopProcSub, npuTop.name) : t("npu.idle")) : null);
     setHeldText(npuFreeSub, npuUsedFresh && npuTotalMb > 0 ? `${num(Math.max(0, npuTotalMb - npuStats.usedMb) / 1024, 1)} ${GB}` : null);
     if (npuTotalSub) {
         npuTotalSub.textContent = `${npuTotalGb} ${GB}`;
@@ -421,7 +457,7 @@ function updateDOM(stats) {
     if (clockBattery) {
         const battery = stats.battery;
         if (battery && battery.present && battery.percent >= 0) {
-            const batteryText = t("battery.status", { pct: battery.percent, source: t(battery.ac ? "battery.ac" : "battery.dc") });
+            const batteryText = formatBattery(battery);
             if (clockBattery.textContent !== batteryText) {
                 clockBattery.textContent = batteryText;
             }
