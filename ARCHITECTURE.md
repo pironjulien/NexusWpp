@@ -59,7 +59,9 @@ The injected WebView2 window lives below desktop icons, so normal mouse delivery
 ## Performance Choices
 
 - WebView2 is warmed before `WorkerW` is found.
-- The Canvas loop sleeps when particles/interactions stop. The two logo spin rings use `steps()` at 12 frames/s instead of a 60 frames/s compositor animation. When Windows energy saver is on (`SystemStatusFlag`), the rings hold still; values, clock and data packets keep updating.
+- One 12 Hz clock drives all continuous motion: the canvas loop, the two logo spin rings (same 180 / 144 steps as the former CSS `steps()` animation) and the 0.18 s ease of the gauge rings share the canvas tick, so no CSS animation or transition runs at the display refresh rate. The canvas skips drawing when particles/interactions stop and the clock sleeps when nothing moves. When Windows energy saver is on (`SystemStatusFlag`) or Windows "Animation effects" is off (`prefers-reduced-motion`), the logo rings hold still; values, clock and data packets keep updating, and with reduced motion gauges and bars take new values at once.
+- The radar canvas backing store follows `devicePixelRatio` (capped at 2), so it stays sharp at 125-200 % display scaling; at 100 % it is unchanged.
+- A missing or stale reading keeps its last valid value on screen (no jump to a dash) with the existing stale cues: card badge, greyed sub-metric or radar value, and an accessible value marked stale. Only a reading never received shows "—". The 60 s history leaves a gap for the missing sample.
 - Top-process ranking uses its own PDH query sampled every 4 s (CPU averaged over that window) and is protected against overlapping calls.
 - A discarded warm-up collection at startup makes the first visible frame show fresh values even after a covered start.
 - GPU routing is left to Windows; NexusWpp does not write DirectX GPU preferences.
