@@ -43,7 +43,6 @@ const NexusI18n = (() => {
             "node.networkActivity": "ACTIVITÉ RÉSEAU",
             "node.processes": "{n} PROCESSUS",
             "node.diskFree": "{gb} libre",
-            "node.dataExpired": "DONNÉE PÉRIMÉE",
             "ram.modules": "{n} barrettes",
             "battery.status": "BATTERIE {pct} % · {source}",
             "battery.ac": "SECTEUR",
@@ -54,6 +53,7 @@ const NexusI18n = (() => {
             "sensor.boardPower": "Puissance de la carte entière, pas celle de NexusWpp.",
             "sensor.stale": "Dernière lecture périmée : mesure ignorée.",
             "sensor.missing": "Ce capteur ne fournit pas de mesure.",
+            "sensor.held": "Dernière valeur connue : le capteur ne répond plus.",
             "alert.highLoad": "Charge élevée",
             "alert.memoryFull": "Mémoire très utilisée",
             "alert.highLoadTitle": "Au moins 90 % pendant 5 s. Retour à la normale sous 80 % pendant 5 s. Ce n’est pas un diagnostic de panne.",
@@ -61,6 +61,7 @@ const NexusI18n = (() => {
             "alert.sensorsStale": "Capteurs périmés",
             "aria.unavailable": "Mesure indisponible",
             "aria.waiting": "En attente d’une mesure",
+            "aria.stale": "{value}, dernière valeur connue (périmée)",
             "aria.map": "Carte interactive de télémétrie matérielle affichant les liens et les flux de données entre composants sous forme de particules animées.",
             "unit.GB": "Go", "unit.MB": "Mo", "unit.KB": "Ko"
         },
@@ -104,7 +105,6 @@ const NexusI18n = (() => {
             "node.networkActivity": "NETWORK ACTIVITY",
             "node.processes": "{n} PROCESSES",
             "node.diskFree": "{gb} free",
-            "node.dataExpired": "DATA EXPIRED",
             "ram.modules": "{n} modules",
             "battery.status": "BATTERY {pct} % · {source}",
             "battery.ac": "PLUGGED IN",
@@ -115,6 +115,7 @@ const NexusI18n = (() => {
             "sensor.boardPower": "Power of the whole card, not of NexusWpp.",
             "sensor.stale": "Last reading is stale: value ignored.",
             "sensor.missing": "This sensor provides no reading.",
+            "sensor.held": "Last known value: the sensor stopped responding.",
             "alert.highLoad": "High load",
             "alert.memoryFull": "Memory nearly full",
             "alert.highLoadTitle": "At least 90 % for 5 s. Back to normal below 80 % for 5 s. This is not a fault diagnosis.",
@@ -122,6 +123,7 @@ const NexusI18n = (() => {
             "alert.sensorsStale": "Sensors stale",
             "aria.unavailable": "Reading unavailable",
             "aria.waiting": "Waiting for a reading",
+            "aria.stale": "{value}, last known value (stale)",
             "aria.map": "Interactive hardware telemetry map showing links and data flows between components as animated particles.",
             "unit.GB": "GB", "unit.MB": "MB", "unit.KB": "KB"
         }
@@ -151,6 +153,31 @@ const NexusI18n = (() => {
         return t("unit." + name);
     }
 
+    // Displayed numbers: "35,8" in French, "35.8" in English, never grouped ("1234,5").
+    // Host strings ("35.80", or "24,0 Mo" from a culture-formatted value) are parsed
+    // and keep their own number of decimals unless `digits` is given.
+    const numberLocale = lang === "fr" ? "fr-FR" : "en-US";
+    const numberFormats = new Map();
+    function num(value, digits) {
+        let number = value;
+        if (typeof value === "string") {
+            const text = value.trim().replace(",", ".");
+            number = parseFloat(text);
+            if (digits === undefined) {
+                const decimals = /^[-+]?\d*\.(\d+)/.exec(text);
+                digits = decimals ? decimals[1].length : 0;
+            }
+        }
+        if (typeof number !== "number" || !Number.isFinite(number)) return "—";
+        const key = digits === undefined ? "auto" : digits;
+        if (!numberFormats.has(key)) {
+            numberFormats.set(key, new Intl.NumberFormat(numberLocale, digits === undefined
+                ? { useGrouping: false, maximumFractionDigits: 3 }
+                : { useGrouping: false, minimumFractionDigits: digits, maximumFractionDigits: digits }));
+        }
+        return numberFormats.get(key).format(number);
+    }
+
     // "MARDI 13 OCTOBRE 2026" / "TUESDAY, OCTOBER 13, 2026"
     const dateFormat = new Intl.DateTimeFormat(locale, { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
     function formatDate(date) {
@@ -167,7 +194,7 @@ const NexusI18n = (() => {
         }
     }
 
-    return { lang, t, unit, formatDate, applyStatic, STRINGS };
+    return { lang, t, unit, num, formatDate, applyStatic, STRINGS };
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = NexusI18n;

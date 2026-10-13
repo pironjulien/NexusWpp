@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('node:assert/strict');
-const { SustainedLoad, reading } = require('../../telemetry-state.js');
+const { SustainedLoad, reading, LastValues } = require('../../telemetry-state.js');
 const gate = new SustainedLoad();
 assert.equal(gate.update(96, 0), false);
 assert.equal(gate.update(96, 4999), false);
@@ -19,4 +19,11 @@ assert.equal(gate.update(-1, 34000), false);
 assert.equal(reading({gpu:{powerW:NaN}},'gpu','powerW'), null);
 assert.equal(reading({gpu:{powerW:4},sources:{nvidia:{status:'stale'}}},'gpu','powerW','nvidia'), null);
 assert.equal(reading({gpu:{powerW:0},sources:{nvidia:{status:'fresh'}}},'gpu','powerW','nvidia'), 0);
-console.log('PASS alert hysteresis and missing/stale readings');
+const last = new LastValues();
+assert.deepEqual(last.take('gpu.temp', -1), { value: null, stale: false }); // Never seen: nothing to show.
+assert.deepEqual(last.take('gpu.temp', 71), { value: 71, stale: false });
+assert.deepEqual(last.take('gpu.temp', -1), { value: 71, stale: true }); // Missing sample keeps the last value.
+assert.deepEqual(last.take('gpu.temp', null), { value: 71, stale: true });
+assert.deepEqual(last.take('gpu.temp', 74, false), { value: 71, stale: true }); // Stale source: last fresh value.
+assert.deepEqual(last.take('gpu.temp', 0), { value: 0, stale: false });
+console.log('PASS alert hysteresis, missing/stale readings and held last values');
