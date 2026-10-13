@@ -342,7 +342,7 @@ function updateDOM(stats) {
         if (stats.network.type === "Wi-Fi" && wifiSignal >= 0) {
             setSubMetric(netTypeSub, t("label.wifiSignal"), `${wifiSignal} %`);
         } else {
-            setSubMetric(netTypeSub, t("label.connectionType"), stats.network.type.toUpperCase());
+            setSubMetric(netTypeSub, t("label.connectionType"), stats.network.type === "none" ? t("network.offline") : stats.network.type.toUpperCase());
         }
     }
     if (netPingSub) {
