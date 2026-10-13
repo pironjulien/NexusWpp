@@ -11,16 +11,53 @@ function setHtmlIfChanged(element, value) {
 
 function setAttrIfChanged(element, name, value) {
     if (!element) return;
-    if (name === 'aria-valuenow' && !NexusTelemetry.valid(value)) {
-        element.removeAttribute(name);
-        element.setAttribute('aria-valuetext', t('aria.unavailable'));
-        return;
-    }
-    if (name === 'aria-valuenow') element.removeAttribute('aria-valuetext');
     const textValue = String(value);
     if (element.getAttribute(name) !== textValue) {
         element.setAttribute(name, textValue);
     }
+}
+
+// The accessible value follows the screen: a held value is announced as stale.
+function setGaugeAria(container, reading) {
+    if (!container) return;
+    if (reading.value === null) {
+        container.removeAttribute('aria-valuenow');
+        setAttrIfChanged(container, 'aria-valuetext', t('aria.unavailable'));
+        return;
+    }
+    setAttrIfChanged(container, 'aria-valuenow', reading.value);
+    if (reading.stale) setAttrIfChanged(container, 'aria-valuetext', t('aria.stale', { value: `${num(reading.value)} %` }));
+    else container.removeAttribute('aria-valuetext');
+}
+
+// Ring, value and accessible value of one gauge. A missing sample keeps the last
+// valid reading on screen (no jump to a dash); a reading never seen shows "—".
+function setGauge(key, ring, valueElement, container, value) {
+    const reading = lastValues.take(key, value);
+    if (reading.value !== null) setCircularProgress(ring, reading.value);
+    animateTextValue(valueElement, reading.value, "%");
+    setGaugeAria(container, reading);
+    return reading;
+}
+
+// Sub-metric text: `text` is null when the sample is missing. The last text then
+// stays, greyed as stale; a reading never seen shows the placeholder.
+function setHeldText(element, text, placeholder = '—') {
+    if (!element) return false;
+    const held = text === null && element.dataset.seen === '1';
+    if (text !== null) element.dataset.seen = '1';
+    const next = text !== null ? text : held ? element.textContent : placeholder;
+    if (element.textContent !== next) element.textContent = next;
+    element.classList.toggle('sensor-unavailable', held);
+    const title = held ? t('sensor.held') : '';
+    if (element.title !== title) element.title = title;
+    return held;
+}
+
+// Cache size sent by the host as text ("24.0 Mo", or "24,0 Mo" in some cultures).
+function formatCacheSize(text) {
+    const value = parseFloat(String(text || '').replace(',', '.'));
+    return Number.isFinite(value) ? `${num(value, 1)} ${MB}` : '—';
 }
 
 // Swaps a sub-metric slot (label + value) so a missing sensor can be replaced by another real metric.
@@ -43,19 +80,68 @@ function setWidthIfChanged(element, value) {
     }
 }
 
+// Ring motion keeps the former 0.18 s ease-out, but it is stepped by the shared 12 Hz
+// animation clock (radar.js) instead of a CSS transition repainted at the display rate.
+const RING_TWEEN_MS = 180;
+const ringTweens = new Map();
+
 function setCircularProgress(ring, value) {
+    if (!ring) return;
     const offset = RING_CIRCUMFERENCE - ((NexusTelemetry.valid(value) ? Math.min(100, value) : 0) / 100) * RING_CIRCUMFERENCE;
     const offsetValue = offset.toFixed(3);
-    if (ring && ring._nexusOffset !== offsetValue) {
-        ring._nexusOffset = offsetValue;
-        ring.style.strokeDashoffset = offsetValue;
+    if (ring._nexusOffset === offsetValue) return;
+    const animate = ring._nexusShown !== undefined && !runtimeSuspended && !reducedMotionQuery.matches
+        && !document.body.classList.contains("runtime-resuming");
+    ring._nexusOffset = offsetValue;
+    if (!animate) {
+        ringTweens.delete(ring);
+        writeRingOffset(ring, offset);
+        return;
     }
+    ringTweens.set(ring, { from: ring._nexusShown, to: offset, start: performance.now() });
+    startMotionClock();
+}
+
+function writeRingOffset(ring, offset) {
+    ring._nexusShown = offset;
+    ring.style.strokeDashoffset = offset.toFixed(3);
+}
+
+// cubic-bezier(0.22, 1, 0.36, 1): the timing function of the former CSS transition.
+function ringEase(x) {
+    const curve = (t, a, b) => 3 * a * t * (1 - t) * (1 - t) + 3 * b * t * t * (1 - t) + t * t * t;
+    let low = 0, high = 1, t = x;
+    for (let i = 0; i < 24; i++) {
+        t = (low + high) / 2;
+        if (curve(t, 0.22, 0.36) < x) low = t; else high = t;
+    }
+    return curve(t, 1, 1);
+}
+
+// Called on each 12 Hz tick; returns true while a ring is still easing.
+function stepRingTweens(now) {
+    ringTweens.forEach((tween, ring) => {
+        const progress = (now - tween.start) / RING_TWEEN_MS;
+        if (progress >= 1) {
+            ringTweens.delete(ring);
+            writeRingOffset(ring, tween.to);
+        } else if (progress > 0) {
+            writeRingOffset(ring, tween.from + (tween.to - tween.from) * ringEase(progress));
+        }
+    });
+    return ringTweens.size > 0;
+}
+
+// Shows the target values at once (resume snap, static test snapshots).
+function finishRingTweens() {
+    ringTweens.forEach((tween, ring) => writeRingOffset(ring, tween.to));
+    ringTweens.clear();
 }
 
 function formatNetSpeed(kbVal) {
-    if (kbVal === 0) return `0.0 ${KB}/s`;
-    if (kbVal < 1024) return `${kbVal.toFixed(1)} ${KB}/s`;
-    return `${(kbVal / 1024).toFixed(1)} ${MB}/s`;
+    if (kbVal === 0) return `${num(0, 1)} ${KB}/s`;
+    if (kbVal < 1024) return `${num(kbVal, 1)} ${KB}/s`;
+    return `${num(kbVal / 1024, 1)} ${MB}/s`;
 }
 
 function getNetworkLinkSpeedKb(stats) {
@@ -133,33 +219,26 @@ function updateDOM(stats) {
     // Older payloads do not carry the detected flags: keep everything visible then.
     setGpuVisibility(stats.igpu.detected !== false, stats.gpu.detected !== false);
 
+    // Cards showing a held (stale) reading get the existing stale badge.
+    const held = new Set();
+    const track = (card, reading) => { if (reading.stale && card) held.add(card); return reading; };
+
     // 1. Update circular telemetry gauges (Left Column)
-    setCircularProgress(cpuRing, stats.cpu.utilization);
-    animateTextValue(cpuVal, stats.cpu.utilization, "%");
-    setAttrIfChanged(cpuGaugeContainer, "aria-valuenow", stats.cpu.utilization);
-
-    setCircularProgress(vramRing, stats.igpu.utilization);
-    animateTextValue(vramVal, stats.igpu.utilization, "%");
-    setAttrIfChanged(vramGaugeContainer, "aria-valuenow", stats.igpu.utilization);
-
-    setCircularProgress(npuRing, npuStats.utilization);
-    animateTextValue(npuVal, npuStats.utilization, "%");
-    setAttrIfChanged(npuGaugeContainer, "aria-valuenow", npuStats.utilization);
-
-    setCircularProgress(gpuRing, stats.gpu.utilization);
-    animateTextValue(gpuVal, stats.gpu.utilization, "%");
-    setAttrIfChanged(gpuGaugeContainer, "aria-valuenow", stats.gpu.utilization);
+    const cpuLoad = track(cpuCard, setGauge("cpu.util", cpuRing, cpuVal, cpuGaugeContainer, stats.cpu.utilization));
+    const igpuLoad = track(vramCard, setGauge("igpu.util", vramRing, vramVal, vramGaugeContainer, stats.igpu.utilization));
+    const npuLoad = track(npuCard, setGauge("npu.util", npuRing, npuVal, npuGaugeContainer, npuStats.utilization));
+    const gpuLoad = track(gpuCard, setGauge("gpu.util", gpuRing, gpuVal, gpuGaugeContainer, stats.gpu.utilization));
 
     // 2. CPU Sub-metrics (real sensor when present, otherwise another real metric fills the slot)
-    if (NexusTelemetry.sensorState(stats, 'cpuTemperature') === 'stale' || stats.cpu.temp >= 0) {
-        setSensorMetric(cpuTempSub, t('label.thermalZone'), stats.cpu.temp, '°C', stats, 'cpuTemperature');
+    if (NexusTelemetry.sensorState(stats, 'cpuTemperature') === 'stale' || NexusTelemetry.valid(stats.cpu.temp) || lastValues.has('cpu.temp')) {
+        track(cpuCard, setSensorMetric(cpuTempSub, t('label.thermalZone'), stats.cpu.temp, '°C', stats, 'cpuTemperature', 'cpu.temp'));
     } else {
-        setSubMetric(cpuTempSub, t("label.cacheL2L3"), `${stats.cpu.l2Cache} / ${stats.cpu.l3Cache}`);
+        setSubMetric(cpuTempSub, t("label.cacheL2L3"), `${formatCacheSize(stats.cpu.l2Cache)} / ${formatCacheSize(stats.cpu.l3Cache)}`);
         cpuTempSub.classList.remove('sensor-unavailable');
         cpuTempSub.title = '';
     }
     if (cpuFreqSub) {
-        cpuFreqSub.textContent = `${stats.cpu.freqGhz} GHz`;
+        cpuFreqSub.textContent = `${num(stats.cpu.freqGhz)} GHz`;
     }
     if (cpuProcThreadsSub) {
         cpuProcThreadsSub.textContent = `${stats.totalProcesses} / ${stats.cpu.threads}`;
@@ -177,80 +256,82 @@ function updateDOM(stats) {
     }
 
     // 3. GPU Sub-metrics (NVML when available, otherwise real Windows counters fill the slots)
-    const dgpuVramUsedGb = NexusTelemetry.valid(stats.vram.usedMb) ? (stats.vram.usedMb / 1024).toFixed(1) : '—';
-    const dgpuVramTotalGb = stats.vram.totalMb > 0 ? (stats.vram.totalMb / 1024).toFixed(0) : "";
-    setSensorMetric(gpuTempSub, t("label.temperature"), stats.gpu.temp, "°C", stats, "nvidia");
-    setSubMetric(gpuVramSub, "VRAM", dgpuVramTotalGb ? `${dgpuVramUsedGb} / ${dgpuVramTotalGb} ${GB}` : `${dgpuVramUsedGb} ${GB}`);
-    setSensorMetric(gpuCoreSub, t("label.gpuPower"), stats.gpu.powerW, "W", stats, "nvidia");
-    setSensorMetric(gpuMemClockSub, t("label.memoryClock"), stats.gpu.memoryClock, "MHz", stats, "nvidia");
-    if (gpuVramBar) {
-        const gpuVramPct = stats.vram.totalMb > 0 ? Math.round((stats.vram.usedMb / stats.vram.totalMb) * 100) : 0;
+    const dgpuVramUsed = lastValues.take("vram.usedMb", stats.vram.usedMb);
+    const dgpuVramTotalGb = stats.vram.totalMb > 0 ? num(stats.vram.totalMb / 1024, 0) : "";
+    const dgpuVramUsedGb = dgpuVramUsed.value !== null ? num(dgpuVramUsed.value / 1024, 1) : '—';
+    track(gpuCard, setSensorMetric(gpuTempSub, t("label.temperature"), stats.gpu.temp, "°C", stats, "nvidia", "gpu.temp"));
+    if (gpuVramSub) {
+        const usedOrNull = NexusTelemetry.valid(stats.vram.usedMb) ? dgpuVramUsedGb : null;
+        setHeldText(gpuVramSub, usedOrNull === null ? null
+            : dgpuVramTotalGb ? `${usedOrNull} / ${dgpuVramTotalGb} ${GB}` : `${usedOrNull} ${GB}`);
+        track(gpuCard, dgpuVramUsed);
+    }
+    track(gpuCard, setSensorMetric(gpuCoreSub, t("label.gpuPower"), stats.gpu.powerW, "W", stats, "nvidia", "gpu.powerW"));
+    track(gpuCard, setSensorMetric(gpuMemClockSub, t("label.memoryClock"), stats.gpu.memoryClock, "MHz", stats, "nvidia", "gpu.memoryClock"));
+    if (gpuVramBar && dgpuVramUsed.value !== null) {
+        const gpuVramPct = stats.vram.totalMb > 0 ? Math.round((dgpuVramUsed.value / stats.vram.totalMb) * 100) : 0;
         setWidthIfChanged(gpuVramBar, gpuVramPct);
     }
 
     // 4. Circular telemetry gauges (Right Column - RAM, SSD, Network)
     // RAM circular gauge
-    setCircularProgress(ramRing, stats.ram.utilization);
-    animateTextValue(ramVal, stats.ram.utilization, "%");
-    setAttrIfChanged(ramGaugeContainer, "aria-valuenow", stats.ram.utilization);
-    
+    const ramLoad = track(ramCard, setGauge("ram.util", ramRing, ramVal, ramGaugeContainer, stats.ram.utilization));
+
     const totalRamGb = stats.ram.totalGb || 0;
-    const freeRamGb = ((1 - stats.ram.utilization / 100) * totalRamGb).toFixed(1);
-    const usedRamGb = ((stats.ram.utilization / 100) * totalRamGb).toFixed(1);
-    ramFreeSub.textContent = `${freeRamGb} ${GB}`;
+    const usedRamGb = ramLoad.value !== null ? num((ramLoad.value / 100) * totalRamGb, 1) : '—';
+    setHeldText(ramFreeSub, NexusTelemetry.valid(stats.ram.utilization)
+        ? `${num((1 - stats.ram.utilization / 100) * totalRamGb, 1)} ${GB}` : null);
     if (ramCachedSub) {
-        ramCachedSub.textContent = `${stats.ram.cachedGb} ${GB}`;
+        ramCachedSub.textContent = `${num(stats.ram.cachedGb)} ${GB}`;
     }
     if (ramTopProcSub) {
         const topRam = stats.topRamProcess;
         if (topRam && topRam.name) {
             const ramMb = Number(topRam.ramMb) || 0;
-            const ramText = ramMb >= 1024 ? `${(ramMb / 1024).toFixed(1)} ${GB}` : `${ramMb} ${MB}`;
+            const ramText = ramMb >= 1024 ? `${num(ramMb / 1024, 1)} ${GB}` : `${ramMb} ${MB}`;
             const shortRamName = topRam.name.length > 12 ? topRam.name.slice(0, 11) + "…" : topRam.name;
             ramTopProcSub.textContent = `${shortRamName} ${ramText}`;
         } else {
             ramTopProcSub.textContent = "--";
         }
     }
-    ramStatusSub.textContent = `${stats.ram.commitUsedGb} ${GB} / ${stats.ram.commitLimitGb} ${GB}`;
+    ramStatusSub.textContent = `${num(stats.ram.commitUsedGb)} ${GB} / ${num(stats.ram.commitLimitGb)} ${GB}`;
     ramStatusSub.className = "val text-blue";
 
     // SSD card gauge: disk capacity occupation. The center map node shows live disk activity.
-    setCircularProgress(ssdRing, stats.disk.storagePercent);
-    animateTextValue(ssdVal, stats.disk.storagePercent, "%");
-    setAttrIfChanged(ssdGaugeContainer, "aria-valuenow", stats.disk.storagePercent);
-    ssdFreeSub.textContent = `${stats.disk.freeGb} ${GB} / ${stats.disk.totalGb} ${GB}`;
+    track(ssdCard, setGauge("disk.storage", ssdRing, ssdVal, ssdGaugeContainer, stats.disk.storagePercent));
+    ssdFreeSub.textContent = `${num(stats.disk.freeGb)} ${GB} / ${num(stats.disk.totalGb)} ${GB}`;
     if (ssdReadSub && ssdWriteSub) {
         // Formatter with dynamic unit support
         const formatSpeed = (mbStr) => {
             const val = parseFloat(mbStr);
-            if (val >= 1000) return `${(val / 1024).toFixed(1)} ${GB}/s`;
-            return `${val.toFixed(1)} ${MB}/s`;
+            if (val >= 1000) return `${num(val / 1024, 1)} ${GB}/s`;
+            return `${num(val, 1)} ${MB}/s`;
         };
         ssdReadSub.textContent = formatSpeed(stats.disk.readMb);
         ssdWriteSub.textContent = formatSpeed(stats.disk.writeMb);
     }
     if (ssdResponseSub) {
-        ssdResponseSub.textContent = `${stats.disk.responseTimeMs.toFixed(1)} ms`;
+        ssdResponseSub.textContent = `${num(stats.disk.responseTimeMs, 1)} ms`;
     }
 
     // Network circular gauge & absolute speed rendering
     const totalNetKb = stats.network.lan + stats.network.wifi;
-    
+
     // Dynamic value display
     if (totalNetKb === 0) {
         setHtmlIfChanged(netVal, `0<span>${KB}/s</span>`);
     } else if (totalNetKb < 1024) {
-        setHtmlIfChanged(netVal, `${totalNetKb}<span>${KB}/s</span>`);
+        setHtmlIfChanged(netVal, `${num(totalNetKb)}<span>${KB}/s</span>`);
     } else {
-        setHtmlIfChanged(netVal, `${(totalNetKb / 1024).toFixed(1)}<span>${MB}/s</span>`);
+        setHtmlIfChanged(netVal, `${num(totalNetKb / 1024, 1)}<span>${MB}/s</span>`);
     }
-    
+
     // Scale the card ring against the real link speed (2.5 Gb/s Ethernet is about 305000 KiB/s).
     const linkSpeedKb = getNetworkLinkSpeedKb(stats);
     const netPercent = totalNetKb > 0 ? Math.min(100, Math.max(1, Math.round((totalNetKb / linkSpeedKb) * 100))) : 0;
     setCircularProgress(netRing, netPercent);
-    setAttrIfChanged(netGaugeContainer, "aria-valuenow", netPercent);
+    setGaugeAria(netGaugeContainer, { value: netPercent, stale: false });
 
     // Dynamic formatting for Send / Receive speeds
 
@@ -265,47 +346,44 @@ function updateDOM(stats) {
         }
     }
     if (netPingSub) {
-        netPingSub.textContent = stats.ping >= 0
-            ? `${stats.ping} ms${stats.pingVia === "gateway" ? ` (${t("ping.router")})` : ""}` : "-- ms";
-        netPingSub.title = stats.pingVia === "gateway" && stats.ping >= 0
-            ? t("ping.routerTitle") : "";
+        const pingFresh = NexusTelemetry.valid(stats.ping);
+        if (!setHeldText(netPingSub, pingFresh
+            ? `${stats.ping} ms${stats.pingVia === "gateway" ? ` (${t("ping.router")})` : ""}` : null, "-- ms")) {
+            netPingSub.title = stats.pingVia === "gateway" && pingFresh ? t("ping.routerTitle") : "";
+        }
     }
 
     // 5. Update iGPU VRAM Sub-metrics
-    const usedVramGb = NexusTelemetry.valid(stats.igpu.usedMb) ? (stats.igpu.usedMb / 1024).toFixed(1) : '—';
-    const freeVramGb = NexusTelemetry.valid(stats.igpu.usedMb) ? (Math.max(0, stats.igpu.totalMb - stats.igpu.usedMb) / 1024).toFixed(1) : '—';
-    const totalVramGb = (stats.igpu.totalMb / 1024).toFixed(0);
-    vramUsedSub.textContent = `${usedVramGb} ${GB}`;
-    vramFreeSub.textContent = `${freeVramGb} ${GB}`;
+    const igpuUsed = track(vramCard, lastValues.take("igpu.usedMb", stats.igpu.usedMb));
+    const igpuUsedFresh = NexusTelemetry.valid(stats.igpu.usedMb);
+    const usedVramGb = igpuUsed.value !== null ? num(igpuUsed.value / 1024, 1) : '—';
+    const totalVramGb = num(stats.igpu.totalMb / 1024, 0);
+    setHeldText(vramUsedSub, igpuUsedFresh ? `${usedVramGb} ${GB}` : null);
+    setHeldText(vramFreeSub, igpuUsedFresh ? `${num(Math.max(0, stats.igpu.totalMb - stats.igpu.usedMb) / 1024, 1)} ${GB}` : null);
     if (vramTotalSub) {
         vramTotalSub.textContent = `${totalVramGb} ${GB}`;
     }
     if (igpuDecodeSub) {
-        const decodePct = NexusTelemetry.valid(stats.igpu.decodeUtil) ? Math.min(100, stats.igpu.decodeUtil) : '—';
-        igpuDecodeSub.textContent = `${decodePct} %`;
+        const decodeFresh = NexusTelemetry.valid(stats.igpu.decodeUtil);
+        if (setHeldText(igpuDecodeSub, decodeFresh ? `${Math.min(100, stats.igpu.decodeUtil)} %` : null)) held.add(vramCard);
     }
-    if (igpuVramBar) {
-        const igpuVramPct = Math.round((stats.igpu.usedMb / stats.igpu.totalMb) * 100) || 0;
+    if (igpuVramBar && igpuUsed.value !== null) {
+        const igpuVramPct = Math.round((igpuUsed.value / stats.igpu.totalMb) * 100) || 0;
         setWidthIfChanged(igpuVramBar, igpuVramPct);
     }
-    const npuUsedGb = NexusTelemetry.valid(npuStats.usedMb) ? (npuStats.usedMb / 1024).toFixed(1) : '—';
+    const npuUsed = track(npuCard, lastValues.take("npu.usedMb", npuStats.usedMb));
+    const npuUsedFresh = NexusTelemetry.valid(npuStats.usedMb);
+    const npuUsedGb = npuUsed.value !== null ? num(npuUsed.value / 1024, 1) : '—';
     const npuTotalMb = Number(npuStats.totalMb) || 0;
-    const npuTotalGb = npuTotalMb > 0 ? (npuTotalMb / 1024).toFixed(0) : "0";
-    const npuFreeGb = npuTotalMb > 0 && NexusTelemetry.valid(npuStats.usedMb) ? (Math.max(0, npuTotalMb - npuStats.usedMb) / 1024).toFixed(1) : '—';
-    if (npuUsedSub) {
-        npuUsedSub.textContent = `${npuUsedGb} ${GB}`;
-    }
-    if (npuSharedSub) {
-        npuSharedSub.textContent = `${npuUsedGb} ${GB}`;
-    }
-    if (npuFreeSub) {
-        npuFreeSub.textContent = `${npuFreeGb} ${GB}`;
-    }
+    const npuTotalGb = npuTotalMb > 0 ? num(npuTotalMb / 1024, 0) : "0";
+    setHeldText(npuUsedSub, npuUsedFresh ? `${npuUsedGb} ${GB}` : null);
+    setHeldText(npuSharedSub, npuUsedFresh ? `${npuUsedGb} ${GB}` : null);
+    setHeldText(npuFreeSub, npuUsedFresh && npuTotalMb > 0 ? `${num(Math.max(0, npuTotalMb - npuStats.usedMb) / 1024, 1)} ${GB}` : null);
     if (npuTotalSub) {
         npuTotalSub.textContent = `${npuTotalGb} ${GB}`;
     }
-    if (npuUtilBar) {
-        const npuMemPct = Math.round(((Number(npuStats.usedMb) || 0) / npuTotalMb) * 100) || 0;
+    if (npuUtilBar && npuUsed.value !== null) {
+        const npuMemPct = Math.round((npuUsed.value / npuTotalMb) * 100) || 0;
         setWidthIfChanged(npuUtilBar, npuMemPct);
     }
 
@@ -354,18 +432,25 @@ function updateDOM(stats) {
     }
     // Windows energy saver: hold decorative motion still; values keep updating.
     document.body.classList.toggle("energy-saver", stats.energySaver === true);
+    startMotionClock();
     // 7. Update Holographic Neural Telemetry Map live parameters
+    const diskActivity = lastValues.take("disk.util", stats.disk.utilization);
     if (telemetryNodes.npu) {
+        // Held readings stay on the map, drawn as stale; never-seen ones show "—".
+        for (const node of telemetryNodeList) node.stale = false;
         telemetryNodes.npu.value = stats.totalProcesses;
         telemetryNodes.npu.subLabel = stats.totalProcesses ? t("node.processes", { n: stats.totalProcesses }) : "CORE ACTIVE";
-        
-        telemetryNodes.cpu.value = stats.cpu.utilization;
-        telemetryNodes.cpu.subLabel = stats.cpu.temp >= 0 ? `${stats.cpu.temp} °C` : `${stats.cpu.freqGhz} GHz`;
-        
-        telemetryNodes.igpu.value = stats.igpu.utilization;
+
+        telemetryNodes.cpu.value = cpuLoad.value;
+        telemetryNodes.cpu.stale = cpuLoad.stale;
+        telemetryNodes.cpu.subLabel = stats.cpu.temp >= 0 ? `${num(stats.cpu.temp)} °C` : `${num(stats.cpu.freqGhz)} GHz`;
+
+        telemetryNodes.igpu.value = igpuLoad.value;
+        telemetryNodes.igpu.stale = igpuLoad.stale;
         telemetryNodes.igpu.subLabel = `${usedVramGb} ${GB}`;
 
-        telemetryNodes.npuAccel.value = npuStats.utilization;
+        telemetryNodes.npuAccel.value = npuLoad.value;
+        telemetryNodes.npuAccel.stale = npuLoad.stale;
         telemetryNodes.npuAccel.subLabel = `${npuUsedGb} ${GB}`;
         
         // Rolling minimum baseline for page faults/sec to filter idle background noise on any PC
@@ -386,8 +471,8 @@ function updateDOM(stats) {
         
         // Combine soft page faults rate, CPU load, and Disk activity for a hyper-realistic real-time memory bus activity
         const faultsFactor = Math.min(40, Math.sqrt(activeDelta) * 0.15);
-        const cpuFactor = stats.cpu.utilization * 0.45;
-        const diskFactor = stats.disk.utilization * 0.45;
+        const cpuFactor = (cpuLoad.value || 0) * 0.45;
+        const diskFactor = (diskActivity.value || 0) * 0.45;
         
         let ramActivityPct = Math.round(cpuFactor + diskFactor + faultsFactor);
         
@@ -398,14 +483,17 @@ function updateDOM(stats) {
         ramActivityPct = Math.min(100, ramActivityPct);
         
         telemetryNodes.ram.value = ramActivityPct;
-        telemetryNodes.ram.subLabel = `${usedRamGb} / ${totalRamGb} ${GB}`;
-        
-        telemetryNodes.gpu.value = stats.gpu.utilization;
-        telemetryNodes.gpu.subLabel = stats.gpu.temp >= 0 ? `${stats.gpu.temp} °C` : `${dgpuVramUsedGb} ${GB}`;
-        
+        telemetryNodes.ram.stale = cpuLoad.stale || diskActivity.stale;
+        telemetryNodes.ram.subLabel = `${usedRamGb} / ${num(totalRamGb)} ${GB}`;
+
+        telemetryNodes.gpu.value = gpuLoad.value;
+        telemetryNodes.gpu.stale = gpuLoad.stale;
+        telemetryNodes.gpu.subLabel = stats.gpu.temp >= 0 ? `${num(stats.gpu.temp)} °C` : `${dgpuVramUsedGb} ${GB}`;
+
         if (stats.disk.drive) telemetryNodes.ssd.label = `SSD ${stats.disk.drive}`;
-        telemetryNodes.ssd.value = stats.disk.utilization; // Dynamic active % inside the center node map!
-        telemetryNodes.ssd.subLabel = t("node.diskFree", { gb: `${stats.disk.freeGb} ${GB}` });
+        telemetryNodes.ssd.value = diskActivity.value; // Dynamic active % inside the center node map!
+        telemetryNodes.ssd.stale = diskActivity.stale;
+        telemetryNodes.ssd.subLabel = t("node.diskFree", { gb: `${num(stats.disk.freeGb)} ${GB}` });
         
         const maxSpeedKb = getNetworkLinkSpeedKb(stats);
         
@@ -434,6 +522,7 @@ function updateDOM(stats) {
     updatePowerPlanButtons(stats);
 
     updateLoadAlerts(stats, performance.now());
+    heldReadingCards = held;
     refreshTelemetryFreshness(true);
 
     // Spawn data packets per node so every active circle emits fairly.
@@ -444,7 +533,8 @@ function updateDOM(stats) {
         if (key === "npu") return;
         const node = telemetryNodes[key];
         if (node.visible === false) return;
-        const pct = node.value || 0;
+        // A held (stale) reading is not live activity: no data packets for it.
+        const pct = node.stale ? 0 : node.value || 0;
         const previous = lastTelemetryNodeValues[key];
         lastTelemetryNodeValues[key] = pct;
         if (previous === undefined || Math.abs(pct - previous) >= 1) {
@@ -606,13 +696,17 @@ function clearPowerPlanPending() {
     }
 }
 
-function setSensorMetric(element, label, value, unit, stats, source) {
+// Sensor sub-metric: a missing or stale sample keeps the last fresh value, greyed;
+// a sensor that never produced a value shows "—".
+function setSensorMetric(element, label, value, unit, stats, source, key) {
     const state = NexusTelemetry.sensorState(stats, source);
-    const usable = state === 'fresh' && NexusTelemetry.valid(value);
-    setSubMetric(element, label, usable ? `${value} ${unit}` : '—');
+    const reading = lastValues.take(key, value, state === 'fresh');
+    const usable = reading.value !== null && !reading.stale;
+    setSubMetric(element, label, reading.value !== null ? `${num(reading.value)} ${unit}` : '—');
     element.classList.toggle('sensor-unavailable', !usable);
     element.title = usable ? (unit === 'W' ? t('sensor.boardPower') : '')
-        : state === 'stale' ? t('sensor.stale') : t('sensor.missing');
+        : reading.stale ? t('sensor.held') : state === 'stale' ? t('sensor.stale') : t('sensor.missing');
+    return reading;
 }
 
 function updateLoadAlerts(stats, now) {
@@ -643,7 +737,7 @@ function refreshTelemetryFreshness(force = false) {
         const status = isGpu ? NexusTelemetry.sensorState(lastTelemetry, 'nvidia')
             : card === vramCard || card === npuCard ? NexusTelemetry.sensorState(lastTelemetry, 'windowsGpu')
             : card === cpuCard ? NexusTelemetry.sensorState(lastTelemetry, 'cpuTemperature') : 'fresh';
-        const stale = expired || status === 'stale';
+        const stale = expired || status === 'stale' || heldReadingCards.has(card);
         card.classList.toggle('sensor-stale', stale);
         if (stale) {
             card.classList.remove('high-load');
@@ -657,11 +751,12 @@ function refreshTelemetryFreshness(force = false) {
     if (expired && !telemetryExpired) {
         telemetryExpired = true;
         loadAlerts.forEach(alert => alert.reset());
-        for (const value of document.querySelectorAll('.gauge-value, .sub-metric .val')) value.textContent = '—';
-        for (const ring of document.querySelectorAll('.ring-fill')) setCircularProgress(ring, 0);
-        for (const bar of [igpuVramBar, gpuVramBar, npuUtilBar]) if (bar) bar.style.width = "0%";
-        for (const gauge of document.querySelectorAll('[role="progressbar"]')) gauge.removeAttribute('aria-valuenow');
-        for (const node of telemetryNodeList) { node.value = null; node.subLabel = t('node.dataExpired'); }
+        // Keep the last readings on screen so the image does not jump; the "data expired"
+        // badge, the stale radar values and the accessible values say they are old.
+        for (const gauge of document.querySelectorAll('[role="progressbar"][aria-valuenow]')) {
+            gauge.setAttribute('aria-valuetext', t('aria.stale', { value: `${num(Number(gauge.getAttribute('aria-valuenow')))} %` }));
+        }
+        for (const node of telemetryNodeList) node.stale = true;
         redrawCanvas();
     }
 }

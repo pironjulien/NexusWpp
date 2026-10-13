@@ -18,6 +18,11 @@ const TELEMETRY_RADAR_RING_COUNT = 5;
 const TELEMETRY_ORBIT_ORDER = ["net", "ram", "ssd", "gpu", "igpu", "npuAccel", "cpu"];
 const TELEMETRY_ORBIT_START_ANGLE = -90;
 
+// Backing-store pixels per logical canvas pixel. 1 at 100 % display scaling (unchanged);
+// at 125-200 % the radar is drawn at the screen's density, capped to bound the cost.
+const CANVAS_MAX_DENSITY = 2;
+let canvasDensity = 1;
+
 function resizeCanvas() {
     const rect = canvas.parentElement.getBoundingClientRect();
     if (!rect.width || !rect.height) return false;
@@ -28,27 +33,37 @@ function resizeCanvas() {
     const scale = Math.min(1, rect.width / minimumSize, rect.height / minimumSize);
     const nextWidth = Math.round(rect.width / scale);
     const nextHeight = Math.round(rect.height / scale);
-    if (width === nextWidth && height === nextHeight) return false;
-    width = canvas.width = nextWidth;
-    height = canvas.height = nextHeight;
+    const nextDensity = Math.max(1, Math.min(CANVAS_MAX_DENSITY, window.devicePixelRatio || 1) * scale);
+    if (width === nextWidth && height === nextHeight && canvasDensity === nextDensity) return false;
+    width = nextWidth;
+    height = nextHeight;
+    canvas.width = Math.round(width * nextDensity);
+    canvas.height = Math.round(height * nextDensity);
+    ctx.setTransform(nextDensity, 0, 0, nextDensity, 0, 0);
+    if (canvasDensity !== nextDensity) {
+        canvasDensity = nextDensity;
+        telemetryNodeList.forEach(renderNodeOffscreen);
+    }
     bgCanvas = null; // force pre-rendered background to regenerate on next draw
     canvasHasRendered = false;
     return true;
 }
-window.addEventListener("resize", () => {
+function onCanvasMetricsChange() {
     if (!resizeCanvas()) return;
     syncTelemetryLayoutAfterResize(true);
     redrawCanvas();
-});
+}
+window.addEventListener("resize", onCanvasMetricsChange);
 
 // SOTA ResizeObserver to guarantee perfect circular aspect ratio under any layout dynamic shifts
 if (canvas.parentElement && typeof ResizeObserver !== 'undefined') {
-    const resizeObserver = new ResizeObserver(() => {
-        if (!resizeCanvas()) return;
-        syncTelemetryLayoutAfterResize(true);
-        redrawCanvas();
-    });
-    resizeObserver.observe(canvas.parentElement);
+    const resizeObserver = new ResizeObserver(onCanvasMetricsChange);
+    // Device pixels also change with the display scaling (another monitor) at the same CSS size.
+    try {
+        resizeObserver.observe(canvas.parentElement, { box: "device-pixel-content-box" });
+    } catch (e) {
+        resizeObserver.observe(canvas.parentElement);
+    }
 }
 
 // SOTA Visibility Change handler to completely sleep the CPU/iGPU when wallpaper hidden
@@ -206,9 +221,11 @@ function renderNodeOffscreen(node) {
     
     const size = (node.radius + 12) * 2;
     const offscreen = document.createElement("canvas");
-    offscreen.width = size;
-    offscreen.height = size;
+    offscreen.width = Math.ceil(size * canvasDensity);
+    offscreen.height = Math.ceil(size * canvasDensity);
+    offscreen.logicalSize = size;
     const oCtx = offscreen.getContext("2d");
+    oCtx.scale(offscreen.width / size, offscreen.height / size);
     const cx = size / 2;
     const cy = size / 2;
     
@@ -464,9 +481,10 @@ function renderStaticBackground() {
     if (!bgCanvas) {
         bgCanvas = document.createElement("canvas");
     }
-    bgCanvas.width = width;
-    bgCanvas.height = height;
+    bgCanvas.width = canvas.width;
+    bgCanvas.height = canvas.height;
     const bgCtx = bgCanvas.getContext("2d");
+    bgCtx.setTransform(canvasDensity, 0, 0, canvasDensity, 0, 0);
     
     bgCtx.strokeStyle = "rgba(255, 255, 255, 0.032)";
     bgCtx.lineWidth = 1;
@@ -495,6 +513,57 @@ function wakeCanvas() {
         isCanvasLoopRunning = true;
         scheduleCanvasFrame(0);
     }
+}
+
+// --- One 12 Hz clock for all continuous motion ---
+// The canvas, the two logo spinner rings and the gauge ring easing share the canvas
+// tick, so the page commits at most 12 animation frames per second instead of a
+// compositor animation and transitions running at the display refresh rate.
+// Spinner positions match the former CSS steps(): 180 steps per 15 s and 144 steps
+// per 12 s in reverse, i.e. one 2.5 or 2 degree step every 83 ms.
+const logoSpinners = [
+    { element: document.querySelector(".vram-scanner-eye"), node: "igpu", periodMs: 15000, steps: 180, reverse: false },
+    { element: document.querySelector(".npu-scanner-eye"), node: "npuAccel", periodMs: 12000, steps: 144, reverse: true }
+].filter(spinner => spinner.element);
+let decorativeMotionMs = 0;
+let lastDecorativeStamp = 0;
+let canvasIdle = false; // the canvas shows its final frame; ticks only move the spinners/rings
+
+// Windows energy saver and "Animation effects" off hold the spinners still.
+function decorativeMotionHeld() {
+    return document.body.classList.contains("energy-saver") || reducedMotionQuery.matches;
+}
+
+function startMotionClock() {
+    if (runtimeSuspended || isCanvasLoopRunning) return;
+    isCanvasLoopRunning = true;
+    scheduleCanvasFrame(0);
+}
+
+function applySpinner(spinner) {
+    const progress = (decorativeMotionMs % spinner.periodMs) / spinner.periodMs;
+    const step = Math.floor((spinner.reverse ? 1 - progress : progress) * spinner.steps) % spinner.steps;
+    const angle = step * 360 / spinner.steps;
+    if (spinner.angle === angle) return;
+    spinner.angle = angle;
+    spinner.element.style.transform = `rotate(${angle}deg)`;
+}
+
+// Advances the spinners and ring easing; returns true while either still moves.
+function stepDecorativeMotion(timestamp) {
+    const easing = stepRingTweens(performance.now());
+    const spinning = !decorativeMotionHeld() && logoSpinners.some(spinner => telemetryNodes[spinner.node].visible !== false);
+    if (spinning && lastDecorativeStamp) decorativeMotionMs += Math.max(0, timestamp - lastDecorativeStamp);
+    lastDecorativeStamp = spinning ? timestamp : 0;
+    logoSpinners.forEach(applySpinner);
+    return easing || spinning;
+}
+logoSpinners.forEach(applySpinner);
+if (reducedMotionQuery.addEventListener) {
+    reducedMotionQuery.addEventListener("change", () => {
+        if (reducedMotionQuery.matches) finishRingTweens();
+        startMotionClock();
+    });
 }
 
 function redrawCanvas() {
@@ -527,6 +596,7 @@ function setRuntimeSuspended(suspended) {
         mouse.isDown = false;
         isCanvasLoopRunning = false;
         needsRender = false;
+        lastDecorativeStamp = 0; // spinners resume from where they stopped
         if (canvasFrameTimer) {
             clearTimeout(canvasFrameTimer);
             canvasFrameTimer = 0;
@@ -546,6 +616,7 @@ function setRuntimeSuspended(suspended) {
         // Snap gauges to fresh values instead of animating from stale ones.
         resumeGeneration++;
         document.body.classList.add("runtime-resuming");
+        finishRingTweens();
         clearTimeout(resumeSnapTimer);
         resumeSnapTimer = setTimeout(endResumeSnap, 3000);
         // The pause itself is not a telemetry outage: give the first fresh sample
@@ -597,7 +668,14 @@ function updatePhysics(timestamp, renderOnly = false) {
         return;
     }
     if (!renderOnly) lastPhysicsTime = timestamp - (elapsed % physicsFpsInterval);
-    
+
+    const decorativeMotion = !renderOnly && stepDecorativeMotion(timestamp);
+    if (!renderOnly && canvasIdle && !needsRender) {
+        // Nothing changed on the canvas: this tick only moved the spinners or rings.
+        if (decorativeMotion) scheduleCanvasFrame();
+        else isCanvasLoopRunning = false;
+        return;
+    }
 
     if (!telemetryNodesInitialized && width > 0) {
         initNodes();
@@ -606,10 +684,10 @@ function updatePhysics(timestamp, renderOnly = false) {
     ctx.clearRect(0, 0, width, height);
     
     // 1. Draw sci-fi background target radar/circles (Offscreen Pre-rendered!)
-    if (!bgCanvas || bgCanvas.width !== width || bgCanvas.height !== height) {
+    if (!bgCanvas || bgCanvas.width !== canvas.width || bgCanvas.height !== canvas.height) {
         renderStaticBackground();
     }
-    ctx.drawImage(bgCanvas, 0, 0);
+    ctx.drawImage(bgCanvas, 0, 0, width, height);
     
     // 2. Update node physics (elastic spring return back to target coordinates)
     for (let i = 0; i < telemetryNodeList.length; i++) {
@@ -702,7 +780,8 @@ function updatePhysics(timestamp, renderOnly = false) {
         
         if (node.offscreenCanvas) {
             // Draw SOTA Pre-rendered static body (Fast iGPU draw!)
-            ctx.drawImage(node.offscreenCanvas, -(node.radius + 12), -(node.radius + 12));
+            const bodySize = node.offscreenCanvas.logicalSize;
+            ctx.drawImage(node.offscreenCanvas, -(node.radius + 12), -(node.radius + 12), bodySize, bodySize);
         } else {
             // Fallback / Dynamic NPU rendering
             // Draw simulated glow using concentric transparent circles (highly optimized, 0% GPU load!)
@@ -785,7 +864,8 @@ function updatePhysics(timestamp, renderOnly = false) {
         // Draw Value text inside node
         if (node !== telemetryNodes.npu) {
             ctx.font = "bold 13px Bahnschrift, 'Segoe UI', sans-serif";
-            ctx.fillStyle = "#ffffff";
+            // A held reading keeps its value, in the stale grey of the cards.
+            ctx.fillStyle = node.stale ? "#afb7c7" : "#ffffff";
             ctx.fillText(NexusTelemetry.valid(node.value) ? `${node.value}${node.suffix}` : '—', node.x, node.y - 3);
             
             // Draw Label below node
@@ -854,7 +934,8 @@ function updatePhysics(timestamp, renderOnly = false) {
 
     const hasActivity = dataPackets.length > 0 || coreParticles.length > 0 || mouse.grabbedNode !== null || nodesAreMoving;
 
-    if (!hasActivity && !needsRender) {
+    canvasIdle = !hasActivity && !needsRender;
+    if (canvasIdle && !decorativeMotion) {
         isCanvasLoopRunning = false;
     } else {
         scheduleCanvasFrame();

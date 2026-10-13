@@ -39,6 +39,7 @@ window.layoutFixture = function (test) {
     }
     // Settle telemetry transitions in this static boundary-data snapshot.
     document.getAnimations().filter(animation => animation instanceof CSSTransition).forEach(animation => animation.finish());
+    if (typeof finishRingTweens === 'function') finishRingTweens();
     setRuntimeSuspended(true);
 };
 
