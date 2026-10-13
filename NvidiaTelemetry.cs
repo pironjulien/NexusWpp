@@ -35,18 +35,42 @@ namespace DesktopHtmlHost
     internal sealed class NvidiaTelemetry
     {
         internal const int IntervalMs = 5000;
+        internal const int BatteryIntervalMs = 15000;
+        internal const int MaxIntervalMs = 60000;
         readonly Stopwatch clock = Stopwatch.StartNew();
-        long lastAttempt = -IntervalMs, lastSuccess = -1;
+        long lastAttempt = long.MinValue / 2, lastSuccess = -1;
+        int failures, intervalMs = IntervalMs;
         NvidiaSample sample;
         string status;
-        internal string Status { get { return status == "fresh" && AgeMs > 2 * IntervalMs ? "stale" : status; } }
+        bool? available;
+        internal string Status { get { return status == "fresh" && AgeMs > 2 * intervalMs ? "stale" : status; } }
         internal long AgeMs { get { return lastSuccess < 0 ? -1 : Math.Max(0, clock.ElapsedMilliseconds - lastSuccess); } }
         internal NvidiaTelemetry() { status = "unavailable"; }
         internal NvidiaSample Current { get { return Status == "fresh" ? sample : null; } }
 
-        internal NvidiaSample Read(string adapterName)
+        // nvidia-smi is installed with the driver and the adapter is an NVIDIA one.
+        internal bool IsAvailable(string adapterName)
         {
-            if (clock.ElapsedMilliseconds - lastAttempt >= IntervalMs) {
+            if (string.IsNullOrEmpty(adapterName) || adapterName.IndexOf("NVIDIA", StringComparison.OrdinalIgnoreCase) < 0) return false;
+            if (!available.HasValue) available = File.Exists(Executable);
+            return available.Value;
+        }
+
+        // Every spawn costs about 50 ms of CPU and initialises NVML, which can wake a sleeping
+        // Optimus GPU: wait longer on battery and after failures, and never poll a suspended GPU
+        // (the last reading then turns stale, then unavailable; nothing is invented).
+        internal static int NextIntervalMs(int failures, bool onBattery)
+        {
+            int interval = onBattery ? BatteryIntervalMs : IntervalMs;
+            for (int i = 0; i < Math.Min(failures, 4); i++) interval *= 2;
+            return Math.Min(MaxIntervalMs, interval);
+        }
+
+        internal NvidiaSample Read(string adapterName, bool adapterSuspended, bool onBattery)
+        {
+            if (!IsAvailable(adapterName)) { if (lastSuccess < 0) status = "unavailable"; return Current; }
+            intervalMs = NextIntervalMs(0, onBattery);
+            if (!adapterSuspended && clock.ElapsedMilliseconds - lastAttempt >= NextIntervalMs(failures, onBattery)) {
                 lastAttempt = clock.ElapsedMilliseconds;
                 Accept(Query(adapterName), clock.ElapsedMilliseconds);
             }
@@ -56,13 +80,14 @@ namespace DesktopHtmlHost
         internal void Accept(NvidiaSample next, long now)
         {
             sample = next;
-            if (next != null) { lastSuccess = now; status = "fresh"; }
-            else status = lastSuccess < 0 ? "unavailable" : "stale";
+            if (next != null) { lastSuccess = now; status = "fresh"; failures = 0; }
+            else { status = lastSuccess < 0 ? "unavailable" : "stale"; failures++; }
         }
+        static string Executable { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "nvidia-smi.exe"); } }
         static NvidiaSample Query(string adapterName)
         {
             if (string.IsNullOrEmpty(adapterName) || adapterName.IndexOf("NVIDIA", StringComparison.OrdinalIgnoreCase) < 0) return null;
-            var executable = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "nvidia-smi.exe");
+            var executable = Executable;
             if (!File.Exists(executable)) return null;
             try {
                 using (var process = Process.Start(new ProcessStartInfo(executable,

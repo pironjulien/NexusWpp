@@ -503,12 +503,13 @@ function updatePowerPlanButtons(stats) {
             button.title = plan.name;
             button.setAttribute("aria-label", t("power.aria", { name: plan.name }));
 
-            // Determine icon based on name
+            // Icon from the kind resolved by the host (plan GUID, then Windows personality)
             let iconSvg = "";
-            const lowerName = plan.name.toLowerCase();
-            if (lowerName.includes("gamer") || lowerName.includes("extreme") || lowerName.includes("perform") || lowerName.includes("jeux")) {
+            const kind = powerPlanKind(plan);
+            button.dataset.kind = kind;
+            if (kind === "performance") {
                 iconSvg = `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 2L1 21h22L12 2zm0 4l7.5 13h-15L12 6zm-1 5h2v4h-2v-4zm0-3h2v2h-2V8z"/></svg>`;
-            } else if (lowerName.includes("veille") || lowerName.includes("eco") || lowerName.includes("silent") || lowerName.includes("silencieux") || lowerName.includes("econom") || lowerName.includes("saver")) {
+            } else if (kind === "eco") {
                 iconSvg = `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M9.5 2c-1.82 0-3.53.5-5 1.35 2.99 1.73 5 4.95 5 8.65s-2.01 6.92-5 8.65c1.47.85 3.18 1.35 5 1.35 5.52 0 10-4.48 10-10S15.02 2 9.5 2z"/></svg>`;
             } else {
                 iconSvg = `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>`;
@@ -534,20 +535,28 @@ function updatePowerPlanButtons(stats) {
             currentPowerPlan = guid;
             button.className = "remote-btn active";
             button.setAttribute("aria-pressed", "true");
-            const lowerName = plan.name.toLowerCase();
-            if (lowerName.includes("gamer") || lowerName.includes("extreme") || lowerName.includes("perform") || lowerName.includes("jeux")) {
-                button.id = "btn-extreme";
-            } else if (lowerName.includes("veille") || lowerName.includes("eco") || lowerName.includes("silent") || lowerName.includes("silencieux") || lowerName.includes("econom") || lowerName.includes("saver")) {
-                button.id = "btn-eco";
-            } else {
-                button.id = "btn-balanced";
-            }
+            button.id = powerPlanButtonId(powerPlanKind(plan));
         } else {
             button.className = "remote-btn";
             button.setAttribute("aria-pressed", "false");
             button.id = "";
         }
     });
+}
+
+// Kind sent by the host (plan GUID / Windows personality / power mode); the name is only a
+// fallback for payloads without it.
+function powerPlanKind(plan) {
+    if (plan && (plan.kind === "eco" || plan.kind === "balanced" || plan.kind === "performance")) return plan.kind;
+    const words = String(plan && plan.name || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().split(/[^a-z0-9]+/);
+    const has = list => list.some(word => words.includes(word));
+    if (has(["economie", "economies", "eco", "saver", "silent", "silencieux", "quiet", "veille", "efficiency", "efficacite"])) return "eco";
+    if (has(["performance", "performances", "extreme", "extremes", "gaming", "gamer", "jeu", "jeux", "turbo", "ultimate"])) return "performance";
+    return "balanced";
+}
+
+function powerPlanButtonId(kind) {
+    return kind === "performance" ? "btn-extreme" : kind === "eco" ? "btn-eco" : "btn-balanced";
 }
 
 function setPowerPlan(guid) {
@@ -571,14 +580,8 @@ function setPowerPlan(guid) {
             if (button.dataset.guid === guid) {
                 button.className = "remote-btn active";
                 button.setAttribute("aria-pressed", "true");
-                const lowerName = button.querySelector('.btn-lbl').textContent.toLowerCase();
-                if (lowerName.includes("gamer") || lowerName.includes("extreme") || lowerName.includes("perform") || lowerName.includes("jeux")) {
-                    button.id = "btn-extreme";
-                } else if (lowerName.includes("veille") || lowerName.includes("eco") || lowerName.includes("silent") || lowerName.includes("silencieux") || lowerName.includes("econom") || lowerName.includes("saver")) {
-                    button.id = "btn-eco";
-                } else {
-                    button.id = "btn-balanced";
-                }
+                button.id = powerPlanButtonId(button.dataset.kind
+                    || powerPlanKind({ name: button.querySelector('.btn-lbl').textContent }));
             } else {
                 button.className = "remote-btn";
                 button.setAttribute("aria-pressed", "false");
