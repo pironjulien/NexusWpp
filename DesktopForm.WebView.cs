@@ -38,7 +38,10 @@ namespace DesktopHtmlHost
                 if (webViewEnvironment == null)
                 {
                     var options = new CoreWebView2EnvironmentOptions();
-                    options.AdditionalBrowserArguments = "--disable-features=EdgeSidebar,EdgeTranslate";
+                    // CalculateNativeWinOcclusion: Chromium would otherwise mark the wallpaper hidden whenever windows
+                    // cover the whole desktop (two snapped halves) and drop its frame, flashing black when one closes.
+                    // NexusWpp pauses its own work for covered desktops; the composed scene must stay.
+                    options.AdditionalBrowserArguments = "--disable-features=EdgeSidebar,EdgeTranslate,CalculateNativeWinOcclusion";
                     webViewEnvironment = await CoreWebView2Environment.CreateAsync(null, userDataFolder, options);
                 }
 
