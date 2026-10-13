@@ -107,8 +107,9 @@ const lastTelemetryNodeValues = {};
 const MAX_DATA_PACKETS = 72;
 
 // --- 🕰️ CYBER-CLOCK WIDGET ENGINE ---
-const days = ["DIMANCHE", "LUNDI", "MARDI", "MERCREDI", "JEUDI", "VENDREDI", "SAMEDI"];
-const months = ["JANVIER", "FEVRIER", "MARS", "AVRIL", "MAI", "JUIN", "JUILLET", "AOUT", "SEPTEMBRE", "OCTOBRE", "NOVEMBRE", "DECEMBRE"];
+const t = NexusI18n.t;
+const GB = NexusI18n.unit("GB"), MB = NexusI18n.unit("MB"), KB = NexusI18n.unit("KB");
+NexusI18n.applyStatic();
 
 function updateClock() {
     if (lastTelemetry) refreshTelemetryFreshness();
@@ -121,12 +122,9 @@ function updateClock() {
     document.getElementById("clock-m").textContent = m;
     document.getElementById("clock-s").textContent = s;
     
-    const dayName = days[now.getDay()];
-    const day = String(now.getDate()).padStart(2, '0');
-    const month = months[now.getMonth()];
-    const year = now.getFullYear();
-    
-    document.getElementById("clock-date").textContent = `${dayName} ${day} ${month} ${year}`;
+    const dateText = NexusI18n.formatDate(now);
+    const dateElement = document.getElementById("clock-date");
+    if (dateElement.textContent !== dateText) dateElement.textContent = dateText;
 }
 updateClock();
 let clockTimer = setInterval(updateClock, 1000);
@@ -228,7 +226,7 @@ const telemetryNodes = {
         value: 0,
         suffix: "%",
         rotAngle: 0,
-        desc: "CHARGE CPU"
+        desc: t("node.cpuLoad")
     },
     igpu: {
         x: 0, y: 0,
@@ -238,11 +236,11 @@ const telemetryNodes = {
         colorEnd: "#1db954",
         glow: "#30d158",
         label: "iGPU",
-        subLabel: "-- Go",
+        subLabel: `-- ${GB}`,
         value: 0,
         suffix: "%",
         rotAngle: 0,
-        desc: "CHARGE iGPU"
+        desc: t("node.igpuLoad")
     },
     npuAccel: {
         x: 0, y: 0,
@@ -252,11 +250,11 @@ const telemetryNodes = {
         colorEnd: "#64d2ff",
         glow: "#00c7be",
         label: "NPU",
-        subLabel: "-- Go",
+        subLabel: `-- ${GB}`,
         value: 0,
         suffix: "%",
         rotAngle: 0,
-        desc: "CHARGE NPU",
+        desc: t("node.npuLoad"),
         visible: false
     },
     ram: {
@@ -267,11 +265,11 @@ const telemetryNodes = {
         colorEnd: "#00c7be",
         glow: "#0a84ff",
         label: "RAM",
-        subLabel: "-- Go",
+        subLabel: `-- ${GB}`,
         value: 0,
         suffix: "%",
         rotAngle: 0,
-        desc: "ACTIVITÉ RAM"
+        desc: t("node.ramActivity")
     },
     gpu: {
         x: 0, y: 0,
@@ -285,7 +283,7 @@ const telemetryNodes = {
         value: 0,
         suffix: "%",
         rotAngle: 0,
-        desc: "CHARGE GPU"
+        desc: t("node.gpuLoad")
     },
     ssd: {
         x: 0, y: 0,
@@ -295,11 +293,11 @@ const telemetryNodes = {
         colorEnd: "#64d2ff",
         glow: "#00c7be",
         label: "SSD C:",
-        subLabel: "-- Go",
+        subLabel: `-- ${GB}`,
         value: 0,
         suffix: "%",
         rotAngle: 0,
-        desc: "ACTIVITÉ DISQUE"
+        desc: t("node.diskActivity")
     },
     net: {
         x: 0, y: 0,
@@ -308,12 +306,12 @@ const telemetryNodes = {
         color: "#ff9f0a",
         colorEnd: "#ffd60a",
         glow: "#ff9f0a",
-        label: "RÉSEAU",
-        subLabel: "-- KB/s",
+        label: t("label.network"),
+        subLabel: `-- ${KB}/s`,
         value: 0,
         suffix: "",
         rotAngle: 0,
-        desc: "ACTIVITÉ RÉSEAU"
+        desc: t("node.networkActivity")
     }
 };
 
@@ -995,7 +993,7 @@ function setAttrIfChanged(element, name, value) {
     if (!element) return;
     if (name === 'aria-valuenow' && !NexusTelemetry.valid(value)) {
         element.removeAttribute(name);
-        element.setAttribute('aria-valuetext', 'Mesure indisponible');
+        element.setAttribute('aria-valuetext', t('aria.unavailable'));
         return;
     }
     if (name === 'aria-valuenow') element.removeAttribute('aria-valuetext');
@@ -1035,9 +1033,9 @@ function setCircularProgress(ring, value) {
 }
 
 function formatNetSpeed(kbVal) {
-    if (kbVal === 0) return "0.0 Ko/s";
-    if (kbVal < 1024) return `${kbVal.toFixed(1)} Ko/s`;
-    return `${(kbVal / 1024).toFixed(1)} Mo/s`;
+    if (kbVal === 0) return `0.0 ${KB}/s`;
+    if (kbVal < 1024) return `${kbVal.toFixed(1)} ${KB}/s`;
+    return `${(kbVal / 1024).toFixed(1)} ${MB}/s`;
 }
 
 function getNetworkLinkSpeedKb(stats) {
@@ -1134,9 +1132,9 @@ function updateDOM(stats) {
 
     // 2. CPU Sub-metrics (real sensor when present, otherwise another real metric fills the slot)
     if (NexusTelemetry.sensorState(stats, 'cpuTemperature') === 'stale' || stats.cpu.temp >= 0) {
-        setSensorMetric(cpuTempSub, 'ZONE THERMIQUE', stats.cpu.temp, '°C', stats, 'cpuTemperature');
+        setSensorMetric(cpuTempSub, t('label.thermalZone'), stats.cpu.temp, '°C', stats, 'cpuTemperature');
     } else {
-        setSubMetric(cpuTempSub, "CACHE L2 / L3", `${stats.cpu.l2Cache} / ${stats.cpu.l3Cache}`);
+        setSubMetric(cpuTempSub, t("label.cacheL2L3"), `${stats.cpu.l2Cache} / ${stats.cpu.l3Cache}`);
         cpuTempSub.classList.remove('sensor-unavailable');
         cpuTempSub.title = '';
     }
@@ -1161,10 +1159,10 @@ function updateDOM(stats) {
     // 3. GPU Sub-metrics (NVML when available, otherwise real Windows counters fill the slots)
     const dgpuVramUsedGb = NexusTelemetry.valid(stats.vram.usedMb) ? (stats.vram.usedMb / 1024).toFixed(1) : '—';
     const dgpuVramTotalGb = stats.vram.totalMb > 0 ? (stats.vram.totalMb / 1024).toFixed(0) : "";
-    setSensorMetric(gpuTempSub, "TEMPÉRATURE", stats.gpu.temp, "°C", stats, "nvidia");
-    setSubMetric(gpuVramSub, "VRAM", dgpuVramTotalGb ? `${dgpuVramUsedGb} / ${dgpuVramTotalGb} Go` : `${dgpuVramUsedGb} Go`);
-    setSensorMetric(gpuCoreSub, "PUISSANCE GPU", stats.gpu.powerW, "W", stats, "nvidia");
-    setSensorMetric(gpuMemClockSub, "FRÉQ. MÉMOIRE", stats.gpu.memoryClock, "MHz", stats, "nvidia");
+    setSensorMetric(gpuTempSub, t("label.temperature"), stats.gpu.temp, "°C", stats, "nvidia");
+    setSubMetric(gpuVramSub, "VRAM", dgpuVramTotalGb ? `${dgpuVramUsedGb} / ${dgpuVramTotalGb} ${GB}` : `${dgpuVramUsedGb} ${GB}`);
+    setSensorMetric(gpuCoreSub, t("label.gpuPower"), stats.gpu.powerW, "W", stats, "nvidia");
+    setSensorMetric(gpuMemClockSub, t("label.memoryClock"), stats.gpu.memoryClock, "MHz", stats, "nvidia");
     if (gpuVramBar) {
         const gpuVramPct = stats.vram.totalMb > 0 ? Math.round((stats.vram.usedMb / stats.vram.totalMb) * 100) : 0;
         setWidthIfChanged(gpuVramBar, gpuVramPct);
@@ -1179,35 +1177,35 @@ function updateDOM(stats) {
     const totalRamGb = stats.ram.totalGb || 0;
     const freeRamGb = ((1 - stats.ram.utilization / 100) * totalRamGb).toFixed(1);
     const usedRamGb = ((stats.ram.utilization / 100) * totalRamGb).toFixed(1);
-    ramFreeSub.textContent = `${freeRamGb} Go`;
+    ramFreeSub.textContent = `${freeRamGb} ${GB}`;
     if (ramCachedSub) {
-        ramCachedSub.textContent = `${stats.ram.cachedGb} Go`;
+        ramCachedSub.textContent = `${stats.ram.cachedGb} ${GB}`;
     }
     if (ramTopProcSub) {
         const topRam = stats.topRamProcess;
         if (topRam && topRam.name) {
             const ramMb = Number(topRam.ramMb) || 0;
-            const ramText = ramMb >= 1024 ? `${(ramMb / 1024).toFixed(1)} Go` : `${ramMb} Mo`;
+            const ramText = ramMb >= 1024 ? `${(ramMb / 1024).toFixed(1)} ${GB}` : `${ramMb} ${MB}`;
             const shortRamName = topRam.name.length > 12 ? topRam.name.slice(0, 11) + "…" : topRam.name;
             ramTopProcSub.textContent = `${shortRamName} ${ramText}`;
         } else {
             ramTopProcSub.textContent = "--";
         }
     }
-    ramStatusSub.textContent = `${stats.ram.commitUsedGb} Go / ${stats.ram.commitLimitGb} Go`;
+    ramStatusSub.textContent = `${stats.ram.commitUsedGb} ${GB} / ${stats.ram.commitLimitGb} ${GB}`;
     ramStatusSub.className = "val text-blue";
 
     // SSD card gauge: disk capacity occupation. The center map node shows live disk activity.
     setCircularProgress(ssdRing, stats.disk.storagePercent);
     animateTextValue(ssdVal, stats.disk.storagePercent, "%");
     setAttrIfChanged(ssdGaugeContainer, "aria-valuenow", stats.disk.storagePercent);
-    ssdFreeSub.textContent = `${stats.disk.freeGb} Go / ${stats.disk.totalGb} Go`;
+    ssdFreeSub.textContent = `${stats.disk.freeGb} ${GB} / ${stats.disk.totalGb} ${GB}`;
     if (ssdReadSub && ssdWriteSub) {
         // Formatter with dynamic unit support
         const formatSpeed = (mbStr) => {
             const val = parseFloat(mbStr);
-            if (val >= 1000) return `${(val / 1024).toFixed(1)} Go/s`;
-            return `${val.toFixed(1)} Mo/s`;
+            if (val >= 1000) return `${(val / 1024).toFixed(1)} ${GB}/s`;
+            return `${val.toFixed(1)} ${MB}/s`;
         };
         ssdReadSub.textContent = formatSpeed(stats.disk.readMb);
         ssdWriteSub.textContent = formatSpeed(stats.disk.writeMb);
@@ -1221,11 +1219,11 @@ function updateDOM(stats) {
     
     // Dynamic value display
     if (totalNetKb === 0) {
-        setHtmlIfChanged(netVal, `0<span>Ko/s</span>`);
+        setHtmlIfChanged(netVal, `0<span>${KB}/s</span>`);
     } else if (totalNetKb < 1024) {
-        setHtmlIfChanged(netVal, `${totalNetKb}<span>Ko/s</span>`);
+        setHtmlIfChanged(netVal, `${totalNetKb}<span>${KB}/s</span>`);
     } else {
-        setHtmlIfChanged(netVal, `${(totalNetKb / 1024).toFixed(1)}<span>Mo/s</span>`);
+        setHtmlIfChanged(netVal, `${(totalNetKb / 1024).toFixed(1)}<span>${MB}/s</span>`);
     }
     
     // Scale the card ring against the real link speed (2.5 Gb/s Ethernet is about 305000 KiB/s).
@@ -1241,26 +1239,26 @@ function updateDOM(stats) {
     if (netTypeSub) {
         const wifiSignal = Number(stats.network.signal);
         if (stats.network.type === "Wi-Fi" && wifiSignal >= 0) {
-            setSubMetric(netTypeSub, "SIGNAL WI-FI", `${wifiSignal} %`);
+            setSubMetric(netTypeSub, t("label.wifiSignal"), `${wifiSignal} %`);
         } else {
-            setSubMetric(netTypeSub, "TYPE DE CONNEXION", stats.network.type.toUpperCase());
+            setSubMetric(netTypeSub, t("label.connectionType"), stats.network.type.toUpperCase());
         }
     }
     if (netPingSub) {
         netPingSub.textContent = stats.ping >= 0
-            ? `${stats.ping} ms${stats.pingVia === "gateway" ? " (routeur)" : ""}` : "-- ms";
+            ? `${stats.ping} ms${stats.pingVia === "gateway" ? ` (${t("ping.router")})` : ""}` : "-- ms";
         netPingSub.title = stats.pingVia === "gateway" && stats.ping >= 0
-            ? "Internet ne répond pas au ping : latence mesurée jusqu'au routeur local." : "";
+            ? t("ping.routerTitle") : "";
     }
 
     // 5. Update iGPU VRAM Sub-metrics
     const usedVramGb = NexusTelemetry.valid(stats.igpu.usedMb) ? (stats.igpu.usedMb / 1024).toFixed(1) : '—';
     const freeVramGb = NexusTelemetry.valid(stats.igpu.usedMb) ? (Math.max(0, stats.igpu.totalMb - stats.igpu.usedMb) / 1024).toFixed(1) : '—';
     const totalVramGb = (stats.igpu.totalMb / 1024).toFixed(0);
-    vramUsedSub.textContent = `${usedVramGb} Go`;
-    vramFreeSub.textContent = `${freeVramGb} Go`;
+    vramUsedSub.textContent = `${usedVramGb} ${GB}`;
+    vramFreeSub.textContent = `${freeVramGb} ${GB}`;
     if (vramTotalSub) {
-        vramTotalSub.textContent = `${totalVramGb} Go`;
+        vramTotalSub.textContent = `${totalVramGb} ${GB}`;
     }
     if (igpuDecodeSub) {
         const decodePct = NexusTelemetry.valid(stats.igpu.decodeUtil) ? Math.min(100, stats.igpu.decodeUtil) : '—';
@@ -1275,16 +1273,16 @@ function updateDOM(stats) {
     const npuTotalGb = npuTotalMb > 0 ? (npuTotalMb / 1024).toFixed(0) : "0";
     const npuFreeGb = npuTotalMb > 0 && NexusTelemetry.valid(npuStats.usedMb) ? (Math.max(0, npuTotalMb - npuStats.usedMb) / 1024).toFixed(1) : '—';
     if (npuUsedSub) {
-        npuUsedSub.textContent = `${npuUsedGb} Go`;
+        npuUsedSub.textContent = `${npuUsedGb} ${GB}`;
     }
     if (npuSharedSub) {
-        npuSharedSub.textContent = `${npuUsedGb} Go`;
+        npuSharedSub.textContent = `${npuUsedGb} ${GB}`;
     }
     if (npuFreeSub) {
-        npuFreeSub.textContent = `${npuFreeGb} Go`;
+        npuFreeSub.textContent = `${npuFreeGb} ${GB}`;
     }
     if (npuTotalSub) {
-        npuTotalSub.textContent = `${npuTotalGb} Go`;
+        npuTotalSub.textContent = `${npuTotalGb} ${GB}`;
     }
     if (npuUtilBar) {
         const npuMemPct = Math.round(((Number(npuStats.usedMb) || 0) / npuTotalMb) * 100) || 0;
@@ -1304,11 +1302,11 @@ function updateDOM(stats) {
     if (stats.ram.totalGb && specRamName) {
         const speed = stats.ram.speedMts ? ` @ ${stats.ram.speedMts} MT/s` : "";
         const ramType = stats.ram.type ? ` ${stats.ram.type}` : "";
-        const ramModules = stats.ram.modules > 1 ? ` (${stats.ram.modules} barrettes)` : "";
-        specRamName.textContent = `RAM ${stats.ram.totalGb} Go${ramType}${ramModules}${speed}`;
+        const ramModules = stats.ram.modules > 1 ? ` (${t("ram.modules", { n: stats.ram.modules })})` : "";
+        specRamName.textContent = `RAM ${stats.ram.totalGb} ${GB}${ramType}${ramModules}${speed}`;
     }
     if (stats.network.name && specNetMode) {
-        specNetMode.textContent = stats.network.name.startsWith("RÉSEAU") ? stats.network.name : "RÉSEAU " + stats.network.name;
+        specNetMode.textContent = `${t("label.network")} ${stats.network.name}`;
     }
     if (stats.igpu.name && specVramName) {
         specVramName.textContent = (stats.igpu.name.toLowerCase().startsWith("igpu") || stats.igpu.name.toLowerCase().startsWith("intel")) 
@@ -1320,12 +1318,12 @@ function updateDOM(stats) {
         specSsdName.textContent = stats.disk.name ? `SSD ${stats.disk.name}` : "SSD";
     }
     if (stats.motherboard && clockMb) {
-        clockMb.textContent = stats.motherboard.startsWith("CARTE MÈRE") ? stats.motherboard : "CARTE MÈRE " + stats.motherboard;
+        clockMb.textContent = `${t("label.motherboard")} ${stats.motherboard}`;
     }
     if (clockBattery) {
         const battery = stats.battery;
         if (battery && battery.present && battery.percent >= 0) {
-            const batteryText = `BATTERIE ${battery.percent} % · ${battery.ac ? "SECTEUR" : "SUR BATTERIE"}`;
+            const batteryText = t("battery.status", { pct: battery.percent, source: t(battery.ac ? "battery.ac" : "battery.dc") });
             if (clockBattery.textContent !== batteryText) {
                 clockBattery.textContent = batteryText;
             }
@@ -1339,16 +1337,16 @@ function updateDOM(stats) {
     // 7. Update Holographic Neural Telemetry Map live parameters
     if (telemetryNodes.npu) {
         telemetryNodes.npu.value = stats.totalProcesses;
-        telemetryNodes.npu.subLabel = stats.totalProcesses ? `${stats.totalProcesses} PROCESSUS` : "CORE ACTIVE";
+        telemetryNodes.npu.subLabel = stats.totalProcesses ? t("node.processes", { n: stats.totalProcesses }) : "CORE ACTIVE";
         
         telemetryNodes.cpu.value = stats.cpu.utilization;
         telemetryNodes.cpu.subLabel = stats.cpu.temp >= 0 ? `${stats.cpu.temp} °C` : `${stats.cpu.freqGhz} GHz`;
         
         telemetryNodes.igpu.value = stats.igpu.utilization;
-        telemetryNodes.igpu.subLabel = `${usedVramGb} Go`;
+        telemetryNodes.igpu.subLabel = `${usedVramGb} ${GB}`;
 
         telemetryNodes.npuAccel.value = npuStats.utilization;
-        telemetryNodes.npuAccel.subLabel = `${npuUsedGb} Go`;
+        telemetryNodes.npuAccel.subLabel = `${npuUsedGb} ${GB}`;
         
         // Rolling minimum baseline for page faults/sec to filter idle background noise on any PC
         if (!window.ramFaultsHistory) {
@@ -1380,14 +1378,14 @@ function updateDOM(stats) {
         ramActivityPct = Math.min(100, ramActivityPct);
         
         telemetryNodes.ram.value = ramActivityPct;
-        telemetryNodes.ram.subLabel = `${usedRamGb} / ${totalRamGb} Go`;
+        telemetryNodes.ram.subLabel = `${usedRamGb} / ${totalRamGb} ${GB}`;
         
         telemetryNodes.gpu.value = stats.gpu.utilization;
-        telemetryNodes.gpu.subLabel = stats.gpu.temp >= 0 ? `${stats.gpu.temp} °C` : `${dgpuVramUsedGb} Go`;
+        telemetryNodes.gpu.subLabel = stats.gpu.temp >= 0 ? `${stats.gpu.temp} °C` : `${dgpuVramUsedGb} ${GB}`;
         
         if (stats.disk.drive) telemetryNodes.ssd.label = `SSD ${stats.disk.drive}`;
         telemetryNodes.ssd.value = stats.disk.utilization; // Dynamic active % inside the center node map!
-        telemetryNodes.ssd.subLabel = `${stats.disk.freeGb} Go libre`;
+        telemetryNodes.ssd.subLabel = t("node.diskFree", { gb: `${stats.disk.freeGb} ${GB}` });
         
         const maxSpeedKb = getNetworkLinkSpeedKb(stats);
         
@@ -1475,14 +1473,14 @@ function updatePowerPlanButtons(stats) {
             button.className = "remote-btn";
             button.dataset.guid = plan.guid;
             button.title = plan.name;
-            button.setAttribute("aria-label", `Mode d'alimentation ${plan.name}`);
+            button.setAttribute("aria-label", t("power.aria", { name: plan.name }));
 
             // Determine icon based on name
             let iconSvg = "";
             const lowerName = plan.name.toLowerCase();
             if (lowerName.includes("gamer") || lowerName.includes("extreme") || lowerName.includes("perform") || lowerName.includes("jeux")) {
                 iconSvg = `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 2L1 21h22L12 2zm0 4l7.5 13h-15L12 6zm-1 5h2v4h-2v-4zm0-3h2v2h-2V8z"/></svg>`;
-            } else if (lowerName.includes("veille") || lowerName.includes("eco") || lowerName.includes("silent") || lowerName.includes("silencieux") || lowerName.includes("econom")) {
+            } else if (lowerName.includes("veille") || lowerName.includes("eco") || lowerName.includes("silent") || lowerName.includes("silencieux") || lowerName.includes("econom") || lowerName.includes("saver")) {
                 iconSvg = `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M9.5 2c-1.82 0-3.53.5-5 1.35 2.99 1.73 5 4.95 5 8.65s-2.01 6.92-5 8.65c1.47.85 3.18 1.35 5 1.35 5.52 0 10-4.48 10-10S15.02 2 9.5 2z"/></svg>`;
             } else {
                 iconSvg = `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>`;
@@ -1511,7 +1509,7 @@ function updatePowerPlanButtons(stats) {
             const lowerName = plan.name.toLowerCase();
             if (lowerName.includes("gamer") || lowerName.includes("extreme") || lowerName.includes("perform") || lowerName.includes("jeux")) {
                 button.id = "btn-extreme";
-            } else if (lowerName.includes("veille") || lowerName.includes("eco") || lowerName.includes("silent") || lowerName.includes("silencieux") || lowerName.includes("econom")) {
+            } else if (lowerName.includes("veille") || lowerName.includes("eco") || lowerName.includes("silent") || lowerName.includes("silencieux") || lowerName.includes("econom") || lowerName.includes("saver")) {
                 button.id = "btn-eco";
             } else {
                 button.id = "btn-balanced";
@@ -1548,7 +1546,7 @@ function setPowerPlan(guid) {
                 const lowerName = button.querySelector('.btn-lbl').textContent.toLowerCase();
                 if (lowerName.includes("gamer") || lowerName.includes("extreme") || lowerName.includes("perform") || lowerName.includes("jeux")) {
                     button.id = "btn-extreme";
-                } else if (lowerName.includes("veille") || lowerName.includes("eco") || lowerName.includes("silent") || lowerName.includes("silencieux") || lowerName.includes("econom")) {
+                } else if (lowerName.includes("veille") || lowerName.includes("eco") || lowerName.includes("silent") || lowerName.includes("silencieux") || lowerName.includes("econom") || lowerName.includes("saver")) {
                     button.id = "btn-eco";
                 } else {
                     button.id = "btn-balanced";
@@ -1582,8 +1580,8 @@ function setSensorMetric(element, label, value, unit, stats, source) {
     const usable = state === 'fresh' && NexusTelemetry.valid(value);
     setSubMetric(element, label, usable ? `${value} ${unit}` : '—');
     element.classList.toggle('sensor-unavailable', !usable);
-    element.title = usable ? (unit === 'W' ? 'Puissance de la carte entière, pas celle de NexusWpp.' : '')
-        : state === 'stale' ? 'Dernière lecture périmée : mesure ignorée.' : 'Ce capteur ne fournit pas de mesure.';
+    element.title = usable ? (unit === 'W' ? t('sensor.boardPower') : '')
+        : state === 'stale' ? t('sensor.stale') : t('sensor.missing');
 }
 
 function updateLoadAlerts(stats, now) {
@@ -1593,11 +1591,11 @@ function updateLoadAlerts(stats, now) {
         const metric = stats[section];
         const high = loadAlerts.get(section).update(metric && metric.detected !== false ? metric.utilization : null, now);
         card.classList.toggle('high-load', high);
-        card.dataset.alertText = high ? (section === 'ram' ? 'Mémoire très utilisée' : 'Charge élevée') : '';
+        card.dataset.alertText = high ? t(section === 'ram' ? 'alert.memoryFull' : 'alert.highLoad') : '';
     }
 }
 
-const HIGH_LOAD_TITLE = 'Au moins 90 % pendant 5 s. Retour à la normale sous 80 % pendant 5 s. Ce n’est pas un diagnostic de panne.';
+const HIGH_LOAD_TITLE = t('alert.highLoadTitle');
 // The badge is an aria-live region: rewriting identical text would be re-announced.
 function setBadge(card, text, title) {
     const badge = card.querySelector('.critical-alert');
@@ -1618,9 +1616,9 @@ function refreshTelemetryFreshness(force = false) {
         card.classList.toggle('sensor-stale', stale);
         if (stale) {
             card.classList.remove('high-load');
-            setBadge(card, expired ? 'Données périmées' : 'Capteurs périmés', '');
+            setBadge(card, t(expired ? 'alert.dataExpired' : 'alert.sensorsStale'), '');
         } else if (card.classList.contains('high-load')) {
-            setBadge(card, card.dataset.alertText || 'Charge élevée', HIGH_LOAD_TITLE);
+            setBadge(card, card.dataset.alertText || t('alert.highLoad'), HIGH_LOAD_TITLE);
         } else {
             setBadge(card, '', '');
         }
@@ -1632,7 +1630,7 @@ function refreshTelemetryFreshness(force = false) {
         for (const ring of document.querySelectorAll('.ring-fill')) setCircularProgress(ring, 0);
         for (const bar of [igpuVramBar, gpuVramBar, npuUtilBar]) if (bar) bar.style.width = "0%";
         for (const gauge of document.querySelectorAll('[role="progressbar"]')) gauge.removeAttribute('aria-valuenow');
-        for (const node of telemetryNodeList) { node.value = null; node.subLabel = 'DONNÉE PÉRIMÉE'; }
+        for (const node of telemetryNodeList) { node.value = null; node.subLabel = t('node.dataExpired'); }
         redrawCanvas();
     }
 }
@@ -1721,7 +1719,7 @@ function dimGauges() {
     gpuVal.innerHTML = `0<span>%</span>`;
     ramVal.innerHTML = `0<span>%</span>`;
     ssdVal.innerHTML = `0<span>%</span>`;
-    netVal.innerHTML = `0<span>Ko/s</span>`;
+    netVal.innerHTML = `0<span>${KB}/s</span>`;
     
 
     
@@ -1735,35 +1733,35 @@ function dimGauges() {
     if (gpuVramBar) gpuVramBar.style.width = "0%";
     
     gpuTempSub.textContent = `-- °C`;
-    if (gpuVramSub) gpuVramSub.textContent = `-- Go`;
+    if (gpuVramSub) gpuVramSub.textContent = `-- ${GB}`;
     gpuCoreSub.textContent = `-- MHz`;
     if (gpuMemClockSub) gpuMemClockSub.textContent = `-- MHz`;
 
-    vramUsedSub.textContent = `0.0 Go`;
-    vramFreeSub.textContent = `0.0 Go`;
-    if (vramTotalSub) vramTotalSub.textContent = `0 Go`;
+    vramUsedSub.textContent = `0.0 ${GB}`;
+    vramFreeSub.textContent = `0.0 ${GB}`;
+    if (vramTotalSub) vramTotalSub.textContent = `0 ${GB}`;
     if (igpuDecodeSub) igpuDecodeSub.textContent = `-- %`;
-    if (npuUsedSub) npuUsedSub.textContent = `0.0 Go`;
-    if (npuSharedSub) npuSharedSub.textContent = `0.0 Go`;
-    if (npuFreeSub) npuFreeSub.textContent = `0.0 Go`;
-    if (npuTotalSub) npuTotalSub.textContent = `0 Go`;
+    if (npuUsedSub) npuUsedSub.textContent = `0.0 ${GB}`;
+    if (npuSharedSub) npuSharedSub.textContent = `0.0 ${GB}`;
+    if (npuFreeSub) npuFreeSub.textContent = `0.0 ${GB}`;
+    if (npuTotalSub) npuTotalSub.textContent = `0 ${GB}`;
     if (npuUtilBar) npuUtilBar.style.width = "0%";
 
-    ramFreeSub.textContent = `0.0 Go`;
-    if (ramCachedSub) ramCachedSub.textContent = `0.0 Go`;
+    ramFreeSub.textContent = `0.0 ${GB}`;
+    if (ramCachedSub) ramCachedSub.textContent = `0.0 ${GB}`;
     if (ramTopProcSub) ramTopProcSub.textContent = `--`;
-    ramStatusSub.textContent = `0.0 Go / 0.0 Go`;
+    ramStatusSub.textContent = `0.0 ${GB} / 0.0 ${GB}`;
     ramStatusSub.className = "val";
     
-    ssdFreeSub.textContent = `0 Go`;
+    ssdFreeSub.textContent = `0 ${GB}`;
     if (ssdReadSub && ssdWriteSub) {
-        ssdReadSub.textContent = `0.0 Mo/s`;
-        ssdWriteSub.textContent = `0.0 Mo/s`;
+        ssdReadSub.textContent = `0.0 ${MB}/s`;
+        ssdWriteSub.textContent = `0.0 ${MB}/s`;
     }
     if (ssdResponseSub) ssdResponseSub.textContent = `0.0 ms`;
     
-    netWifiSub.textContent = `0.0 Ko/s`;
-    netLanSub.textContent = `0.0 Ko/s`;
+    netWifiSub.textContent = `0.0 ${KB}/s`;
+    netLanSub.textContent = `0.0 ${KB}/s`;
     if (netTypeSub) netTypeSub.textContent = `--`;
     if (netPingSub) netPingSub.textContent = `0 ms`;
     
@@ -1779,7 +1777,7 @@ function dimGauges() {
     for (const value of document.querySelectorAll('.gauge-value, .sub-metric .val')) value.textContent = '—';
     for (const gauge of document.querySelectorAll('[role="progressbar"]')) {
         gauge.removeAttribute('aria-valuenow');
-        gauge.setAttribute('aria-valuetext', 'En attente d’une mesure');
+        gauge.setAttribute('aria-valuetext', t('aria.waiting'));
     }
 
 

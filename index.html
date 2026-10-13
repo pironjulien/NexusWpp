@@ -44,19 +44,19 @@
                     <!-- Sub-metrics Grid for CPU -->
                     <div class="card-sub-metrics">
                         <div class="sub-metric">
-                            <span class="lbl">TEMPÉRATURE</span>
+                            <span class="lbl" data-i18n="label.temperature">TEMPÉRATURE</span>
                             <span class="val" id="cpu-temp-sub">-- °C</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl">TOP PROCESSUS</span>
+                            <span class="lbl" data-i18n="label.topProcess">TOP PROCESSUS</span>
                             <span class="val" id="cpu-top-proc-sub">--</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl">CADENCE</span>
+                            <span class="lbl" data-i18n="label.clockSpeed">CADENCE</span>
                             <span class="val text-purple" id="cpu-freq-sub">-- GHz</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl">PROC / THREADS</span>
+                            <span class="lbl" data-i18n="label.procThreads">PROC / THREADS</span>
                             <span class="val text-purple" id="cpu-proc-threads-sub">-- / --</span>
                         </div>
                     </div>
@@ -85,19 +85,19 @@
                         </div>
                         <div class="card-sub-metrics">
                             <div class="sub-metric">
-                                <span class="lbl">DÉCODAGE VIDÉO</span>
+                                <span class="lbl" data-i18n="label.videoDecode">DÉCODAGE VIDÉO</span>
                                 <span class="val highlight-green" id="igpu-decode-sub">-- %</span>
                             </div>
                             <div class="sub-metric">
-                                <span class="lbl">VRAM PARTAGÉE</span>
+                                <span class="lbl" data-i18n="label.sharedVram">VRAM PARTAGÉE</span>
                                 <span class="val highlight-green" id="vram-used-sub">-- Go</span>
                             </div>
                             <div class="sub-metric">
-                                <span class="lbl">VRAM LIBRE</span>
+                                <span class="lbl" data-i18n="label.freeVram">VRAM LIBRE</span>
                                 <span class="val highlight-green" id="vram-free-sub">-- Go</span>
                             </div>
                             <div class="sub-metric">
-                                <span class="lbl">VRAM TOTALE</span>
+                                <span class="lbl" data-i18n="label.totalVram">VRAM TOTALE</span>
                                 <span class="val highlight-green" id="vram-total-sub">-- Go</span>
                             </div>
                             <div class="sub-progress-container">
@@ -127,19 +127,19 @@
                         </div>
                         <div class="card-sub-metrics">
                             <div class="sub-metric">
-                                <span class="lbl">MÉMOIRE UTILISÉE</span>
+                                <span class="lbl" data-i18n="label.memoryUsed">MÉMOIRE UTILISÉE</span>
                                 <span class="val text-cyan" id="npu-used-sub">-- Go</span>
                             </div>
                             <div class="sub-metric">
-                                <span class="lbl">MÉMOIRE PARTAGÉE</span>
+                                <span class="lbl" data-i18n="label.sharedMemory">MÉMOIRE PARTAGÉE</span>
                                 <span class="val text-cyan" id="npu-shared-sub">-- Go</span>
                             </div>
                             <div class="sub-metric">
-                                <span class="lbl">MÉMOIRE LIBRE</span>
+                                <span class="lbl" data-i18n="label.freeMemory">MÉMOIRE LIBRE</span>
                                 <span class="val text-cyan" id="npu-free-sub">-- Go</span>
                             </div>
                             <div class="sub-metric">
-                                <span class="lbl">MÉMOIRE TOTALE</span>
+                                <span class="lbl" data-i18n="label.totalMemory">MÉMOIRE TOTALE</span>
                                 <span class="val text-cyan" id="npu-total-sub">-- Go</span>
                             </div>
                             <div class="sub-progress-container">
@@ -170,7 +170,7 @@
                     <!-- Sub-metrics Grid for GPU -->
                     <div class="card-sub-metrics">
                         <div class="sub-metric">
-                            <span class="lbl">TEMPÉRATURE</span>
+                            <span class="lbl" data-i18n="label.temperature">TEMPÉRATURE</span>
                             <span class="val" id="gpu-temp-sub">-- °C</span>
                         </div>
                         <div class="sub-metric">
@@ -178,12 +178,12 @@
                             <span class="val" id="gpu-vram-sub">-- Go</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl">CORE CLOCK</span>
+                            <span class="lbl" data-i18n="label.gpuPower">CORE CLOCK</span>
                             <span class="val" id="gpu-core-sub">-- MHz</span>
                         </div>
 
                         <div class="sub-metric">
-                            <span class="lbl">MÉMOIRE CLOCK</span>
+                            <span class="lbl" data-i18n="label.memoryClock">MÉMOIRE CLOCK</span>
                             <span class="val" id="gpu-mem-clock-sub">-- MHz</span>
                         </div>
                         <div class="sub-progress-container">
@@ -209,7 +209,7 @@
 
                 <!-- SOTA Holographic Neural Telemetry Map Canvas -->
                 <div class="hologram-sub-panel">
-                    <canvas id="physics-canvas" role="img" aria-label="Carte interactive de télémétrie neuronale matérielle affichant les liens et les flux de données entre composants sous forme de particules animées."></canvas>
+                    <canvas id="physics-canvas" role="img" data-i18n-aria="aria.map" aria-label="Carte interactive de télémétrie matérielle affichant les liens et les flux de données entre composants sous forme de particules animées."></canvas>
                 </div>
 
                 <!-- Windows Power Plan Remote Control (Horizontal bottom) -->
@@ -242,19 +242,19 @@
                     <!-- Sub-metrics Grid for RAM -->
                     <div class="card-sub-metrics">
                         <div class="sub-metric">
-                            <span class="lbl">DISPONIBLE</span>
+                            <span class="lbl" data-i18n="label.available">DISPONIBLE</span>
                             <span class="val" id="ram-free-sub">-- Go</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl">MISE EN CACHE</span>
+                            <span class="lbl" data-i18n="label.cached">MISE EN CACHE</span>
                             <span class="val" id="ram-cached-sub">-- Go</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl">TOP PROCESSUS</span>
+                            <span class="lbl" data-i18n="label.topProcess">TOP PROCESSUS</span>
                             <span class="val" id="ram-top-proc-sub">--</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl">MÉMOIRE VIRTUELLE</span>
+                            <span class="lbl" data-i18n="label.virtualMemory">MÉMOIRE VIRTUELLE</span>
                             <span class="val text-blue" id="ram-status-sub">-- Go / -- Go</span>
                         </div>
                     </div>
@@ -282,19 +282,19 @@
                     <!-- Sub-metrics Grid for SSD -->
                     <div class="card-sub-metrics">
                         <div class="sub-metric">
-                            <span class="lbl">ESPACE DISQUE</span>
+                            <span class="lbl" data-i18n="label.diskSpace">ESPACE DISQUE</span>
                             <span class="val" id="ssd-free-sub">-- Go</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl">LECTURE</span>
+                            <span class="lbl" data-i18n="label.read">LECTURE</span>
                             <span class="val text-green" id="ssd-read-sub">0.0 Mo/s</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl">ÉCRITURE</span>
+                            <span class="lbl" data-i18n="label.write">ÉCRITURE</span>
                             <span class="val text-green" id="ssd-write-sub">0.0 Mo/s</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl">TEMPS DE RÉPONSE</span>
+                            <span class="lbl" data-i18n="label.responseTime">TEMPS DE RÉPONSE</span>
                             <span class="val" id="ssd-response-sub">-- ms</span>
                         </div>
                     </div>
@@ -303,7 +303,7 @@
 
                 <!-- Network Card -->
                 <div class="gauge-card glass-panel" id="net-card">
-                    <div class="card-heading"><h2 class="gauge-label" id="spec-net-mode">RÉSEAU</h2><div class="critical-alert" role="status" aria-live="polite"></div></div>
+                    <div class="card-heading"><h2 class="gauge-label" id="spec-net-mode" data-i18n="label.network">RÉSEAU</h2><div class="critical-alert" role="status" aria-live="polite"></div></div>
                     <div class="gauge-slot">
                         <div class="gauge-container" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="spec-net-mode" id="net-gauge-container">
                             <svg class="progress-ring" viewBox="0 0 180 180" width="100%" height="100%">
@@ -322,20 +322,20 @@
                     <!-- Sub-metrics Grid for Network -->
                     <div class="card-sub-metrics">
                         <div class="sub-metric">
-                            <span class="lbl">RECEVOIR (DÉBIT)</span>
+                            <span class="lbl" data-i18n="label.download">RECEVOIR (DÉBIT)</span>
                             <span class="val text-orange" id="net-wifi-sub">-- KB/s</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl">ENVOYER (DÉBIT)</span>
+                            <span class="lbl" data-i18n="label.upload">ENVOYER (DÉBIT)</span>
                             <span class="val text-orange" id="net-lan-sub">-- KB/s</span>
                         </div>
 
                         <div class="sub-metric">
-                            <span class="lbl">TYPE DE CONNEXION</span>
+                            <span class="lbl" data-i18n="label.connectionType">TYPE DE CONNEXION</span>
                             <span class="val" id="net-type-sub">--</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl">PING RÉSEAU</span>
+                            <span class="lbl" data-i18n="label.ping">PING RÉSEAU</span>
                             <span class="val" id="net-ping-sub">-- ms</span>
                         </div>
                     </div>
@@ -347,6 +347,7 @@
     </main>
 
     <script src="telemetry-state.js" charset="UTF-8"></script>
+    <script src="i18n.js" charset="UTF-8"></script>
     <script src="app.js?v=22" charset="UTF-8"></script>
 </body>
 </html>

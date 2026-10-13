@@ -15,6 +15,9 @@ $sources = @('DesktopHtmlHost.cs', 'DesktopVisibility.cs', 'NvidiaTelemetry.cs',
     ForEach-Object { Join-Path $project $_ }
 & (Join-Path $PSScriptRoot 'csc.ps1') /nologo /target:winexe /platform:x64 /main:StoreScreenshots "/out:$binary" @refs @sources (Join-Path $PSScriptRoot 'tests\StoreScreenshots.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Store screenshot tool compilation failed.' }
-$process = Start-Process -FilePath $binary -ArgumentList "`"$project`"", "`"$output`"" -Wait -PassThru -NoNewWindow
-if ($process.ExitCode -ne 0) { throw 'Store screenshot capture failed.' }
+Get-ChildItem $output -Filter *.png | Remove-Item
+foreach ($language in @('fr', 'en')) {
+    $process = Start-Process -FilePath $binary -ArgumentList "`"$project`"", "`"$output`"", $language -Wait -PassThru -NoNewWindow
+    if ($process.ExitCode -ne 0) { throw "Store screenshot capture failed ($language)." }
+}
 Get-ChildItem $output -Filter *.png | Select-Object Name, Length

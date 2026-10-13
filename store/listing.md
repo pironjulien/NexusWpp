@@ -40,14 +40,15 @@ Confidentialité : tout est mesuré localement. Pas de compte, pas de publicité
 - Changement du mode d'alimentation Windows d'un clic sur le fond d'écran
 - S'adapte à toutes les résolutions, à la mise à l'échelle et au mode portrait
 - Démarre avec Windows ; pas de compte, pas de publicité, aucune donnée envoyée
+- Interface en français ou en anglais, selon la langue de Windows
 
 ### Mots-clés (7 max)
 
 fond d'écran animé, moniteur système, cockpit, CPU GPU, température, NPU, widget bureau
 
-### Nouveautés de cette version (1.0.34.0)
+### Nouveautés de cette version (1.0.35.0)
 
-Économiseur d'énergie : quand il est activé dans Windows, les anneaux du logo s'immobilisent pour économiser la batterie ; les valeurs continuent de se mettre à jour. Moteur d'affichage WebView2 mis à jour. Mesures du disque et du ping corrigées, démarrage et reprise plus fiables.
+Interface disponible en anglais, selon la langue de Windows. Économiseur d'énergie : quand il est activé dans Windows, les anneaux du logo s'immobilisent pour économiser la batterie ; les valeurs continuent de se mettre à jour. Moteur d'affichage WebView2 mis à jour. Mesures du disque et du ping corrigées, démarrage et reprise plus fiables.
 
 ---
 
@@ -74,8 +75,6 @@ Switch your Windows power mode with one click, right on the wallpaper.
 
 Privacy: everything is measured locally. No account, no ads, no data collected or sent. The only network use is a ping to 1.1.1.1 or 8.8.8.8 to measure internet latency.
 
-Note: the interface is currently in French.
-
 ### Features
 
 - Animated wallpaper with a real-time system cockpit, behind your desktop icons
@@ -88,11 +87,12 @@ Note: the interface is currently in French.
 - Switch the Windows power mode with one click on the wallpaper
 - Adapts to every resolution, display scaling and portrait mode
 - Starts with Windows; no account, no ads, no data sent
+- English or French interface, following your Windows language
 
 ### Keywords (7 max)
 
 live wallpaper, system monitor, hardware monitor, CPU GPU, temperature, NPU, desktop dashboard
 
-### What's new in this version (1.0.34.0)
+### What's new in this version (1.0.35.0)
 
-Energy saver: when it is on in Windows, the logo rings hold still to save battery; values keep updating. Updated WebView2 display engine. Fixed disk and ping readings, more reliable startup and resume.
+The interface is now available in English, following your Windows language. Energy saver: when it is on in Windows, the logo rings hold still to save battery; values keep updating. Updated WebView2 display engine. Fixed disk and ping readings, more reliable startup and resume.

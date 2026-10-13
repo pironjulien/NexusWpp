@@ -4,7 +4,7 @@
 
 - Application Windows native de fond d'ecran dynamique.
 - L'hote principal est `DesktopHtmlHost.cs`.
-- L'interface est dans `index.html`, `style.css` et `app.js`.
+- L'interface est dans `index.html`, `style.css` et `app.js` ; les textes visibles sont traduits dans `i18n.js` (français et anglais).
 - Le mode EXE autonome utilise `C:\nexuswpp`. Le mode Store/MSIX utilise WindowsApps et conserve ses données dans le profil utilisateur packagé ; ne pas lui ajouter deploy_local.ps1.
 
 ## Commandes utiles

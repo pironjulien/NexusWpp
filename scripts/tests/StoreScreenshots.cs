@@ -16,7 +16,7 @@ class StoreScreenshots : Form
     readonly WebView2 view = new WebView2 { Dock = DockStyle.Fill };
     readonly JavaScriptSerializer json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
     readonly TelemetryCollector collector = new TelemetryCollector();
-    readonly string project, output;
+    readonly string project, output, language;
     bool ready;
     int result = 1;
 
@@ -36,7 +36,7 @@ class StoreScreenshots : Form
 
     StoreScreenshots(string[] args)
     {
-        project = args[0]; output = args[1];
+        project = args[0]; output = args[1]; language = args.Length > 2 ? args[2] : "fr";
         ClientSize = new Size(960, 540);
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.Manual;
@@ -70,7 +70,7 @@ class StoreScreenshots : Form
                     ready = true;
                 }
             };
-            view.Source = new Uri("http://nexuswpp.local/index.html");
+            view.Source = new Uri("http://nexuswpp.local/index.html?lang=" + language);
             for (int i = 0; i < 100 && !ready; i++) await Task.Delay(100);
             if (!ready) throw new Exception("Page did not initialize");
             await FeedTelemetry(4); // counters need a few samples for real deltas
@@ -84,7 +84,7 @@ class StoreScreenshots : Form
                 await FeedTelemetry(4);
                 var response = await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", "{\"format\":\"png\",\"captureBeyondViewport\":false}");
                 var screenshot = json.Deserialize<Dictionary<string, object>>(response);
-                string path = Path.Combine(output, shot[0] + ".png");
+                string path = Path.Combine(output, shot[0] + "-" + language + ".png");
                 File.WriteAllBytes(path, Convert.FromBase64String((string)screenshot["data"]));
                 Console.WriteLine("SAVED " + path);
             }
