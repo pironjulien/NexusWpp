@@ -4,6 +4,7 @@
 
 - Historique des 60 dernières secondes dans chaque carte (CPU, iGPU, NPU, GPU, RAM, activité disque, réseau) : une courbe discrète dans la couleur de la carte, en bas et derrière le contenu, sans changer la disposition. Une mesure manquante coupe la courbe au lieu d'afficher un faux zéro.
 - Fenêtre de réglages plus aérée.
+- Code réorganisé sans changement de comportement : l'hôte est découpé en classes partielles par responsabilité (`Program.cs`, `DesktopForm*.cs`, `NativeMethods.cs`) et l'interface en scripts chargés dans l'ordre (`cockpit-state.js`, `radar.js`, `dashboard.js`, `app.js`). Les scripts de test lisent la liste des sources dans `scripts\host_sources.ps1`.
 - Captures Store : cockpit, écran ultra-large, portrait, logo personnalisé et fenêtre de réglages, en français et en anglais, générées par `scripts\store_screenshots.ps1` avec les vraies mesures du PC.
 
 ## 2026-10-13 — 1.0.37.0

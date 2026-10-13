@@ -11,11 +11,11 @@ NexusWpp affiche un cockpit matériel dynamique directement dans le bureau Windo
 
 ## Architecture Actuelle
 
-- `DesktopHtmlHost.cs` : hôte WinForms/WebView2, injection desktop, hook souris et cycle de vie.
+- `Program.cs` et `DesktopForm*.cs` : hôte WinForms/WebView2 découpé par responsabilité (cycle de vie et bureau, WebView2, pause/reprise, télémétrie, réglages, hook souris) ; `NativeMethods.cs` : déclarations Win32.
 - `TelemetryCollector.cs`, `NvidiaTelemetry.cs`, `WindowsGpuTelemetry.cs` : collecte native et validité des capteurs.
 - `telemetry-state.js` : règles de validité des mesures et confirmation des charges élevées.
 - `DesktopVisibility.cs` : détection du bureau couvert, du plein écran et calcul de couverture multi-écrans.
-- `index.html`, `app.js`, `style.css` : interface du cockpit et moteur Canvas.
+- `index.html`, `style.css` et les scripts chargés dans l'ordre : `i18n.js` (traductions), `cockpit-state.js` (état partagé, horloge), `radar.js` (radar Canvas, pause), `dashboard.js` (cartes, alertes, historique), `app.js` (messages de l'hôte, démarrage).
 - `compile.ps1` : compile l'hôte et la détection de visibilité en `bin\nexuswpp.exe`.
 - `deploy_local.ps1` : copie l'app dans `C:\nexuswpp` et configure le lancement Windows via `HKLM\...\Run`.
 - `run.bat` : menu local pour démarrer, compiler, déployer ou arrêter l'app.

@@ -23,14 +23,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="DesktopHtmlHost.cs" />
-    <Compile Include="DesktopVisibility.cs" />
-    <Compile Include="NvidiaTelemetry.cs" />
-    <Compile Include="PdhCounters.cs" />
-    <Compile Include="SettingsForm.cs" />
-    <Compile Include="TelemetryCollector.cs" />
-    <Compile Include="UserSettings.cs" />
-    <Compile Include="WindowsGpuTelemetry.cs" />
+    <!-- Every C# file at the project root belongs to the host. -->
+    <Compile Include="*.cs" />
     <Compile Include="$(ReleaseVersionSource)" />
   </ItemGroup>
 

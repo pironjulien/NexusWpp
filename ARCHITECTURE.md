@@ -11,7 +11,7 @@ graph TD
     TEL --> WMI[WMI / Win32 APIs]
     TEL --> NVIDIA[Isolated nvidia-smi process when available]
     TEL --> POWER[powercfg / PowerGetActiveScheme]
-    WV --> UI[index.html + app.js + style.css]
+    WV --> UI[index.html + style.css + cockpit-state.js / radar.js / dashboard.js / app.js]
     TEL --> MSG[PostWebMessageAsJson]
     MSG --> UI
     UI --> CMD[SET_POWER / REQUEST_RUNTIME_STATE / REQUEST_TELEMETRY messages]
