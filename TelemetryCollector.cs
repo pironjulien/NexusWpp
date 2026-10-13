@@ -76,8 +76,6 @@ namespace DesktopHtmlHost
         // Network rates cache
         private long cachedNetRxRate = 0;
         private long cachedNetTxRate = 0;
-        private string cachedActiveIp = "127.0.0.1";
-        private string cachedActiveIpv6 = "fe80::1";
         private string cachedActiveNetName = "Ethernet";
         private string cachedNetType = "Ethernet";
         private long cachedNetLinkSpeedMbps = 1000;
@@ -820,8 +818,6 @@ namespace DesktopHtmlHost
             {
                 long currentRx = 0;
                 long currentTx = 0;
-                string activeIp = "127.0.0.1";
-                string activeIpv6 = "fe80::1";
                 string activeNetName = "Ethernet";
                 string netType = "Ethernet";
                 long linkSpeedMbps = cachedNetLinkSpeedMbps;
@@ -852,7 +848,6 @@ namespace DesktopHtmlHost
                         {
                             if (addr.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
                             {
-                                activeIp = addr.Address.ToString();
                                 activeNetName = ni.Description;
                                 netType = (ni.NetworkInterfaceType == NetworkInterfaceType.Wireless80211) ? "Wi-Fi" : "Ethernet";
                                 if (ni.Speed > 0)
@@ -860,10 +855,6 @@ namespace DesktopHtmlHost
                                     linkSpeedMbps = Math.Max(1, ni.Speed / 1000000L);
                                 }
                                 gotIpv4 = true;
-                            }
-                            else if (addr.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
-                            {
-                                activeIpv6 = addr.Address.ToString();
                             }
                         }
 
@@ -887,8 +878,6 @@ namespace DesktopHtmlHost
                 prevTxBytes = currentTx;
                 prevNetTime = DateTime.Now;
 
-                cachedActiveIp = activeIp;
-                cachedActiveIpv6 = activeIpv6;
                 cachedActiveNetName = activeNetName;
                 cachedNetType = netType;
                 cachedNetLinkSpeedMbps = linkSpeedMbps;
@@ -1462,8 +1451,8 @@ namespace DesktopHtmlHost
                 diskFreeGbStr, diskActiveTime, diskStoragePercent, (int)diskTotalGb, diskReadMbStr, diskWriteMbStr, diskResponseMsStr, JsonString(DiskName), JsonString(SystemDrive));
 
             // network
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"network\":{{\"lan\":{0},\"wifi\":{1},\"ip\":{2},\"ipv6\":{3},\"name\":{4},\"type\":{5},\"linkSpeedMbps\":{6},\"signal\":{7}}},",
-                cachedNetTxRate, cachedNetRxRate, JsonString(cachedActiveIp), JsonString(cachedActiveIpv6), JsonString(cachedActiveNetName), JsonString(cachedNetType), cachedNetLinkSpeedMbps, wifiSignal);
+            sb.AppendFormat(CultureInfo.InvariantCulture, "\"network\":{{\"lan\":{0},\"wifi\":{1},\"name\":{2},\"type\":{3},\"linkSpeedMbps\":{4},\"signal\":{5}}},",
+                cachedNetTxRate, cachedNetRxRate, JsonString(cachedActiveNetName), JsonString(cachedNetType), cachedNetLinkSpeedMbps, wifiSignal);
 
             // battery
             sb.AppendFormat(CultureInfo.InvariantCulture, "\"battery\":{{\"present\":{0},\"percent\":{1},\"ac\":{2}}},\"energySaver\":{3},",
