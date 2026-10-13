@@ -172,7 +172,7 @@ class RuntimePauseRegression : Form
             await Check("cpuVal.textContent==='48%' && gpuVal.textContent==='73%' && cpuRing.style.strokeDashoffset===ringBefore", "a missing reading keeps the last gauge value and ring");
             await Check("cpuGaugeContainer.getAttribute('aria-valuenow')==='48' && cpuGaugeContainer.getAttribute('aria-valuetext')===t('aria.stale',{value:'48 %'}) && cpuCard.classList.contains('sensor-stale') && cpuCard.querySelector('.critical-alert').textContent===t('alert.sensorsStale')", "a held gauge is badged and announced as stale");
             await Check("drawnLabels.includes('48%@#afb7c7') && drawnLabels.includes('73%@#afb7c7') && !drawnLabels.some(text=>/^(-1|null|—)%?@/.test(text))", "radar keeps held readings in the stale grey instead of negative, fabricated or blank values");
-            await Check("vramUsedSub.textContent===num(2,1)+' '+GB && vramUsedSub.classList.contains('sensor-unavailable') && netPingSub.textContent==='124 ms' && netPingSub.classList.contains('sensor-unavailable')", "sub-metrics keep their last text, greyed");
+            await Check("vramUsedSub.textContent===num(2,1)+' / 32 '+GB && vramUsedSub.classList.contains('sensor-unavailable') && netPingSub.textContent==='124 ms' && netPingSub.classList.contains('sensor-unavailable')", "sub-metrics keep their last text, greyed");
             await Check("cardHistories.find(h=>h.id==='cpu-card').values.slice(-1)[0]===null && cardHistories.find(h=>h.id==='gpu-card').values.slice(-1)[0]===null", "history records the missing sample as a gap");
 
             await view.CoreWebView2.ExecuteScriptAsync(@"
@@ -293,6 +293,9 @@ class RuntimePauseRegression : Form
             await Check("formatBattery({present:true,percent:50,ac:false,rateW:-8,minutesLeft:42}).endsWith(t('battery.left',{time:'42 MIN'}))", "short remaining time is in minutes");
             await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal'});");
             await Check("npuTopProcSub.textContent.length >= 4 && 'WindowsStudioEffects'.startsWith(npuTopProcSub.textContent.replace('…', '')) && npuTopProcSub.scrollWidth <= npuTopProcSub.parentElement.clientWidth + 1", "NPU card shows its busiest client process, shortened to fit");
+            await Check("igpuTopProcSub.textContent.length >= 4 && 'msedgewebview2'.startsWith(igpuTopProcSub.textContent.replace('…', '')) && gpuTopProcSub.textContent.length >= 4 && 'Cyberpunk2077'.startsWith(gpuTopProcSub.textContent.replace('…', ''))", "iGPU and GPU cards show their busiest client process");
+            await Check("specGpuName.textContent.endsWith('@ 15001 MHz')", "GPU memory clock is shown in the card title");
+            await Check("vramUsedSub.textContent===num(2,1)+' / 32 '+GB && igpuEncodeSub.textContent==='12 %'", "iGPU card shows VRAM used / total and video encode load");
             exitCode = 0;
         }
         catch (Exception error) { Console.Error.WriteLine("FAIL " + error); }

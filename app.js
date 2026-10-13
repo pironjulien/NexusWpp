@@ -86,11 +86,11 @@ function dimGauges() {
     gpuTempSub.textContent = `-- °C`;
     if (gpuVramSub) gpuVramSub.textContent = `-- ${GB}`;
     gpuCoreSub.textContent = `-- MHz`;
-    if (gpuMemClockSub) gpuMemClockSub.textContent = `-- MHz`;
+    if (gpuTopProcSub) gpuTopProcSub.textContent = `--`;
 
     vramUsedSub.textContent = `0.0 ${GB}`;
-    vramFreeSub.textContent = `0.0 ${GB}`;
-    if (vramTotalSub) vramTotalSub.textContent = `0 ${GB}`;
+    if (igpuTopProcSub) igpuTopProcSub.textContent = `--`;
+    if (igpuEncodeSub) igpuEncodeSub.textContent = `-- %`;
     if (igpuDecodeSub) igpuDecodeSub.textContent = `-- %`;
     if (npuUsedSub) npuUsedSub.textContent = `0.0 ${GB}`;
     if (npuTopProcSub) npuTopProcSub.textContent = `--`;
