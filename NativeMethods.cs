@@ -74,22 +74,4 @@ namespace DesktopHtmlHost
         public int BatteryLifeTime;
         public int BatteryFullLifeTime;
     }
-
-    public static class WlanApi
-    {
-        [DllImport("wlanapi.dll")]
-        public static extern int WlanOpenHandle(uint dwClientVersion, IntPtr pReserved, out uint pdwNegotiatedVersion, out IntPtr phClientHandle);
-
-        [DllImport("wlanapi.dll")]
-        public static extern int WlanCloseHandle(IntPtr hClientHandle, IntPtr pReserved);
-
-        [DllImport("wlanapi.dll")]
-        public static extern int WlanEnumInterfaces(IntPtr hClientHandle, IntPtr pReserved, out IntPtr ppInterfaceList);
-
-        [DllImport("wlanapi.dll")]
-        public static extern int WlanQueryInterface(IntPtr hClientHandle, ref Guid pInterfaceGuid, int OpCode, IntPtr pReserved, out uint pdwDataSize, out IntPtr ppData, IntPtr pWlanOpcodeValueType);
-
-        [DllImport("wlanapi.dll")]
-        public static extern void WlanFreeMemory(IntPtr pMemory);
-    }
 }
