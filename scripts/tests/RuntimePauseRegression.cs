@@ -181,6 +181,11 @@ class RuntimePauseRegression : Form
             view.CoreWebView2.PostWebMessageAsJson("{\"control\":\"SETTINGS\",\"logo\":null}");
             await Task.Delay(300);
             await Check("logoImg.getAttribute('src') === DEFAULT_LOGO && logoLoaded", "reset restores the brand logo");
+            // 60 s history behind each card: drawn under the content, gaps for missing readings, clamped values.
+            await Check("document.querySelectorAll('.gauge-card > svg.history-line').length === 7 && [...document.querySelectorAll('.history-line')].every(s => getComputedStyle(s).zIndex === '-1' && getComputedStyle(s).pointerEvents === 'none')", "every card has a history line behind its content");
+            await Check("cardHistories.every(h => h.values.length > 0 && h.values.length <= HISTORY_LENGTH)", "history keeps at most 60 samples");
+            await Check("historyPaths([10, null, 20, 30]).line.split('M').length - 1 === 2 && historyPaths([null, null]).line === ''", "missing readings break the line instead of drawing zero");
+            await Check("historyPaths([150]).line === 'M59 8.0' && historyPaths([-5]).line === 'M59 100.0'", "history values are clamped to the card");
             exitCode = 0;
         }
         catch (Exception error) { Console.Error.WriteLine("FAIL " + error); }

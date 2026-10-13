@@ -1407,11 +1407,19 @@ function updateDOM(stats) {
         }
         
         telemetryNodes.net.value = netActivityPct;
+        pushCardHistory("net-card", netActivityPct);
         telemetryNodes.net.suffix = "%";
         
         const speedStr = formatNetSpeed(totalNetKb);
         telemetryNodes.net.subLabel = speedStr;
     }
+
+    pushCardHistory("cpu-card", stats.cpu.utilization);
+    pushCardHistory("vram-card", stats.igpu.utilization);
+    pushCardHistory("npu-card", npuStats.utilization);
+    pushCardHistory("gpu-card", stats.gpu.utilization);
+    pushCardHistory("ram-card", stats.ram.utilization);
+    pushCardHistory("ssd-card", stats.disk.utilization);
 
     updatePowerPlanButtons(stats);
 
@@ -1643,6 +1651,55 @@ function refreshTelemetryFreshness(force = false) {
         for (const node of telemetryNodeList) { node.value = null; node.subLabel = t('node.dataExpired'); }
         redrawCanvas();
     }
+}
+
+// --- 60 s history drawn as a faint area behind each card's content ---
+const HISTORY_LENGTH = 60;
+const cardHistories = [
+    ["cpu-card", "#bf5aff"], ["vram-card", "#30d158"], ["npu-card", "#00c7be"], ["gpu-card", "#ff375f"],
+    ["ram-card", "#0a84ff"], ["ssd-card", "#64d2ff"], ["net-card", "#ff9f0a"]
+].map(([id, color]) => {
+    const card = document.getElementById(id);
+    if (!card) return null;
+    const ns = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("class", "history-line");
+    svg.setAttribute("viewBox", `0 0 ${HISTORY_LENGTH - 1} 100`);
+    svg.setAttribute("preserveAspectRatio", "none");
+    svg.setAttribute("aria-hidden", "true");
+    const gradientId = `${id}-history-fill`;
+    svg.innerHTML = `<defs><linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">` +
+        `<stop offset="0%" stop-color="${color}" stop-opacity="0.16"/><stop offset="100%" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>` +
+        `<path class="history-area" fill="url(#${gradientId})"/><path class="history-stroke" stroke="${color}"/>`;
+    card.insertBefore(svg, card.firstChild);
+    return { id, values: [], area: svg.querySelector(".history-area"), stroke: svg.querySelector(".history-stroke") };
+}).filter(Boolean);
+
+// Builds the line and filled area from the samples; missing readings break the line instead of faking zero.
+function historyPaths(values) {
+    const offset = HISTORY_LENGTH - values.length;
+    let line = "", area = "", runStart = -1, last = -1;
+    const closeRun = () => { if (runStart >= 0) area += `L${last} 100 L${runStart} 100 Z`; runStart = -1; };
+    values.forEach((value, index) => {
+        const x = offset + index;
+        if (value === null) { closeRun(); return; }
+        const y = (100 - Math.max(0, Math.min(100, value)) * 0.92).toFixed(1);
+        if (runStart < 0) { line += `M${x} ${y}`; area += `M${x} 100 L${x} ${y}`; runStart = x; }
+        else { line += `L${x} ${y}`; area += `L${x} ${y}`; }
+        last = x;
+    });
+    closeRun();
+    return { line, area };
+}
+
+function pushCardHistory(id, value) {
+    const history = cardHistories.find(h => h.id === id);
+    if (!history) return;
+    history.values.push(NexusTelemetry.valid(value) ? value : null);
+    if (history.values.length > HISTORY_LENGTH) history.values.shift();
+    const paths = historyPaths(history.values);
+    history.stroke.setAttribute("d", paths.line);
+    history.area.setAttribute("d", paths.area);
 }
 
 // Direct DOM update instead of requestAnimationFrame loop to save CPU and iGPU cycles

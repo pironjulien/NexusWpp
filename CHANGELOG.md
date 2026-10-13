@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-13 — 1.0.38.0
+
+- Historique des 60 dernières secondes dans chaque carte (CPU, iGPU, NPU, GPU, RAM, activité disque, réseau) : une courbe discrète dans la couleur de la carte, en bas et derrière le contenu, sans changer la disposition. Une mesure manquante coupe la courbe au lieu d'afficher un faux zéro.
+- Fenêtre de réglages plus aérée.
+- Captures Store : cockpit, écran ultra-large, portrait, logo personnalisé et fenêtre de réglages, en français et en anglais, générées par `scripts\store_screenshots.ps1` avec les vraies mesures du PC.
+
 ## 2026-10-13 — 1.0.37.0
 
 - Réglages : icône NexusWpp dans la zone de notification (clic : réglages ; menu : réglages, quitter). Relancer NexusWpp depuis le menu Démarrer ouvre aussi les réglages. Il est enfin possible de quitter l'application sans le Gestionnaire des tâches ; le fond d'écran Windows est alors redessiné.

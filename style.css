@@ -330,6 +330,27 @@ body {
     display: none;
 }
 
+/* Last 60 s of the card's activity, behind its content. */
+.history-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 28%;
+    z-index: -1;
+    pointer-events: none;
+}
+
+.history-stroke {
+    fill: none;
+    stroke-width: 1.5px;
+    stroke-opacity: 0.45;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+}
+
 .gauge-card.card-hidden {
     display: none !important;
 }
