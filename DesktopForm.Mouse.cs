@@ -21,8 +21,16 @@ namespace DesktopHtmlHost
     {
         private static void StartMouseHook()
         {
-            if (mouseHookThread != null && mouseHookThread.IsAlive) return;
+            if (mouseHookThread != null && mouseHookThread.IsAlive)
+            {
+                if (Volatile.Read(ref mouseHookStopRequested) == 0) return;
+                // A stop is in flight (pause then quick resume): let that pump exit first.
+                int threadId = Volatile.Read(ref mouseHookThreadId);
+                if (threadId != 0) PostThreadMessage(unchecked((uint)threadId), 0x0012 /* WM_QUIT */, IntPtr.Zero, IntPtr.Zero);
+                if (!mouseHookThread.Join(1000)) return;
+            }
             Volatile.Write(ref mouseHookStopRequested, 0);
+            pairedRenderWindow = IntPtr.Zero;
             mouseProc = HookCallback;
             mouseHookThread = new Thread(RunMouseHook);
             mouseHookThread.IsBackground = true;
@@ -81,17 +89,9 @@ namespace DesktopHtmlHost
 
             try
             {
-                MouseRoutingSnapshot routing = Volatile.Read(ref mouseRouting);
-                if (routing != null)
+                if (RouteLeftButton((uint)wParam.ToInt32(), lParam))
                 {
-                    MSLLHOOKSTRUCT hookStruct = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
-                    if (routing.ScreenBounds.Contains(hookStruct.pt.x, hookStruct.pt.y) &&
-                        IsWindow(routing.RenderWindow) &&
-                        ShouldForwardDesktopClick(hookStruct.pt, routing) &&
-                        ForwardMouseClick(routing.RenderWindow, hookStruct.pt.x, hookStruct.pt.y, (uint)wParam.ToInt32()))
-                    {
-                        return (IntPtr)1; // Suppress desktop selection only after successful forwarding.
-                    }
+                    return (IntPtr)1; // Suppress desktop selection only after successful forwarding.
                 }
             }
             catch (Exception ex)
@@ -102,34 +102,49 @@ namespace DesktopHtmlHost
             return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
         }
 
-        private static bool ShouldForwardDesktopClick(POINT screenPt, MouseRoutingSnapshot routing)
+        // Render window that received the last forwarded button-down; hook thread only.
+        // The matching button-up follows the same route wherever it is released, so
+        // neither Chromium nor Explorer is left in the middle of a press or a drag.
+        private static IntPtr pairedRenderWindow;
+
+        private static bool RouteLeftButton(uint message, IntPtr lParam)
         {
-            IntPtr hit = WindowFromPoint(screenPt);
-            if (hit == IntPtr.Zero) return false;
-            if (hit == routing.HostWindow || hit == routing.RenderWindow) return true;
-
-            IntPtr current = hit;
-            for (int i = 0; i < 8 && current != IntPtr.Zero; i++)
+            if (message == WM_LBUTTONUP)
             {
-                if (current == routing.HostWindow || current == routing.RenderWindow) return true;
-
-                string cls = GetWindowClassName(current);
-                if (cls == "Progman" || cls == "WorkerW" || cls == "SHELLDLL_DefView" || cls == "SysListView32")
-                {
-                    return true;
-                }
-
-                uint pid;
-                GetWindowThreadProcessId(current, out pid);
-                if (pid == currentProcessId)
-                {
-                    return true;
-                }
-
-                current = GetParent(current);
+                IntPtr paired = pairedRenderWindow;
+                pairedRenderWindow = IntPtr.Zero;
+                if (paired == IntPtr.Zero) return false;
+                MSLLHOOKSTRUCT up = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
+                return IsWindow(paired) && ForwardMouseClick(paired, up.pt.x, up.pt.y, message);
             }
 
-            return false;
+            pairedRenderWindow = IntPtr.Zero;
+            MouseRoutingSnapshot routing = Volatile.Read(ref mouseRouting);
+            if (routing == null) return false;
+            MSLLHOOKSTRUCT down = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
+            if (!routing.ScreenBounds.Contains(down.pt.x, down.pt.y) || !IsWindow(routing.RenderWindow)) return false;
+            if (!ShouldForwardHit(WindowFromPoint(down.pt), routing.HostWindow, routing.RenderWindow)) return false;
+            if (!ForwardMouseClick(routing.RenderWindow, down.pt.x, down.pt.y, message)) return false;
+            pairedRenderWindow = routing.RenderWindow;
+            return true;
+        }
+
+        // Only the wallpaper itself or the desktop layers above it. Any other window,
+        // including our own settings window, file dialog or tray menu, keeps its click.
+        private static bool ShouldForwardHit(IntPtr hit, IntPtr hostWindow, IntPtr renderWindow)
+        {
+            if (hit == IntPtr.Zero) return false;
+            if (hit == renderWindow || hit == hostWindow) return true;
+            if (hostWindow != IntPtr.Zero && IsChild(hostWindow, hit)) return true;
+            string cls = GetWindowClassName(hit);
+            return cls == "Progman" || cls == "WorkerW" || cls == "SHELLDLL_DefView" || cls == "SysListView32";
+        }
+
+        // Panel rectangle reported by the page, limited to the wallpaper client area.
+        internal static System.Drawing.Rectangle ClipPanelBounds(System.Drawing.Rectangle panel, System.Drawing.Rectangle client)
+        {
+            System.Drawing.Rectangle clipped = System.Drawing.Rectangle.Intersect(panel, client);
+            return clipped.Width > 0 && clipped.Height > 0 ? clipped : System.Drawing.Rectangle.Empty;
         }
 
         private static string GetWindowClassName(IntPtr hwnd)
@@ -158,9 +173,16 @@ namespace DesktopHtmlHost
                 Volatile.Write(ref mouseRouting, null);
                 return;
             }
-            System.Drawing.Point origin = PointToScreen(remotePanelBounds.Location);
+            System.Drawing.Rectangle panel = ClipPanelBounds(remotePanelBounds, ClientRectangle);
+            if (panel.IsEmpty)
+            {
+                Volatile.Write(ref mouseRouting, null);
+                return;
+            }
+            // Client to screen through the real window: correct below WorkerW at any origin.
+            System.Drawing.Point origin = PointToScreen(panel.Location);
             Volatile.Write(ref mouseRouting, new MouseRoutingSnapshot(
-                new System.Drawing.Rectangle(origin, remotePanelBounds.Size), Handle, renderWindow));
+                new System.Drawing.Rectangle(origin, panel.Size), Handle, renderWindow));
         }
 
         private static bool FindRenderWindowCallback(IntPtr hwnd, IntPtr lParam)

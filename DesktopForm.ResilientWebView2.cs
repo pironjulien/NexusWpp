@@ -23,6 +23,10 @@ namespace DesktopHtmlHost
         {
             private bool shutdownStarted = false;
 
+            // Raised (on the UI thread) when a lifecycle exception is suppressed outside a shutdown:
+            // the CoreWebView2 behind this control is gone and the page is no longer updated.
+            internal event EventHandler LifecycleFault;
+
             internal void BeginShutdown()
             {
                 shutdownStarted = true;
@@ -129,9 +133,12 @@ namespace DesktopHtmlHost
                     StringComparison.OrdinalIgnoreCase) >= 0;
             }
 
-            private static void LogSuppressedLifecycleException(string context, Exception ex)
+            private void LogSuppressedLifecycleException(string context, Exception ex)
             {
                 Program.LogDebug("Suppressed WebView2 " + context + " after disposal: " + ex.Message);
+                if (shutdownStarted) return;
+                EventHandler handler = LifecycleFault;
+                if (handler != null) handler(this, EventArgs.Empty);
             }
         }
     }
