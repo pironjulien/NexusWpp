@@ -1,7 +1,9 @@
 using System;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Windows.Forms;
 using DesktopHtmlHost;
 
@@ -14,6 +16,13 @@ static class SettingsRegression
     {
         Console.WriteLine((condition ? "PASS " : "FAIL ") + label);
         if (!condition) failures++;
+    }
+
+    static List<Control> AllControls(Control root)
+    {
+        var all = new List<Control>();
+        foreach (Control child in root.Controls) { all.Add(child); all.AddRange(AllControls(child)); }
+        return all;
     }
 
     static bool Throws(Action action)
@@ -89,8 +98,44 @@ static class SettingsRegression
                 form.DrawToBitmap(snapshot, new Rectangle(0, 0, form.Width, form.Height));
                 snapshot.Save(Path.Combine(output, "settings-window.png"), ImageFormat.Png);
             }
-            Check(form.Controls.Count >= 8, "settings window builds its controls");
+            Check(AllControls(form).Count(c => c is Button || c is Label) >= 7, "settings window builds its controls");
             form.Close();
+        }
+
+        // Windows display scaling: fonts grow in pixels and layout is scaled. No text may be clipped or covered,
+        // even if the layout is not scaled at all (fonts only), which is what clipped the text in 1.0.37.
+        foreach (bool scaleLayout in new[] { true, false })
+        foreach (float scale in new[] { 1f, 1.25f, 1.5f, 1.75f, 2f })
+        {
+            using (var form = new SettingsForm(Path.Combine(project, "julienpiron.png"), () => { }, () => { }))
+            {
+                form.StartPosition = FormStartPosition.Manual;
+                form.Location = new Point(-20000, -20000);
+                foreach (var control in new[] { (Control)form }.Concat(AllControls(form)))
+                    if (control.Font.Size > 0 && (control == form || control.Font != control.Parent.Font))
+                        control.Font = new Font(control.Font.FontFamily, control.Font.Size * scale, control.Font.Style);
+                if (scaleLayout) form.Scale(new SizeF(scale, scale));
+                form.Show();
+                Application.DoEvents();
+                string label = " at " + (int)(scale * 100) + " %" + (scaleLayout ? "" : " (fonts only)");
+                var texts = AllControls(form).Where(c => (c is Label || c is Button) && c.Visible).ToList();
+                Check(texts.All(c => c.GetPreferredSize(new Size(c.Width, 0)).Height <= c.Height + 1 || c is Button && c.PreferredSize.Width <= c.Width + 1),
+                    "every text fits its control" + label);
+                var client = form.RectangleToScreen(form.ClientRectangle);
+                Check(texts.All(c => client.Contains(c.RectangleToScreen(c.ClientRectangle))), "every text stays inside the window" + label);
+                bool overlap = false;
+                for (int i = 0; i < texts.Count; i++)
+                    for (int j = i + 1; j < texts.Count; j++)
+                        if (texts[i].RectangleToScreen(texts[i].ClientRectangle).IntersectsWith(texts[j].RectangleToScreen(texts[j].ClientRectangle))) overlap = true;
+                Check(!overlap, "no text overlaps another" + label);
+                if (scale == 1.5f && scaleLayout)
+                    using (var snapshot = new Bitmap(form.Width, form.Height))
+                    {
+                        form.DrawToBitmap(snapshot, new Rectangle(0, 0, form.Width, form.Height));
+                        snapshot.Save(Path.Combine(output, "settings-window-150.png"), ImageFormat.Png);
+                    }
+                form.Close();
+            }
         }
 
         Console.WriteLine(failures == 0 ? "RESULT settings regressions passed" : "RESULT " + failures + " settings regressions failed");
