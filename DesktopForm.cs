@@ -16,7 +16,7 @@ using System.Threading;
 
 namespace DesktopHtmlHost
 {
-    public partial class DesktopForm : Form
+    public partial class DesktopForm : Form, IDesktopHostWindow
     {
         private WebView2 webView;
         private string htmlPath;
@@ -54,6 +54,8 @@ namespace DesktopHtmlHost
         private int telemetryGeneration = 0;
         private string fullscreenReason = "";
         private bool isClosing = false;
+        private bool displayOff = false;
+        private ShellEventWindow shellEvents;
 
         // --- Static Hook and Bounds State ---
         private static DesktopForm activeInstance;
@@ -66,7 +68,6 @@ namespace DesktopHtmlHost
         private static System.Drawing.Rectangle remotePanelBounds = System.Drawing.Rectangle.Empty;
         private static IntPtr renderWindow = IntPtr.Zero;
         private static MouseRoutingSnapshot mouseRouting;
-        private static readonly uint currentProcessId = (uint)Process.GetCurrentProcess().Id;
 
         // Published by the UI thread as one immutable snapshot. The mouse thread must
         // never invoke a WinForms control or wait for WebView2/the display driver.
@@ -238,7 +239,11 @@ namespace DesktopHtmlHost
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
         [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
+        private static extern int MapWindowPoints(IntPtr hWndFrom, IntPtr hWndTo, ref POINT lpPoints, int cPoints);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool IsChild(IntPtr hWndParent, IntPtr hWnd);
 
         // Win32 Constants
         private const int GWL_STYLE = -16;
@@ -249,6 +254,7 @@ namespace DesktopHtmlHost
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOZORDER = 0x0004;
+        private const uint SWP_NOACTIVATE = 0x0010;
         private const uint SWP_FRAMECHANGED = 0x0020;
 
         protected override CreateParams CreateParams
@@ -286,6 +292,7 @@ namespace DesktopHtmlHost
 
             CreateTrayIcon();
             ListenForSettingsRequests();
+            CreateShellEventWindow();
 
             // Create and configure the WebView2 UI component
             CreateWebViewControl();
@@ -300,11 +307,58 @@ namespace DesktopHtmlHost
             searchTimer.Start();
         }
 
+        private void CreateShellEventWindow()
+        {
+            try
+            {
+                shellEvents = new ShellEventWindow(
+                    delegate { QueueDesktopReattach("Explorer restart (TaskbarCreated)"); },
+                    delegate (bool on)
+                    {
+                        if (isClosing || IsDisposed || displayOff == !on) return;
+                        displayOff = !on;
+                        Program.LogDebug(on ? "Display turned on." : "Display turned off.");
+                        FullscreenTimer_Tick(null, null);
+                    });
+                if (!shellEvents.DisplayNotificationsRegistered)
+                {
+                    Program.LogDebug("Display power notifications unavailable.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Program.LogDebug("Shell event window failed: " + ex.Message);
+            }
+        }
+
+        // The native window was destroyed by someone else (Explorer exiting).
+        public bool HandleLost { get { return handleLost; } }
+        private bool handleLost;
+
+        // Explorer destroys its child windows when it exits: our handle goes with WorkerW.
+        // Stop work at once; DesktopHostContext disposes this form and creates a new one.
+        protected override void OnHandleDestroyed(EventArgs e)
+        {
+            if (!isClosing && !RecreatingHandle)
+            {
+                Program.LogDebug("Wallpaper window destroyed outside a requested close (desktop parent lost).");
+                handleLost = true;
+                isClosing = true;
+                if (searchTimer != null) searchTimer.Stop();
+                if (telemetryTimer != null) telemetryTimer.Stop();
+                if (fullscreenTimer != null) fullscreenTimer.Stop();
+                if (recoveryDelayTimer != null) recoveryDelayTimer.Stop();
+                StopMouseHook();
+            }
+            base.OnHandleDestroyed(e);
+        }
+
         private void CreateWebViewControl()
         {
             ResilientWebView2 newWebView = new ResilientWebView2();
             newWebView.Dock = DockStyle.Fill;
             newWebView.Disposed += WebView_Disposed;
+            newWebView.LifecycleFault += WebView_LifecycleFault;
             webView = newWebView;
             this.Controls.Add(webView);
         }
@@ -317,6 +371,12 @@ namespace DesktopHtmlHost
             }
 
             QueueWebViewRecovery("unexpected WebView2 disposal");
+        }
+
+        private void WebView_LifecycleFault(object sender, EventArgs e)
+        {
+            if (isClosing || IsDisposed || !ReferenceEquals(sender, webView)) return;
+            QueueWebViewRecovery("suppressed WebView2 lifecycle exception");
         }
 
         private void SearchTimer_Tick(object sender, EventArgs e)
@@ -394,13 +454,12 @@ namespace DesktopHtmlHost
             SetWindowLong(this.Handle, GWL_STYLE, style);
             SetWindowPos(this.Handle, IntPtr.Zero, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
 
-            UpdateBoundsToVirtualScreen();
-            MoveWindow(this.Handle, this.Left, this.Top, this.Width, this.Height, true);
-            ShowWindow(this.Handle, SW_SHOW);
-
             desktopAttached = true;
             attachedToTemporaryParent = temporary;
             currentDesktopParent = parent;
+
+            UpdateBoundsToVirtualScreen();
+            ShowWindow(this.Handle, SW_SHOW);
 
             double elapsed = (DateTime.Now - startupTime).TotalSeconds;
             if (temporary)
@@ -417,13 +476,56 @@ namespace DesktopHtmlHost
             }
         }
 
+        // Covers the virtual screen. Once the window is a WS_CHILD of WorkerW/Progman,
+        // SetWindowPos takes parent-client coordinates, so the screen rectangle is mapped
+        // into the parent first (a monitor left of or above the primary gives a negative
+        // virtual-screen origin, which is (0,0) in a WorkerW spanning the virtual screen).
         private void UpdateBoundsToVirtualScreen()
         {
-            this.Left = SystemInformation.VirtualScreen.Left;
-            this.Top = SystemInformation.VirtualScreen.Top;
-            this.Width = SystemInformation.VirtualScreen.Width;
-            this.Height = SystemInformation.VirtualScreen.Height;
+            if (IsHandleCreated)
+            {
+                PlaceOverScreenRect(Handle, SystemInformation.VirtualScreen);
+            }
             PublishMouseRouting();
+            PostLayout();
+        }
+
+        internal static bool PlaceOverScreenRect(IntPtr window, System.Drawing.Rectangle screen)
+        {
+            POINT origin = new POINT { x = screen.Left, y = screen.Top };
+            if ((GetWindowLong(window, GWL_STYLE) & WS_CHILD) != 0)
+            {
+                IntPtr parent = GetParent(window);
+                if (parent != IntPtr.Zero) MapWindowPoints(IntPtr.Zero, parent, ref origin, 1);
+            }
+            return SetWindowPos(window, IntPtr.Zero, origin.x, origin.y, screen.Width, screen.Height, SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+
+        // Window-relative primary monitor rectangle, in window pixels, so the page can keep
+        // the cockpit on the primary monitor while the background spans every monitor.
+        internal static string BuildLayoutMessage(System.Drawing.Rectangle window, System.Drawing.Rectangle primary)
+        {
+            return string.Format(CultureInfo.InvariantCulture,
+                "{{\"control\":\"LAYOUT\",\"window\":{{\"w\":{0},\"h\":{1}}},\"primary\":{{\"x\":{2},\"y\":{3},\"w\":{4},\"h\":{5}}}}}",
+                window.Width, window.Height, primary.Left - window.Left, primary.Top - window.Top, primary.Width, primary.Height);
+        }
+
+        private void PostLayout()
+        {
+            if (isClosing || IsDisposed || !IsHandleCreated) return;
+            try
+            {
+                RECT bounds;
+                if (!GetWindowRect(Handle, out bounds)) return;
+                System.Drawing.Rectangle window = System.Drawing.Rectangle.FromLTRB(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom);
+                Screen primary = Screen.PrimaryScreen;
+                if (window.Width <= 0 || window.Height <= 0 || primary == null) return;
+                PostWebMessageAsJsonSafe(BuildLayoutMessage(window, primary.Bounds), "Layout post");
+            }
+            catch (Exception ex)
+            {
+                Program.LogDebug("Layout post error: " + ex.Message);
+            }
         }
 
         private void SystemEvents_DisplaySettingsChanged(object sender, EventArgs e)
@@ -431,7 +533,6 @@ namespace DesktopHtmlHost
             if (isClosing || IsDisposed) return;
             TryBeginInvoke((MethodInvoker)delegate {
                 UpdateBoundsToVirtualScreen();
-                MoveWindow(this.Handle, this.Left, this.Top, this.Width, this.Height, true);
                 QueueDesktopReattach("display settings changed");
             });
         }
@@ -489,10 +590,9 @@ namespace DesktopHtmlHost
             retryCount = 0;
             startupTime = DateTime.Now;
 
-            UpdateBoundsToVirtualScreen();
-            if (this.Handle != IntPtr.Zero)
+            if (IsHandleCreated)
             {
-                MoveWindow(this.Handle, this.Left, this.Top, this.Width, this.Height, true);
+                UpdateBoundsToVirtualScreen();
                 ShowWindow(this.Handle, SW_SHOW);
             }
 
@@ -532,6 +632,8 @@ namespace DesktopHtmlHost
             if (searchTimer != null) searchTimer.Stop();
             if (telemetryTimer != null) telemetryTimer.Stop();
             if (fullscreenTimer != null) fullscreenTimer.Stop();
+            if (recoveryDelayTimer != null) recoveryDelayTimer.Stop();
+            if (shellEvents != null) { shellEvents.Dispose(); shellEvents = null; }
             DisposeWindowWatcher();
             StopMouseHook();
 
@@ -546,6 +648,7 @@ namespace DesktopHtmlHost
                     }
 
                     webView.Disposed -= WebView_Disposed;
+                    if (resilientWebView != null) resilientWebView.LifecycleFault -= WebView_LifecycleFault;
                     webView.Dock = DockStyle.None;
                     webView.Visible = false;
                     Controls.Remove(webView);
@@ -567,11 +670,15 @@ namespace DesktopHtmlHost
         {
             if (disposing)
             {
+                // Tray icon, settings channel and WebView detach normally go through FormClosing.
+                if (handleLost) BeginCleanShutdown();
                 SystemEvents.DisplaySettingsChanged -= SystemEvents_DisplaySettingsChanged;
                 SystemEvents.PowerModeChanged -= SystemEvents_PowerModeChanged;
                 SystemEvents.SessionSwitch -= SystemEvents_SessionSwitch;
                 SystemEvents.SessionEnding -= SystemEvents_SessionEnding;
                 StopMouseHook();
+                if (shellEvents != null) { shellEvents.Dispose(); shellEvents = null; }
+                if (recoveryDelayTimer != null) { recoveryDelayTimer.Dispose(); recoveryDelayTimer = null; }
                 if (searchTimer != null)
                 {
                     searchTimer.Dispose();
@@ -593,6 +700,7 @@ namespace DesktopHtmlHost
                     }
 
                     webView.Disposed -= WebView_Disposed;
+                    if (resilientWebView != null) resilientWebView.LifecycleFault -= WebView_LifecycleFault;
                     try
                     {
                         webView.Dispose();
@@ -689,28 +797,54 @@ namespace DesktopHtmlHost
             }
         }
 
-        private void PostWebMessageAsJsonSafe(string payload, string context)
+        // Consecutive failed posts tolerated before the WebView is recreated.
+        internal const int MaxFailedPosts = 5;
+        private int failedPosts;
+
+        private bool PostWebMessageAsJsonSafe(string payload, string context)
         {
             CoreWebView2 coreWebView;
             if (!TryGetCoreWebView2(out coreWebView))
             {
-                return;
+                return false;
             }
 
             try
             {
                 coreWebView.PostWebMessageAsJson(payload);
+                failedPosts = 0;
+                return true;
             }
-            catch (ObjectDisposedException)
+            catch (Exception ex)
             {
+                if (!(ex is ObjectDisposedException || ex is InvalidOperationException || ex is COMException)) throw;
+                OnWebMessageFailure(context, ex);
+                return false;
             }
-            catch (InvalidOperationException ex)
+        }
+
+        // A swallowed failure used to leave a dead WebView on the desktop for days:
+        // a disposed core recovers at once, other failures after a short streak.
+        private void OnWebMessageFailure(string context, Exception ex)
+        {
+            if (isClosing || IsDisposed) return;
+            failedPosts++;
+            if (failedPosts <= MaxFailedPosts)
             {
-                if (!isClosing)
-                {
-                    Program.LogDebug(context + " skipped: " + ex.Message);
-                }
+                Program.LogDebug(context + " skipped: " + ex.Message);
             }
+            if (ShouldRecoverAfterPostFailure(ex, failedPosts))
+            {
+                failedPosts = 0;
+                QueueWebViewRecovery(context + " failure: " + ex.Message);
+            }
+        }
+
+        internal static bool ShouldRecoverAfterPostFailure(Exception ex, int consecutiveFailures)
+        {
+            return ex is ObjectDisposedException ||
+                ResilientWebView2.IsDisposedLifecycleException(ex) ||
+                consecutiveFailures >= MaxFailedPosts;
         }
 
     }

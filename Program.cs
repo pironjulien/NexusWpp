@@ -32,6 +32,13 @@ namespace DesktopHtmlHost
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern int RegisterApplicationRestart(string commandLineArgs, int flags);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool AllowSetForegroundWindow(int processId);
+
+        private const int ASFW_ANY = -1;
+        // Startup already relaunches the app after a reboot (Run key or Store startup task).
+        private const int RESTART_NO_REBOOT = 8;
+
         [STAThread]
         static void Main(string[] args)
         {
@@ -45,6 +52,8 @@ namespace DesktopHtmlHost
                     EventWaitHandle showSettings;
                     if (EventWaitHandle.TryOpenExisting(ShowSettingsEventName, out showSettings))
                     {
+                        // This launch owns the foreground right: let the running instance bring Settings to front.
+                        AllowSetForegroundWindow(ASFW_ANY);
                         using (showSettings) showSettings.Set();
                     }
                     return;
@@ -52,6 +61,7 @@ namespace DesktopHtmlHost
 
                 // Force Process DPI Awareness to prevent Windows from virtualizing coordinates
                 SetProcessDPIAware();
+                LogDebug("NexusWpp " + NexusWpp.ReleaseVersion.Value + " starting (" + Application.ExecutablePath + ").");
 
                 RegisterForUpdateRestart(args);
                 CleanupStaleWebView2Processes();
@@ -62,7 +72,10 @@ namespace DesktopHtmlHost
                 string defaultHtml = GetDefaultHtmlPath();
                 string htmlPath = args.Length > 0 ? args[0] : defaultHtml;
 
-                Application.Run(new DesktopForm(htmlPath));
+                using (var context = new DesktopHostContext(() => new DesktopForm(htmlPath)))
+                {
+                    Application.Run(context);
+                }
                 if (QuitRequestedByUser) RestoreDesktopWallpaper();
             }
             catch (Exception ex)
@@ -76,7 +89,7 @@ namespace DesktopHtmlHost
             try
             {
                 string restartArgs = BuildRestartCommandLine(args);
-                int result = RegisterApplicationRestart(restartArgs, 0);
+                int result = RegisterApplicationRestart(restartArgs, RESTART_NO_REBOOT);
                 if (result != 0)
                 {
                     LogDebug("Application restart registration returned 0x" + result.ToString("X8", CultureInfo.InvariantCulture));
@@ -229,10 +242,13 @@ namespace DesktopHtmlHost
             catch { }
         }
 
+        // Tests that compile the host sources log to their own folder, never the user's log.
+        internal static string LogPathOverride = null;
+
         internal static void LogDebug(string message)
         {
             string line = string.Format("[{0}] {1}\r\n", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), message);
-            AppendLog(Path.Combine(GetAppDataFolder(), "webview_debug.log"), line);
+            AppendLog(LogPathOverride ?? Path.Combine(GetAppDataFolder(), "webview_debug.log"), line);
         }
 
         private static void CleanupStaleWebView2Processes()
