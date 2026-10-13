@@ -511,6 +511,8 @@ namespace DesktopHtmlHost
                 window.Width, window.Height, primary.Left - window.Left, primary.Top - window.Top, primary.Width, primary.Height);
         }
 
+        private string lastLayoutMessage;
+
         private void PostLayout()
         {
             if (isClosing || IsDisposed || !IsHandleCreated) return;
@@ -521,7 +523,13 @@ namespace DesktopHtmlHost
                 System.Drawing.Rectangle window = System.Drawing.Rectangle.FromLTRB(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom);
                 Screen primary = Screen.PrimaryScreen;
                 if (window.Width <= 0 || window.Height <= 0 || primary == null) return;
-                PostWebMessageAsJsonSafe(BuildLayoutMessage(window, primary.Bounds), "Layout post");
+                string message = BuildLayoutMessage(window, primary.Bounds);
+                if (message != lastLayoutMessage)
+                {
+                    lastLayoutMessage = message;
+                    Program.LogDebug("Layout: " + message);
+                }
+                PostWebMessageAsJsonSafe(message, "Layout post");
             }
             catch (Exception ex)
             {

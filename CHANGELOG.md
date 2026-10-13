@@ -2,6 +2,26 @@
 
 ## 2026-10-13 — 1.0.39.0
 
+Audit complet sur 8 axes (86 constats vérifiés) et corrections :
+
+- Valeurs manquantes : la dernière valeur mesurée reste affichée, grisée avec le badge « Capteurs périmés » ou « Données périmées », au lieu d'un « — » qui faisait sauter l'image. « — » ne reste que pour un capteur qui n'a jamais répondu.
+- Aucune valeur inventée : plus de « ETHERNET » hors ligne (affiche « HORS LIGNE »), plus de 180 processus / 1200 threads ni de 3,80 GHz par défaut ; une carte Intel Arc dédiée n'est plus prise pour une puce intégrée ; après une pause ou une mise en veille, les débits repartent d'une mesure fraîche.
+- Wi-Fi : le signal est lu sans l'API que Windows 11 soumet à la localisation ; NexusWpp ne déclenche plus l'autorisation de localisation.
+- Multi-écrans : le fond d'écran ne part plus hors écran avec un moniteur à gauche ou au-dessus du principal ; le cockpit se place sur l'écran principal au lieu d'être coupé à la jointure. Sur un seul écran, rien ne change. Détection de pause cohérente avec des DPI différents.
+- Auto-réparation : WebView2 est relancé s'il meurt (un arrêt de 42 h avait été constaté), avec un traitement adapté à chaque type de panne ; NexusWpp se rattache après un redémarrage d'Explorer au lieu de se fermer.
+- Clics : la fenêtre de réglages et ses boîtes de dialogue gardent leurs clics ; appui et relâchement sont traités ensemble ; le hook souris est retiré pendant la pause.
+- Pause aussi quand l'écran est éteint.
+- Consommation : collecte de télémétrie en ~16 ms au lieu de ~63 ms (réseau et disque via les compteurs Windows), nvidia-smi espacé sur batterie et jamais quand la carte dort ; animations calées sur une seule horloge à 12 Hz (page ~70 % moins coûteuse en banc de mesure ; sur le bureau réel 5120x1440, environ 21 à 30 % d'un cœur au total selon les mesures).
+- Radar net en haute résolution (125 à 200 %). Réglage Windows « Effets d'animation » respecté.
+- Capteurs GPU AMD et Intel dédiés (température, fréquence mémoire, ventilateur) via WDDM, sans pilote supplémentaire.
+- Panneau d'alimentation : plans lus par l'API Windows et triés Économie → Normal → Performances ; sur les portables qui n'ont qu'un plan, les trois modes d'alimentation de Windows sont proposés.
+- Nombres : virgule décimale en français ; plus de « Mo »/« Go » dans l'interface anglaise.
+- Réglages : accueil au premier lancement, version, bouton « Noter NexusWpp », accès au démarrage avec Windows et au dossier des journaux ; import de logo plus sûr (orientation des photos, taille limitée, PNG/JPEG/BMP) ; la fenêtre passe au premier plan quand on relance NexusWpp.
+- Installeur EXE : dossier sécurisé, fond d'écran lancé sans droits administrateur, runtime WebView2 vérifié par signature Microsoft ; la désinstallation redessine le fond Windows et supprime les données de l'utilisateur.
+- Sécurité : WebView2 verrouillé (menus, outils de développement, zoom, téléchargements, permissions) et politique de sécurité du contenu stricte ; adresses IP retirées des données envoyées à la page.
+- Diagnostics : version et vraie version de Windows dans le journal, journal limité à 1 Mo, vrais plantages remontés à Windows.
+- CI : nouvelles suites d'interface lancées sur GitHub ; script `scripts	ag_release.ps1` pour étiqueter chaque version.
+
 - Fenêtre de réglages : le texte d'aide n'est plus coupé avec une mise à l'échelle Windows de 125 % ou plus. La mise à l'échelle automatique n'était pas appliquée (construction sans `SuspendLayout`/`ResumeLayout`) et les textes avaient des tailles fixes ; la fenêtre utilise maintenant une mise en page automatique qui s'adapte au texte, à la langue et au DPI.
 - Test : la fenêtre de réglages est vérifiée de 100 % à 200 %, avec et sans mise à l'échelle de la mise en page (aucun texte coupé, hors de la fenêtre ou superposé). Ce test échoue sur la version 1.0.37.
 
