@@ -68,7 +68,7 @@ namespace DesktopHtmlHost
                 // Read before anything creates the data folder: a profile without WebView2 data is a first launch.
                 FirstLaunch = !File.Exists(WelcomeFlagPath) && !Directory.Exists(GetWebViewUserDataFolder());
                 if (!FirstLaunch) MarkWelcomeShown();
-                LogDebug("NexusWpp " + NexusWpp.ReleaseVersion.Value + (IsPackaged ? " (Store)" : " (EXE)") + " starting on Windows " + Environment.OSVersion.Version + " (" + Application.ExecutablePath + ").");
+                LogDebug("NexusWpp " + NexusWpp.ReleaseVersion.Value + (IsPackaged ? " (Store)" : " (EXE)") + " starting on Windows " + RealWindowsVersion() + " (" + Application.ExecutablePath + ").");
 
                 // Force Process DPI Awareness to prevent Windows from virtualizing coordinates
                 SetProcessDPIAware();
@@ -102,6 +102,31 @@ namespace DesktopHtmlHost
                 WriteCrashLog(ex);
                 Environment.FailFast("NexusWpp crashed: " + ex.Message, ex);
             }
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct OSVERSIONINFOEX
+        {
+            public int dwOSVersionInfoSize, dwMajorVersion, dwMinorVersion, dwBuildNumber, dwPlatformId;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string szCSDVersion;
+            public short wServicePackMajor, wServicePackMinor, wSuiteMask;
+            public byte wProductType, wReserved;
+        }
+
+        [DllImport("ntdll.dll")]
+        private static extern int RtlGetVersion(ref OSVERSIONINFOEX versionInfo);
+
+        // Environment.OSVersion reports 6.2.9200 to apps without a compatibility manifest.
+        internal static string RealWindowsVersion()
+        {
+            try
+            {
+                var info = new OSVERSIONINFOEX { dwOSVersionInfoSize = Marshal.SizeOf(typeof(OSVERSIONINFOEX)) };
+                if (RtlGetVersion(ref info) == 0)
+                    return info.dwMajorVersion + "." + info.dwMinorVersion + "." + info.dwBuildNumber;
+            }
+            catch { }
+            return Environment.OSVersion.Version.ToString();
         }
 
         internal static bool FirstLaunch { get; private set; }
