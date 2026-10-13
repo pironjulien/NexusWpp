@@ -184,15 +184,25 @@ document.addEventListener("visibilitychange", () => {
     setRuntimeSuspended(hostRuntimeSuspended || document.hidden);
 });
 
-// Load Logo Image in case it can be drawn at NPU Core
+// Center logo: the brand logo by default, or the user's own image sent by the host settings.
+const DEFAULT_LOGO = "julienpiron.png";
 const logoImg = new Image();
-logoImg.src = "julienpiron.png";
 let logoLoaded = false;
 logoImg.onload = () => {
     logoLoaded = true;
     redrawCanvas();
 };
-logoImg.onerror = () => {};
+logoImg.onerror = () => {
+    // An unreadable custom image falls back to the brand logo.
+    if (logoImg.src.startsWith("data:")) setCenterLogo(null);
+};
+function setCenterLogo(source) {
+    const next = typeof source === "string" && source.startsWith("data:image/") ? source : DEFAULT_LOGO;
+    if (logoImg.getAttribute("src") === next) return;
+    logoLoaded = false;
+    logoImg.src = next;
+}
+setCenterLogo(null);
 
 // Interactive state
 let mouse = { x: null, y: null, isDown: false, grabbedNode: null };
@@ -1664,6 +1674,8 @@ function connectStream() {
                     if (stats.control === "SUSPEND" || stats.control === "RESUME") {
                         hostRuntimeSuspended = stats.control === "SUSPEND";
                         setRuntimeSuspended(hostRuntimeSuspended || document.hidden);
+                    } else if (stats.control === "SETTINGS") {
+                        setCenterLogo(stats.logo);
                     } else if (stats.control === "POWER_RESULT") {
                         if (!pendingPowerPlanGuid || stats.requestedGuid === pendingPowerPlanGuid) {
                             clearPowerPlanPending();

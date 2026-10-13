@@ -70,7 +70,7 @@ namespace DesktopHtmlHost
         // Process lists and cached top processes
         private string cachedTopProcessesJson = "[]";
         private string cachedTopRamProcessJson = "{}";
-        private int topProcessCounter = 0;
+        private int topProcessCounter = 3; // first ranking on the first collection
         private bool topProcessUpdatePending = false;
 
         // Network rates cache
@@ -105,6 +105,42 @@ namespace DesktopHtmlHost
         // the wallpaper host. Windows performance counters remain the fast utilization source.
         private readonly NvidiaTelemetry nvidiaTelemetry = new NvidiaTelemetry();
 
+        // One persistent PDH query sampled once per collection (memory, system, CPU clock, GPU/NPU).
+        private PdhQuery perf;
+        private PdhQuery processPerf;
+        private const string PdhProcessCpu = @"\Process(*)\% Processor Time";
+        private const string PdhProcessPrivateBytes = @"\Process(*)\Working Set - Private";
+        private const string PdhCacheBytes = @"\Memory\Cache Bytes";
+        private const string PdhStandbyNormal = @"\Memory\Standby Cache Normal Priority Bytes";
+        private const string PdhStandbyReserve = @"\Memory\Standby Cache Reserve Bytes";
+        private const string PdhStandbyCore = @"\Memory\Standby Cache Core Bytes";
+        private const string PdhPoolPaged = @"\Memory\Pool Paged Bytes";
+        private const string PdhPoolNonPaged = @"\Memory\Pool Nonpaged Bytes";
+        private const string PdhPageFaults = @"\Memory\Page Faults/sec";
+        private const string PdhThreads = @"\System\Threads";
+        private const string PdhProcesses = @"\System\Processes";
+        private const string PdhCpuPerformance = @"\Processor Information(_Total)\% Processor Performance";
+        private const string PdhCpuFrequency = @"\Processor Information(_Total)\Processor Frequency";
+
+        private void OpenPerformanceCounters()
+        {
+            perf = new PdhQuery();
+            foreach (string path in new[] { PdhCacheBytes, PdhStandbyNormal, PdhStandbyReserve, PdhStandbyCore, PdhPoolPaged,
+                PdhPoolNonPaged, PdhPageFaults, PdhThreads, PdhProcesses, PdhCpuPerformance, PdhCpuFrequency })
+            {
+                perf.Add(path);
+            }
+            WindowsGpuTelemetry.AddCounters(perf);
+            perf.Collect(); // baseline for rate counters
+
+            // Process ranking has its own query: it is sampled every 4 s, so % Processor Time
+            // is the average over that window rather than an instant.
+            processPerf = new PdhQuery();
+            processPerf.Add(PdhProcessCpu);
+            processPerf.Add(PdhProcessPrivateBytes);
+            processPerf.Collect();
+        }
+
         // Windows may be installed on a drive other than C:; the value is validated
         // because it is interpolated into WMI queries.
         private static readonly string SystemDrive = ResolveSystemDrive();
@@ -133,6 +169,9 @@ namespace DesktopHtmlHost
         private double cachedCpuFreqGhz = 0.0;
         public void Initialize()
         {
+            try { OpenPerformanceCounters(); }
+            catch (Exception ex) { DesktopHtmlHost.Program.LogDebug("Performance counters unavailable: " + ex.Message); }
+
             // Read GPUs AdapterLuid and names from Registry
             try
             {
@@ -1086,22 +1125,24 @@ namespace DesktopHtmlHost
                     int cpuCount = Environment.ProcessorCount;
                     if (cpuCount <= 0) cpuCount = 1;
 
-                    using (var searcher = new ManagementObjectSearcher(@"root\cimv2", "SELECT Name, PercentProcessorTime, WorkingSetPrivate FROM Win32_PerfFormattedData_PerfProc_Process WHERE Name <> '_Total' AND Name <> 'Idle'"))
+                    if (processPerf == null || !processPerf.Collect()) return;
+                    var cpuRows = processPerf.Instances(PdhProcessCpu);
+                    var ramRows = processPerf.Instances(PdhProcessPrivateBytes);
+                    if (cpuRows == null || ramRows == null) return;
+                    var ramByInstance = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var row in ramRows) ramByInstance[row.Key] = row.Value;
+                    foreach (var row in cpuRows)
                     {
-                        foreach (ManagementObject obj in searcher.Get())
-                        {
-                            object nameVal = obj["Name"];
-                            string name = nameVal != null ? nameVal.ToString() : "";
-                            int hashIndex = name.IndexOf('#');
-                            if (hashIndex != -1) name = name.Substring(0, hashIndex);
+                        string name = row.Key ?? "";
+                        if (name == "_Total" || name == "Idle") continue;
+                        double ramBytes;
+                        ramByInstance.TryGetValue(name, out ramBytes);
+                        int hashIndex = name.IndexOf('#');
+                        if (hashIndex != -1) name = name.Substring(0, hashIndex);
 
-                            int pct = Convert.ToInt32(obj["PercentProcessorTime"] ?? 0);
-                            int cpuPercent = (int)Math.Min(99, Math.Round((double)pct / cpuCount));
-                            long ramBytes = Convert.ToInt64(obj["WorkingSetPrivate"] ?? 0L);
-                            long ramMb = ramBytes / (1024 * 1024);
-
-                            processes.Add(new Tuple<string, int, long>(name, cpuPercent, ramMb));
-                        }
+                        int cpuPercent = (int)Math.Min(99, Math.Round(Math.Max(0, row.Value) / cpuCount));
+                        long ramMb = (long)(Math.Max(0, ramBytes) / (1024 * 1024));
+                        processes.Add(new Tuple<string, int, long>(name, cpuPercent, ramMb));
                     }
 
                     var topList = processes.OrderByDescending(p => p.Item2).Take(4).ToList();
@@ -1240,75 +1281,42 @@ namespace DesktopHtmlHost
             long ramPoolPagedBytes = cachedRamPoolPagedBytes;
             long ramPoolNonPagedBytes = cachedRamPoolNonPagedBytes;
             long ramActivityVal = cachedRamActivityVal;
-            if (lastMemoryPerfTime == DateTime.MinValue || (DateTime.Now - lastMemoryPerfTime).TotalSeconds >= 2.0)
+            bool perfSampled = perf != null && perf.Collect();
+            if (perfSampled)
             {
-                try
+                double? cache = perf.Value(PdhCacheBytes);
+                if (cache.HasValue)
                 {
-                    using (var searcher = new ManagementObjectSearcher("SELECT CacheBytes, StandbyCacheNormalPriorityBytes, StandbyCacheReserveBytes, StandbyCacheCoreBytes, PoolPagedBytes, PoolNonpagedBytes, PageFaultsPersec FROM Win32_PerfFormattedData_PerfOS_Memory"))
-                    {
-                        foreach (ManagementObject obj in searcher.Get())
-                        {
-                            ulong cache = Convert.ToUInt64(obj["CacheBytes"] ?? 0);
-                            ulong standbyNormal = Convert.ToUInt64(obj["StandbyCacheNormalPriorityBytes"] ?? 0);
-                            ulong standbyReserve = Convert.ToUInt64(obj["StandbyCacheReserveBytes"] ?? 0);
-                            ulong standbyCore = Convert.ToUInt64(obj["StandbyCacheCoreBytes"] ?? 0);
-                            ramCachedBytes = (long)(cache + standbyNormal + standbyReserve + standbyCore);
-                            ramPoolPagedBytes = (long)(Convert.ToUInt64(obj["PoolPagedBytes"] ?? 0));
-                            ramPoolNonPagedBytes = (long)(Convert.ToUInt64(obj["PoolNonpagedBytes"] ?? 0));
-                            ramActivityVal = (long)(Convert.ToUInt32(obj["PageFaultsPersec"] ?? 0));
-                            cachedRamCachedBytes = ramCachedBytes;
-                            cachedRamPoolPagedBytes = ramPoolPagedBytes;
-                            cachedRamPoolNonPagedBytes = ramPoolNonPagedBytes;
-                            cachedRamActivityVal = ramActivityVal;
-                            lastMemoryPerfTime = DateTime.Now;
-                            break;
-                        }
-                    }
+                    ramCachedBytes = (long)(cache.Value + (perf.Value(PdhStandbyNormal) ?? 0) + (perf.Value(PdhStandbyReserve) ?? 0) + (perf.Value(PdhStandbyCore) ?? 0));
+                    cachedRamCachedBytes = ramCachedBytes;
+                    lastMemoryPerfTime = DateTime.Now;
                 }
-                catch {}
+                double? poolPaged = perf.Value(PdhPoolPaged), poolNonPaged = perf.Value(PdhPoolNonPaged), faults = perf.Value(PdhPageFaults);
+                if (poolPaged.HasValue) cachedRamPoolPagedBytes = ramPoolPagedBytes = (long)poolPaged.Value;
+                if (poolNonPaged.HasValue) cachedRamPoolNonPagedBytes = ramPoolNonPagedBytes = (long)poolNonPaged.Value;
+                if (faults.HasValue) cachedRamActivityVal = ramActivityVal = (long)Math.Round(faults.Value);
             }
 
             int threadsCount = cachedThreadsCount;
             int processesCount = cachedProcessesCount;
-            if (lastSystemPerfTime == DateTime.MinValue || (DateTime.Now - lastSystemPerfTime).TotalSeconds >= 2.0)
+            if (perfSampled)
             {
-                try
+                double? threads = perf.Value(PdhThreads), processes = perf.Value(PdhProcesses);
+                if (threads.HasValue && processes.HasValue)
                 {
-                    using (var searcher = new ManagementObjectSearcher("SELECT Threads, Processes FROM Win32_PerfFormattedData_PerfOS_System"))
-                    {
-                        foreach (ManagementObject obj in searcher.Get())
-                        {
-                            threadsCount = Convert.ToInt32(obj["Threads"] ?? 0);
-                            processesCount = Convert.ToInt32(obj["Processes"] ?? 0);
-                            cachedThreadsCount = threadsCount;
-                            cachedProcessesCount = processesCount;
-                            lastSystemPerfTime = DateTime.Now;
-                            break;
-                        }
-                    }
+                    cachedThreadsCount = threadsCount = (int)threads.Value;
+                    cachedProcessesCount = processesCount = (int)processes.Value;
+                    lastSystemPerfTime = DateTime.Now;
                 }
-                catch {}
 
                 // Real average core frequency. The performance percentage is relative to the
-                // counter's own ProcessorFrequency base (true base clock on hybrid CPUs), not
+                // counter's own Processor Frequency base (true base clock on hybrid CPUs), not
                 // to the WMI MaxClockSpeed value which can be a different reference.
-                try
+                double? perfPct = perf.Value(PdhCpuPerformance), counterBaseMhz = perf.Value(PdhCpuFrequency);
+                if (perfPct > 0 && counterBaseMhz > 0)
                 {
-                    using (var searcher = new ManagementObjectSearcher("SELECT PercentProcessorPerformance, ProcessorFrequency FROM Win32_PerfFormattedData_Counters_ProcessorInformation WHERE Name LIKE '%_Total'"))
-                    {
-                        foreach (ManagementObject obj in searcher.Get())
-                        {
-                            double perfPct = Convert.ToDouble(obj["PercentProcessorPerformance"] ?? 0.0);
-                            double counterBaseMhz = Convert.ToDouble(obj["ProcessorFrequency"] ?? 0.0);
-                            if (perfPct > 0 && counterBaseMhz > 0)
-                            {
-                                cachedCpuFreqGhz = counterBaseMhz * perfPct / 100.0 / 1000.0;
-                            }
-                            break;
-                        }
-                    }
+                    cachedCpuFreqGhz = counterBaseMhz.Value * perfPct.Value / 100.0 / 1000.0;
                 }
-                catch {}
             }
 
             long diskReadSec = 0;
@@ -1332,12 +1340,12 @@ namespace DesktopHtmlHost
             int npuUtil = cachedNpuUtil;
             long npuMemBytes = cachedNpuMemBytes;
             int dgpuUtil = cachedDgpuUtil;
-            if (lastGpuAttempt == DateTime.MinValue || (DateTime.UtcNow - lastGpuAttempt).TotalSeconds >= 2.0)
+            if (perfSampled)
             {
                 lastGpuAttempt = DateTime.UtcNow;
                 gpuCountersFresh = false;
                 if (NpuDetected && string.IsNullOrEmpty(npuLuid)) npuLuid = DiscoverNpuLuid();
-                var counters = WindowsGpuTelemetry.Read(igpuLuid, dgpuLuid, npuLuid);
+                var counters = WindowsGpuTelemetry.Read(perf, igpuLuid, dgpuLuid, npuLuid);
                 cachedIgpuUtil = igpuUtil = counters[0].Utilization;
                 cachedIgpuDecodeUtil = igpuDecodeUtil = counters[0].Decode;
                 cachedIgpuMemBytes = igpuMemBytes = counters[0].SharedBytes;

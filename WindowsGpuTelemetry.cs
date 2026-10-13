@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Management;
 
 namespace DesktopHtmlHost
 {
@@ -29,29 +28,27 @@ namespace DesktopHtmlHost
             // Separate engines run concurrently, so retain the busiest, not their sum.
             return Math.Max(BusiestEngine(rows,luid,"Neural"),BusiestEngine(rows,luid,"Compute"));
         }
-        // Two WMI snapshots for all adapters, replacing repeated per-adapter queries.
-        internal static WindowsGpuSample[] Read(string igpu,string dgpu,string npu) {
+        const string EngineUtilization=@"\GPU Engine(*)\Utilization Percentage";
+        const string SharedUsage=@"\GPU Adapter Memory(*)\Shared Usage";
+        const string DedicatedUsage=@"\GPU Adapter Memory(*)\Dedicated Usage";
+        internal static void AddCounters(PdhQuery perf) {
+            perf.Add(EngineUtilization);perf.Add(SharedUsage);perf.Add(DedicatedUsage);
+        }
+        // All adapters from the collection's PDH sample (instances follow processes as they come and go).
+        internal static WindowsGpuSample[] Read(PdhQuery perf,string igpu,string dgpu,string npu) {
             string[] luids={igpu,dgpu,npu};var result=new[]{new WindowsGpuSample(),new WindowsGpuSample(),new WindowsGpuSample()};
-            try {
-                var rows=new List<GpuEngineReading>();
-                using(var query=new ManagementObjectSearcher("SELECT Name,UtilizationPercentage FROM Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine")) {
-                    query.Options.Timeout=TimeSpan.FromSeconds(2);
-                    foreach(ManagementObject row in query.Get()) rows.Add(new GpuEngineReading {Name=Convert.ToString(row["Name"]),Utilization=Convert.ToInt32(row["UtilizationPercentage"]??0)});
-                }
+            var engines=perf.Instances(EngineUtilization);
+            if(engines!=null) {
+                var rows=new List<GpuEngineReading>(engines.Count);
+                foreach(var engine in engines) rows.Add(new GpuEngineReading {Name=engine.Key,Utilization=(int)Math.Round(Math.Max(0,engine.Value))});
                 for(int i=0;i<3;i++) {result[i].Utilization=i==2?BusiestNpuEngine(rows,luids[i]):BusiestEngine(rows,luids[i],"3D");result[i].Decode=BusiestEngine(rows,luids[i],"VideoDecode");}
-            } catch(Exception) { }
-            try {
-                using(var query=new ManagementObjectSearcher("SELECT Name,SharedUsage,DedicatedUsage FROM Win32_PerfFormattedData_GPUPerformanceCounters_GPUAdapterMemory")) {
-                    query.Options.Timeout=TimeSpan.FromSeconds(2);
-                    foreach(ManagementObject row in query.Get()) {
-                        string name=Convert.ToString(row["Name"]);
-                        for(int i=0;i<3;i++) if(!string.IsNullOrEmpty(luids[i]) && name.IndexOf(luids[i],StringComparison.OrdinalIgnoreCase)>=0) {
-                            result[i].SharedBytes=Math.Max(0,Convert.ToInt64(row["SharedUsage"]??0));
-                            result[i].DedicatedBytes=Math.Max(0,Convert.ToInt64(row["DedicatedUsage"]??0));
-                        }
-                    }
-                }
-            } catch(Exception) { }
+            }
+            var shared=perf.Instances(SharedUsage);var dedicated=perf.Instances(DedicatedUsage);
+            for(int i=0;i<3;i++) {
+                if(string.IsNullOrEmpty(luids[i]))continue;
+                if(shared!=null) foreach(var row in shared) if(row.Key.IndexOf(luids[i],StringComparison.OrdinalIgnoreCase)>=0) result[i].SharedBytes=(long)Math.Max(0,row.Value);
+                if(dedicated!=null) foreach(var row in dedicated) if(row.Key.IndexOf(luids[i],StringComparison.OrdinalIgnoreCase)>=0) result[i].DedicatedBytes=(long)Math.Max(0,row.Value);
+            }
             return result;
         }
     }
