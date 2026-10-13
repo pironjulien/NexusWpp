@@ -174,6 +174,7 @@ $manifest = @"
   </Dependencies>
   <Resources>
     <Resource Language="fr-fr" />
+    <Resource Language="en-us" />
   </Resources>
   <Applications>
     <Application
@@ -184,7 +185,7 @@ $manifest = @"
       uap10:TrustLevel="mediumIL">
       <uap:VisualElements
         DisplayName="NexusWpp"
-        Description="Fond d'ecran telemetry cockpit"
+        Description="Live PC telemetry wallpaper"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png" />
@@ -210,7 +211,7 @@ $manifest = @"
 Set-Content -LiteralPath (Join-Path $packageDir "AppxManifest.xml") -Value $manifest -Encoding UTF8
 
 $priConfigPath = Join-Path $packageDir "priconfig.xml"
-& $makePri createconfig /cf $priConfigPath /dq fr-FR /o
+& $makePri createconfig /cf $priConfigPath /dq fr-FR_en-US /o
 if ($LASTEXITCODE -ne 0) {
     throw "makepri createconfig failed with exit code $LASTEXITCODE"
 }
