@@ -58,5 +58,10 @@ $expanded = foreach ($item in $cases) {
     }
 }
 $expanded | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $casesPath -Encoding UTF8
-& $binary $project $output $casesPath
-if ($LASTEXITCODE -ne 0) { throw "Responsive layout failures; see $output\results.json" }
+# Every case runs in both interface languages: English labels have other lengths.
+foreach ($language in @('fr', 'en')) {
+    $languageOutput = Join-Path $output $language
+    New-Item -ItemType Directory -Path $languageOutput -Force | Out-Null
+    & $binary $project $languageOutput $casesPath $language
+    if ($LASTEXITCODE -ne 0) { throw "Responsive layout failures ($language); see $languageOutput\results.json" }
+}

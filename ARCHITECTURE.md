@@ -42,6 +42,8 @@ Telemetry is collected in `TelemetryCollector.cs`. `NvidiaTelemetry.cs` isolates
 - System uptime: `GetTickCount64`
 - Power plans: `powercfg /list`, `PowerGetActiveScheme`, and `PowerSetActiveScheme`
 
+Visible text lives in `i18n.js` (French and English, chosen from the Windows display language through `navigator.language`; `?lang=` overrides it in tests).
+
 The frontend receives telemetry only through WebView2 messages. There is no HTTP server in the current native architecture.
 
 ## Interaction

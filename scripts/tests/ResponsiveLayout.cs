@@ -14,7 +14,7 @@ class ResponsiveLayout : Form
 {
     readonly WebView2 view = new WebView2 { Dock = DockStyle.Fill };
     readonly JavaScriptSerializer json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
-    readonly string project, output, casesPath;
+    readonly string project, output, casesPath, language;
     bool ready;
     int result = 1;
 
@@ -27,7 +27,7 @@ class ResponsiveLayout : Form
 
     ResponsiveLayout(string[] args)
     {
-        project = args[0]; output = args[1]; casesPath = args[2];
+        project = args[0]; output = args[1]; casesPath = args[2]; language = args.Length > 3 ? args[3] : "fr";
         Text = "NexusWpp — validation des formats d'écran";
         ClientSize = new Size(960, 640);
         ShowInTaskbar = false;
@@ -58,7 +58,7 @@ class ResponsiveLayout : Form
                     ready = true;
                 }
             };
-            view.Source = new Uri("http://nexuswpp.local/index.html");
+            view.Source = new Uri("http://nexuswpp.local/index.html?lang=" + language);
             for (int i = 0; i < 100 && !ready; i++) await Task.Delay(100);
             if (!ready) throw new Exception("Page did not initialize");
             await Script(File.ReadAllText(Path.Combine(project, "scripts", "tests", "responsive_layout.js")));

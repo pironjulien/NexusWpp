@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-13 — 1.0.35.0
+
+- Interface en anglais : la langue suit celle de Windows (français sur un Windows en français, anglais partout ailleurs), y compris la date, les unités (Go/GB, Mo/s/MB/s) et les messages d'accessibilité.
+- Icône « économie » reconnue aussi pour les modes d'alimentation Windows en anglais (« Power saver »).
+- Test de disposition exécuté dans les deux langues (1230 cas chacune) ; captures Store générées en français et en anglais.
+
 ## 2026-10-13 — 1.0.34.0
 
 - Économiseur d'énergie Windows : quand il est activé, les deux anneaux du logo s'immobilisent (c'est l'animation qui coûte le plus) ; valeurs, horloge et paquets de données continuent de se mettre à jour. Aucun changement visuel le reste du temps.
