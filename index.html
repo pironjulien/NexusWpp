@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JULIENPIRON.FR - Control Cockpit</title>
-    <link rel="stylesheet" href="style.css?v=23">
+    <link rel="stylesheet" href="style.css?v=24">
 </head>
 <body>
     <!-- Vibrant Saturated Cosmic Background (Booster for Apple Glass) -->
@@ -15,7 +15,8 @@
         <div class="nebula nebula-green"></div>
     </div>
 
-    <!-- Main Container -->
+    <!-- Main Container: laid out in the layout frame (primary monitor on multi-monitor desktops) -->
+    <div class="layout-frame"><div class="layout-safe">
     <main class="dashboard" id="main-dashboard">
         <h1 class="sr-only">JULIENPIRON.FR - Control Cockpit</h1>
         <!-- Main Workspace: 3 Columns Symmetric Layout -->
@@ -345,12 +346,13 @@
 
         </section>
     </main>
+    </div></div>
 
     <script src="telemetry-state.js" charset="UTF-8"></script>
     <script src="i18n.js" charset="UTF-8"></script>
     <script src="cockpit-state.js" charset="UTF-8"></script>
     <script src="radar.js" charset="UTF-8"></script>
     <script src="dashboard.js" charset="UTF-8"></script>
-    <script src="app.js?v=23" charset="UTF-8"></script>
+    <script src="app.js?v=24" charset="UTF-8"></script>
 </body>
 </html>
