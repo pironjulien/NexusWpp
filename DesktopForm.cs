@@ -542,6 +542,13 @@ namespace DesktopHtmlHost
             if (isClosing || IsDisposed) return;
             TryBeginInvoke((MethodInvoker)delegate {
                 UpdateBoundsToVirtualScreen();
+                // Still attached to the real desktop layer: resizing is enough. A full re-attach
+                // detaches the window and flashes black, which happened on every GPU/display change.
+                if (IsAttachedToLiveDesktop())
+                {
+                    Program.LogDebug("Display settings changed: wallpaper resized in place.");
+                    return;
+                }
                 QueueDesktopReattach("display settings changed");
             });
         }
@@ -576,6 +583,14 @@ namespace DesktopHtmlHost
                 });
                 QueueDesktopReattach("session became active: " + e.Reason);
             }
+        }
+
+        // Attached to Explorer's wallpaper layer (not the temporary Progman fallback) and still its child.
+        private bool IsAttachedToLiveDesktop()
+        {
+            return desktopAttached && !attachedToTemporaryParent && IsHandleCreated &&
+                   currentDesktopParent != IntPtr.Zero && IsWindow(currentDesktopParent) &&
+                   GetParent(Handle) == currentDesktopParent;
         }
 
         private void QueueDesktopReattach(string reason)

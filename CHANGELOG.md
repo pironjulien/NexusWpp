@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-13 — 1.0.40.0
+
+- Courbes d'historique sur toute la hauteur des cartes, en filigrane derrière les valeurs.
+- Fin des coupures noires : un changement d'affichage (bascule de carte graphique, réveil, résolution) redimensionne le fond d'écran sur place au lieu de le détacher puis le rattacher au bureau ; le journal en comptait 534 en pleine session. Le double rattachement au démarrage disparaît aussi.
+- WebView2 ne calcule plus lui-même le masquage de la fenêtre (CalculateNativeWinOcclusion) : quand deux fenêtres couvrent tout l'écran, l'image n'est plus jetée ; NexusWpp gère seul sa pause.
+- Journal : vraie version de Windows (RtlGetVersion) au lieu de 6.2.9200.
+
 ## 2026-10-13 — 1.0.39.0
 
 Audit complet sur 8 axes (86 constats vérifiés) et corrections :
