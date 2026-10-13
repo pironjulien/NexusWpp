@@ -32,6 +32,15 @@ namespace DesktopHtmlHost
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern int RegisterApplicationRestart(string commandLineArgs, int flags);
 
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetCurrentPackageFullName(ref int packageFullNameLength, StringBuilder packageFullName);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetCurrentPackageFamilyName(ref int packageFamilyNameLength, StringBuilder packageFamilyName);
+
+        [DllImport("user32.dll")]
+        private static extern bool AllowSetForegroundWindow(int processId);
+
         [STAThread]
         static void Main(string[] args)
         {
@@ -45,10 +54,18 @@ namespace DesktopHtmlHost
                     EventWaitHandle showSettings;
                     if (EventWaitHandle.TryOpenExisting(ShowSettingsEventName, out showSettings))
                     {
+                        // This launch owns the foreground: let the running instance bring its window forward.
+                        const int ASFW_ANY = -1;
+                        try { AllowSetForegroundWindow(ASFW_ANY); } catch { }
                         using (showSettings) showSettings.Set();
                     }
                     return;
                 }
+
+                // Read before anything creates the data folder: a profile without WebView2 data is a first launch.
+                FirstLaunch = !File.Exists(WelcomeFlagPath) && !Directory.Exists(GetWebViewUserDataFolder());
+                if (!FirstLaunch) MarkWelcomeShown();
+                LogDebug("NexusWpp " + NexusWpp.ReleaseVersion.Value + (IsPackaged ? " (Store)" : " (EXE)") + " starting on Windows " + Environment.OSVersion.Version + ".");
 
                 // Force Process DPI Awareness to prevent Windows from virtualizing coordinates
                 SetProcessDPIAware();
@@ -58,6 +75,13 @@ namespace DesktopHtmlHost
 
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
+                // No WinForms "Continue" dialog on the desktop: unexpected errors reach the crash handler below.
+                Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
+                AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+                {
+                    Exception error = e.ExceptionObject as Exception;
+                    if (error != null) WriteCrashLog(error);
+                };
 
                 string defaultHtml = GetDefaultHtmlPath();
                 string htmlPath = args.Length > 0 ? args[0] : defaultHtml;
@@ -67,8 +91,73 @@ namespace DesktopHtmlHost
             }
             catch (Exception ex)
             {
+                // A real crash: keep a trace, then let Windows Error Reporting record it (and the
+                // registered restart apply) instead of exiting as if nothing happened.
                 WriteCrashLog(ex);
+                Environment.FailFast("NexusWpp crashed: " + ex.Message, ex);
             }
+        }
+
+        internal static bool FirstLaunch { get; private set; }
+
+        private static string WelcomeFlagPath
+        {
+            get { return Path.Combine(GetAppDataFolder(), "welcome-shown"); }
+        }
+
+        internal static void MarkWelcomeShown()
+        {
+            try
+            {
+                Directory.CreateDirectory(GetAppDataFolder());
+                File.WriteAllText(WelcomeFlagPath, NexusWpp.ReleaseVersion.Value);
+            }
+            catch (Exception ex)
+            {
+                LogDebug("Welcome flag write failed: " + ex.Message);
+            }
+            FirstLaunch = false;
+        }
+
+        // Store (MSIX) build: the process runs with a package identity.
+        internal static bool IsPackaged
+        {
+            get
+            {
+                try
+                {
+                    int length = 0;
+                    const int APPMODEL_ERROR_NO_PACKAGE = 15700;
+                    return GetCurrentPackageFullName(ref length, null) != APPMODEL_ERROR_NO_PACKAGE;
+                }
+                catch (EntryPointNotFoundException) { return false; }
+            }
+        }
+
+        // Folder holding webview_debug.log as Explorer sees it. A packaged process writes its
+        // AppData into the package's LocalCache, which Explorer does not redirect.
+        internal static string GetLogsFolderForShell()
+        {
+            string folder = GetAppDataFolder();
+            try
+            {
+                int length = 0;
+                if (GetCurrentPackageFamilyName(ref length, null) == 122 /* ERROR_INSUFFICIENT_BUFFER */ && length > 0)
+                {
+                    var family = new StringBuilder(length);
+                    if (GetCurrentPackageFamilyName(ref length, family) == 0)
+                    {
+                        string redirected = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                            "Packages", family.ToString(), "LocalCache", "Local", AppDataFolderName);
+                        if (Directory.Exists(redirected)) return redirected;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogDebug("Package folder lookup failed: " + ex.Message);
+            }
+            return folder;
         }
 
         private static void RegisterForUpdateRestart(string[] args)
@@ -191,12 +280,14 @@ namespace DesktopHtmlHost
             {
                 string dir = GetAppDataFolder();
                 Directory.CreateDirectory(dir);
-                File.WriteAllText(Path.Combine(dir, "crash.txt"), ex.ToString());
+                File.WriteAllText(Path.Combine(dir, "crash.txt"), "[" + DateTime.Now.ToString("s", CultureInfo.InvariantCulture) + "] NexusWpp " +
+                    NexusWpp.ReleaseVersion.Value + (IsPackaged ? " (Store)" : " (EXE)") + "\r\n" + ex);
             }
             catch { }
         }
 
         private static readonly object logLock = new object();
+        internal const long MaxLogBytes = 1024 * 1024;
         private static void AppendLog(string filePath, string content)
         {
             try
@@ -209,13 +300,13 @@ namespace DesktopHtmlHost
                         Directory.CreateDirectory(directory);
                     }
 
-                    // Basic log rotation (5MB limit)
+                    // Rotation: at most 1 MB current log plus one previous file.
                     if (File.Exists(filePath))
                     {
                         FileInfo fi = new FileInfo(filePath);
-                        if (fi.Length > 5 * 1024 * 1024)
+                        if (fi.Length > MaxLogBytes)
                         {
-                            string backupPath = filePath + ".bak";
+                            string backupPath = filePath + ".old";
                             if (File.Exists(backupPath))
                             {
                                 File.Delete(backupPath);

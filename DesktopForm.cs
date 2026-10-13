@@ -401,6 +401,7 @@ namespace DesktopHtmlHost
             desktopAttached = true;
             attachedToTemporaryParent = temporary;
             currentDesktopParent = parent;
+            if (firstAttach && Program.FirstLaunch) ShowWelcome();
 
             double elapsed = (DateTime.Now - startupTime).TotalSeconds;
             if (temporary)
