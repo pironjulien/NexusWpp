@@ -11,7 +11,7 @@ foreach ($dll in @('Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.Wi
 $binary = Join-Path $toolDir 'StoreScreenshots.exe'
 $refs = @('/reference:System.Windows.Forms.dll', '/reference:System.Drawing.dll', '/reference:System.Web.Extensions.dll', '/reference:System.Management.dll',
     "/reference:$toolDir\Microsoft.Web.WebView2.Core.dll", "/reference:$toolDir\Microsoft.Web.WebView2.WinForms.dll")
-$sources = @('DesktopHtmlHost.cs', 'DesktopVisibility.cs', 'NvidiaTelemetry.cs', 'TelemetryCollector.cs', 'WindowsGpuTelemetry.cs', 'work\obj\ReleaseVersion.cs') |
+$sources = @('DesktopHtmlHost.cs', 'DesktopVisibility.cs', 'NvidiaTelemetry.cs', 'TelemetryCollector.cs', 'WindowsGpuTelemetry.cs', 'PdhCounters.cs', 'SettingsForm.cs', 'UserSettings.cs', 'work\obj\ReleaseVersion.cs') |
     ForEach-Object { Join-Path $project $_ }
 & (Join-Path $PSScriptRoot 'csc.ps1') /nologo /target:winexe /platform:x64 /main:StoreScreenshots "/out:$binary" @refs @sources (Join-Path $PSScriptRoot 'tests\StoreScreenshots.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Store screenshot tool compilation failed.' }

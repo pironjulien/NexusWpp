@@ -20,6 +20,11 @@ namespace DesktopHtmlHost
     {
         private static Mutex appMutex;
         private const string AppDataFolderName = "NexusWpp";
+        internal const string ShowSettingsEventName = @"Local\NexusWppShowSettings";
+        internal static bool QuitRequestedByUser;
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool SystemParametersInfo(int action, int param, StringBuilder value, int winIni);
 
         [DllImport("user32.dll")]
         private static extern bool SetProcessDPIAware();
@@ -36,6 +41,12 @@ namespace DesktopHtmlHost
                 appMutex = new Mutex(true, @"Local\NexusWppDesktopHost", out createdNew);
                 if (!createdNew)
                 {
+                    // Launching NexusWpp again (Start menu, Store "Open") shows the running instance's settings.
+                    EventWaitHandle showSettings;
+                    if (EventWaitHandle.TryOpenExisting(ShowSettingsEventName, out showSettings))
+                    {
+                        using (showSettings) showSettings.Set();
+                    }
                     return;
                 }
 
@@ -52,6 +63,7 @@ namespace DesktopHtmlHost
                 string htmlPath = args.Length > 0 ? args[0] : defaultHtml;
 
                 Application.Run(new DesktopForm(htmlPath));
+                if (QuitRequestedByUser) RestoreDesktopWallpaper();
             }
             catch (Exception ex)
             {
@@ -126,6 +138,25 @@ namespace DesktopHtmlHost
             escaped.Append('\\', backslashCount * 2);
             escaped.Append('"');
             return escaped.ToString();
+        }
+
+        // After quitting, Explorer may keep the last frame of the injected window: repaint the
+        // user's own wallpaper with its current path, without writing the setting.
+        private static void RestoreDesktopWallpaper()
+        {
+            try
+            {
+                const int SPI_GETDESKWALLPAPER = 0x0073, SPI_SETDESKWALLPAPER = 0x0014;
+                var current = new StringBuilder(1024);
+                if (SystemParametersInfo(SPI_GETDESKWALLPAPER, current.Capacity, current, 0))
+                {
+                    SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, current, 0);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogDebug("Wallpaper repaint after quit failed: " + ex.Message);
+            }
         }
 
         internal static string GetAppDataFolder()
@@ -245,6 +276,10 @@ namespace DesktopHtmlHost
     {
         private WebView2 webView;
         private string htmlPath;
+        private NotifyIcon trayIcon;
+        private SettingsForm settingsForm;
+        private EventWaitHandle showSettingsEvent;
+        private RegisteredWaitHandle showSettingsWait;
         private System.Windows.Forms.Timer searchTimer;
         private int retryCount = 0;
         private const int maxRetries = 300;
@@ -505,6 +540,9 @@ namespace DesktopHtmlHost
             SystemEvents.SessionSwitch += SystemEvents_SessionSwitch;
             SystemEvents.SessionEnding += SystemEvents_SessionEnding;
 
+            CreateTrayIcon();
+            ListenForSettingsRequests();
+
             // Create and configure the WebView2 UI component
             CreateWebViewControl();
 
@@ -516,6 +554,71 @@ namespace DesktopHtmlHost
             searchTimer.Interval = 100;
             searchTimer.Tick += SearchTimer_Tick;
             searchTimer.Start();
+        }
+
+        private void CreateTrayIcon()
+        {
+            bool french = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "fr";
+            var menu = new ContextMenuStrip();
+            menu.Items.Add(french ? "Réglages…" : "Settings…", null, delegate { ShowSettings(); });
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(french ? "Quitter NexusWpp" : "Quit NexusWpp", null, delegate { QuitFromUser(); });
+            trayIcon = new NotifyIcon
+            {
+                Text = "NexusWpp",
+                ContextMenuStrip = menu,
+                Visible = true
+            };
+            try { trayIcon.Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
+            catch { trayIcon.Icon = System.Drawing.SystemIcons.Application; }
+            trayIcon.MouseClick += (sender, e) => { if (e.Button == MouseButtons.Left) ShowSettings(); };
+        }
+
+        private void ListenForSettingsRequests()
+        {
+            try
+            {
+                showSettingsEvent = new EventWaitHandle(false, EventResetMode.AutoReset, Program.ShowSettingsEventName);
+                showSettingsWait = ThreadPool.RegisterWaitForSingleObject(showSettingsEvent, (state, timedOut) =>
+                {
+                    TryBeginInvoke((MethodInvoker)ShowSettings);
+                }, null, Timeout.Infinite, false);
+            }
+            catch (Exception ex)
+            {
+                Program.LogDebug("Settings request listener failed: " + ex.Message);
+            }
+        }
+
+        private void ShowSettings()
+        {
+            if (isClosing) return;
+            if (settingsForm != null && !settingsForm.IsDisposed)
+            {
+                if (settingsForm.WindowState == FormWindowState.Minimized) settingsForm.WindowState = FormWindowState.Normal;
+                settingsForm.Activate();
+                return;
+            }
+            string directory = Path.GetDirectoryName(htmlPath);
+            if (string.IsNullOrEmpty(directory)) directory = AppDomain.CurrentDomain.BaseDirectory;
+            settingsForm = new SettingsForm(Path.Combine(directory, "julienpiron.png"), PostSettings, QuitFromUser);
+            settingsForm.FormClosed += delegate { settingsForm = null; };
+            settingsForm.Show();
+            settingsForm.Activate();
+        }
+
+        private void PostSettings()
+        {
+            if (isClosing) return;
+            PostWebMessageAsJsonSafe(UserSettings.BuildSettingsMessage(), "Settings post");
+        }
+
+        private void QuitFromUser()
+        {
+            Program.QuitRequestedByUser = true;
+            Program.LogDebug("Quit requested by the user.");
+            if (settingsForm != null && !settingsForm.IsDisposed) settingsForm.Close();
+            Close();
         }
 
         private void CreateWebViewControl()
@@ -741,6 +844,9 @@ namespace DesktopHtmlHost
         private void BeginCleanShutdown()
         {
             isClosing = true;
+            if (showSettingsWait != null) { showSettingsWait.Unregister(null); showSettingsWait = null; }
+            if (showSettingsEvent != null) { showSettingsEvent.Dispose(); showSettingsEvent = null; }
+            if (trayIcon != null) { trayIcon.Visible = false; trayIcon.Dispose(); trayIcon = null; }
             telemetryCollectPending = false;
             runtimeSuspended = true;
 
@@ -861,6 +967,7 @@ namespace DesktopHtmlHost
                                 // Also covers navigation/recovery while the desktop is covered.
                                 FullscreenTimer_Tick(null, null);
                                 ApplyWebViewRuntimeState();
+                                PostSettings();
                             }
                             else if (msg == "REQUEST_TELEMETRY")
                             {
@@ -907,6 +1014,10 @@ namespace DesktopHtmlHost
                         {
                             var collector = new TelemetryCollector();
                             collector.Initialize();
+                            // Warm-up sample (discarded): first WMI queries and counter baselines are slow,
+                            // so the first visible frame gets fresh values even after a covered start.
+                            try { collector.CollectStats(); }
+                            catch (Exception ex) { Program.LogDebug("Telemetry warm-up error: " + ex.Message); }
                             TryBeginInvoke((MethodInvoker)delegate
                             {
                                 telemetryCollector = collector;

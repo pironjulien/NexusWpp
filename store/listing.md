@@ -19,12 +19,13 @@ Aucun réglage n'est nécessaire : installez, et votre fond d'écran prend vie. 
 
 Conçu pour rester léger :
 • le rendu se met en pause dès qu'une fenêtre couvre le bureau, et reprend instantanément quand il redevient visible ;
+• la télémétrie utilise les compteurs natifs de Windows : quelques millisecondes par mesure ;
 • les animations restent sobres (12 images/s) ;
 • avec l'économiseur d'énergie de Windows, les anneaux du logo s'immobilisent pour économiser la batterie.
 
 Au centre, un radar relie chaque composant au logo et fait circuler des paquets de données au rythme de l'activité réelle. Les alertes « Charge élevée » et « Mémoire très utilisée » n'apparaissent qu'après plusieurs secondes de charge réelle, sans clignotement.
 
-Vous pouvez changer de mode d'alimentation Windows d'un clic, directement sur le fond d'écran.
+Vous pouvez changer de mode d'alimentation Windows d'un clic, directement sur le fond d'écran. Depuis l'icône de la zone de notification, remplacez le logo central par votre propre image, ou quittez l'application.
 
 Confidentialité : tout est mesuré localement. Pas de compte, pas de publicité, aucune donnée collectée ni envoyée. Seul un ping vers 1.1.1.1 ou 8.8.8.8 mesure la latence internet.
 
@@ -38,6 +39,7 @@ Confidentialité : tout est mesuré localement. Pas de compte, pas de publicité
 - Pause automatique quand une fenêtre couvre le bureau, reprise instantanée
 - Animations immobilisées quand l'économiseur d'énergie de Windows est actif
 - Changement du mode d'alimentation Windows d'un clic sur le fond d'écran
+- Logo central personnalisable avec votre propre image
 - S'adapte à toutes les résolutions, à la mise à l'échelle et au mode portrait
 - Démarre avec Windows ; pas de compte, pas de publicité, aucune donnée envoyée
 - Interface en français ou en anglais, selon la langue de Windows
@@ -46,9 +48,9 @@ Confidentialité : tout est mesuré localement. Pas de compte, pas de publicité
 
 fond d'écran animé, moniteur système, cockpit, CPU GPU, température, NPU, widget bureau
 
-### Nouveautés de cette version (1.0.35.0)
+### Nouveautés de cette version (1.0.36.0)
 
-Interface disponible en anglais, selon la langue de Windows. Économiseur d'énergie : quand il est activé dans Windows, les anneaux du logo s'immobilisent pour économiser la batterie ; les valeurs continuent de se mettre à jour. Moteur d'affichage WebView2 mis à jour. Mesures du disque et du ping corrigées, démarrage et reprise plus fiables.
+Réglages depuis l'icône de la zone de notification : logo central personnalisable et bouton Quitter. Télémétrie environ 28 fois plus rapide grâce aux compteurs natifs de Windows, pour une consommation nettement réduite. Interface disponible en anglais, selon la langue de Windows. Économiseur d'énergie : quand il est activé dans Windows, les anneaux du logo s'immobilisent pour économiser la batterie ; les valeurs continuent de se mettre à jour. Moteur d'affichage WebView2 mis à jour. Mesures du disque et du ping corrigées, démarrage et reprise plus fiables.
 
 ---
 
@@ -66,12 +68,13 @@ No setup needed: install it and your wallpaper comes alive. NexusWpp detects you
 
 Built to stay light:
 • rendering pauses as soon as a window covers the desktop, and resumes instantly when it is visible again;
+• telemetry uses native Windows performance counters: a few milliseconds per reading;
 • animations stay restrained (12 frames per second);
 • with Windows energy saver on, the logo rings hold still to save battery.
 
 In the center, a radar links every component to the logo, with data packets flowing at the pace of real activity. "High load" and "Memory nearly full" alerts only appear after several seconds of real load, without flickering.
 
-Switch your Windows power mode with one click, right on the wallpaper.
+Switch your Windows power mode with one click, right on the wallpaper. From the notification area icon, replace the center logo with your own image, or quit the app.
 
 Privacy: everything is measured locally. No account, no ads, no data collected or sent. The only network use is a ping to 1.1.1.1 or 8.8.8.8 to measure internet latency.
 
@@ -85,6 +88,7 @@ Privacy: everything is measured locally. No account, no ads, no data collected o
 - Automatic pause when a window covers the desktop, instant resume
 - Animations hold still while Windows energy saver is on
 - Switch the Windows power mode with one click on the wallpaper
+- Customizable center logo with your own image
 - Adapts to every resolution, display scaling and portrait mode
 - Starts with Windows; no account, no ads, no data sent
 - English or French interface, following your Windows language
@@ -93,6 +97,6 @@ Privacy: everything is measured locally. No account, no ads, no data collected o
 
 live wallpaper, system monitor, hardware monitor, CPU GPU, temperature, NPU, desktop dashboard
 
-### What's new in this version (1.0.35.0)
+### What's new in this version (1.0.36.0)
 
-The interface is now available in English, following your Windows language. Energy saver: when it is on in Windows, the logo rings hold still to save battery; values keep updating. Updated WebView2 display engine. Fixed disk and ping readings, more reliable startup and resume.
+Settings from the notification area icon: customizable center logo and a Quit button. Telemetry about 28 times faster through native Windows performance counters, for much lower resource use. The interface is now available in English, following your Windows language. Energy saver: when it is on in Windows, the logo rings hold still to save battery; values keep updating. Updated WebView2 display engine. Fixed disk and ping readings, more reliable startup and resume.

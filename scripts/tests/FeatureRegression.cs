@@ -34,6 +34,24 @@ class FeatureRegression
             idleNpu[0].Utilization=18;
             Check(WindowsGpuTelemetry.BusiestNpuEngine(idleNpu,"luid_NPU")==18,"Neural engine names are case insensitive");
             Check(WindowsGpuTelemetry.BusiestNpuEngine(npuEngines,"")==-1,"missing NPU adapter remains unavailable");
+
+            // Native performance counters (PDH) replacing WMI formatted-data queries.
+            using(var perf=new PdhQuery()) {
+                Check(perf.IsOpen,"PDH query opens");
+                Check(perf.Add(@"\System\Processes") && perf.Add(@"\Memory\Cache Bytes") && perf.Add(@"\Memory\Page Faults/sec"),"English counter paths resolve on this Windows language");
+                Check(!perf.Add(@"\NexusWpp Missing\Nothing"),"missing counter is reported, not fabricated");
+                Check(perf.Value(@"\NexusWpp Missing\Nothing")==null,"missing counter has no value");
+                Check(perf.Add(@"\Processor(*)\% Processor Time"),"wildcard counter resolves");
+                perf.Collect();System.Threading.Thread.Sleep(250);
+                var watch=System.Diagnostics.Stopwatch.StartNew();
+                Check(perf.Collect(),"PDH sample succeeds");
+                watch.Stop();
+                Check(perf.Value(@"\System\Processes")>10 && perf.Value(@"\Memory\Cache Bytes")>0,"live system values are real");
+                Check(perf.Value(@"\Memory\Page Faults/sec")>=0,"rate counter is valid after two samples");
+                var cpus=perf.Instances(@"\Processor(*)\% Processor Time");
+                Check(cpus!=null && cpus.Count>=2 && cpus.Exists(c=>c.Key=="_Total"),"wildcard returns every instance with names");
+                Check(watch.ElapsedMilliseconds<200,"PDH sample stays fast ("+watch.ElapsedMilliseconds+" ms)");
+            }
             return 0;
         } catch(Exception ex) {Console.Error.WriteLine(ex);return 1;}
     }

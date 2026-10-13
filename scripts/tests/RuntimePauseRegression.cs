@@ -165,6 +165,22 @@ class RuntimePauseRegression : Form
             await Check("gpuVal.textContent==='73%' && clockTimer !== 0", "energy saver keeps values and clock live");
             await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal'});setRuntimeSuspended(false);");
             await Check("!document.body.classList.contains('energy-saver') && document.getAnimations().filter(a => a.animationName === 'spin-eye').every(a => a.playState === 'running')", "leaving energy saver restarts the logo rings");
+            // Center logo from the host settings: custom image, unreadable image fallback, then the brand logo again.
+            const string pixel = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+            view.CoreWebView2.PostWebMessageAsJson("{\"control\":\"SETTINGS\",\"logo\":\"" + pixel + "\"}");
+            await Task.Delay(300);
+            await Check("logoImg.getAttribute('src').startsWith('data:image/png') && logoLoaded", "custom center logo replaces the brand logo");
+            view.CoreWebView2.PostWebMessageAsJson("{\"control\":\"SETTINGS\",\"logo\":\"data:image/png;base64,AAAA\"}");
+            await Task.Delay(300);
+            await Check("logoImg.getAttribute('src') === DEFAULT_LOGO && logoLoaded", "unreadable custom logo falls back to the brand logo");
+            view.CoreWebView2.PostWebMessageAsJson("{\"control\":\"SETTINGS\",\"logo\":\"javascript:alert(1)\"}");
+            await Task.Delay(200);
+            await Check("logoImg.getAttribute('src') === DEFAULT_LOGO", "only image data URLs are accepted as logo");
+            view.CoreWebView2.PostWebMessageAsJson("{\"control\":\"SETTINGS\",\"logo\":\"" + pixel + "\"}");
+            await Task.Delay(300);
+            view.CoreWebView2.PostWebMessageAsJson("{\"control\":\"SETTINGS\",\"logo\":null}");
+            await Task.Delay(300);
+            await Check("logoImg.getAttribute('src') === DEFAULT_LOGO && logoLoaded", "reset restores the brand logo");
             exitCode = 0;
         }
         catch (Exception error) { Console.Error.WriteLine("FAIL " + error); }
