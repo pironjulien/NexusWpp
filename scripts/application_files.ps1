@@ -1,3 +1,3 @@
 # One asset manifest for MSIX, installer and standalone deployment.
-@('app.js','telemetry-state.js','i18n.js',
+@('app.js','cockpit-state.js','radar.js','dashboard.js','telemetry-state.js','i18n.js',
   'style.css','index.html','julienpiron.png','splash.jpg','icon.ico')

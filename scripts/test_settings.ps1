@@ -11,8 +11,7 @@ foreach ($dll in @('Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.Wi
 $binary = Join-Path $testDir 'SettingsRegression.exe'
 $refs = @('/reference:System.Windows.Forms.dll', '/reference:System.Drawing.dll', '/reference:System.Management.dll',
     "/reference:$testDir\Microsoft.Web.WebView2.Core.dll", "/reference:$testDir\Microsoft.Web.WebView2.WinForms.dll")
-$sources = @('DesktopHtmlHost.cs', 'DesktopVisibility.cs', 'NvidiaTelemetry.cs', 'TelemetryCollector.cs', 'WindowsGpuTelemetry.cs', 'PdhCounters.cs', 'SettingsForm.cs', 'UserSettings.cs', 'work\obj\ReleaseVersion.cs') |
-    ForEach-Object { Join-Path $project $_ }
+$sources = & (Join-Path $PSScriptRoot 'host_sources.ps1')
 & (Join-Path $PSScriptRoot 'csc.ps1') /nologo /target:exe /platform:x64 /main:SettingsRegression "/out:$binary" @refs @sources (Join-Path $PSScriptRoot 'tests\SettingsRegression.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Settings test compilation failed.' }
 & $binary $output $project
