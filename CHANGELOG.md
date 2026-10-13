@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-13 — 1.0.39.0
+
+- Fenêtre de réglages : le texte d'aide n'est plus coupé avec une mise à l'échelle Windows de 125 % ou plus. La mise à l'échelle automatique n'était pas appliquée (construction sans `SuspendLayout`/`ResumeLayout`) et les textes avaient des tailles fixes ; la fenêtre utilise maintenant une mise en page automatique qui s'adapte au texte, à la langue et au DPI.
+- Test : la fenêtre de réglages est vérifiée de 100 % à 200 %, avec et sans mise à l'échelle de la mise en page (aucun texte coupé, hors de la fenêtre ou superposé). Ce test échoue sur la version 1.0.37.
+
 ## 2026-10-13 — 1.0.38.0
 
 - Historique des 60 dernières secondes dans chaque carte (CPU, iGPU, NPU, GPU, RAM, activité disque, réseau) : une courbe discrète dans la couleur de la carte, en bas et derrière le contenu, sans changer la disposition. Une mesure manquante coupe la courbe au lieu d'afficher un faux zéro.

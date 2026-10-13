@@ -38,48 +38,81 @@ namespace DesktopHtmlHost
             this.logoChanged = logoChanged;
             this.quitRequested = quitRequested;
 
+            // Auto-scaling to the display DPI only happens inside a SuspendLayout/ResumeLayout pair.
+            SuspendLayout();
             Text = L("NexusWpp — Réglages", "NexusWpp — Settings");
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(440, 548);
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = Back;
             ForeColor = Ink;
             Font = new Font("Segoe UI", 10F);
+            // The window sizes itself to its content: no text can be clipped at any DPI or language.
+            AutoSize = true;
+            AutoSizeMode = AutoSizeMode.GrowOnly; // never jumps smaller when the status text changes
+            Padding = new Padding(28, 20, 28, 22);
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
-            var title = new Label { Text = "NEXUSWPP", Font = new Font("Bahnschrift", 18F, FontStyle.Bold), ForeColor = Ink, AutoSize = true, Location = new Point(28, 22) };
-            var subtitle = new Label { Text = L("Réglages", "Settings"), ForeColor = Muted, AutoSize = true, Location = new Point(30, 58) };
+            var layout = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty, BackColor = Back };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, ContentWidth));
 
-            var section = new Label { Text = L("LOGO CENTRAL", "CENTER LOGO"), Font = new Font("Bahnschrift", 10F, FontStyle.Bold), ForeColor = Accent, AutoSize = true, Location = new Point(30, 100) };
-            preview.Location = new Point(130, 130);
+            var title = new Label { Text = "NEXUSWPP", Font = new Font("Bahnschrift", 18F, FontStyle.Bold), ForeColor = Ink, AutoSize = true, Margin = Padding.Empty };
+            var subtitle = new Label { Text = L("Réglages", "Settings"), ForeColor = Muted, AutoSize = true, Margin = new Padding(2, 2, 0, 0) };
+            var section = new Label { Text = L("LOGO CENTRAL", "CENTER LOGO"), Font = new Font("Bahnschrift", 10F, FontStyle.Bold), ForeColor = Accent, AutoSize = true, Margin = new Padding(2, 22, 0, 0) };
+
             preview.Size = new Size(180, 180);
+            preview.Anchor = AnchorStyles.None; // centered in its row
+            preview.Margin = new Padding(0, 12, 0, 18);
             preview.AccessibleRole = AccessibleRole.Graphic;
             preview.AccessibleName = L("Aperçu du logo central", "Center logo preview");
 
-            chooseButton = MakeButton(L("Choisir une image…", "Choose an image…"), Accent, Back, new Point(30, 330), new Size(380, 40));
+            chooseButton = MakeButton(L("Choisir une image…", "Choose an image…"), Accent, Back, 40);
             chooseButton.Click += ChooseImage;
-            resetButton = MakeButton(L("Revenir au logo d'origine", "Restore the original logo"), Panel, Ink, new Point(30, 380), new Size(380, 36));
+            resetButton = MakeButton(L("Revenir au logo d'origine", "Restore the original logo"), Panel, Ink, 36);
+            resetButton.Margin = new Padding(0, 10, 0, 0);
             resetButton.FlatAppearance.BorderColor = Line;
             resetButton.Click += ResetLogo;
 
-            status = new Label { ForeColor = Muted, Location = new Point(30, 426), Size = new Size(380, 56),
+            // Wraps to as many lines as the text needs within the column width.
+            status = new Label { ForeColor = Muted, AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 12, 0, 16),
                 Text = L("L'image est recadrée en carré au centre, puis affichée dans le rond du radar.",
                          "The image is cropped to a centered square, then shown in the radar circle.") };
 
-            var quitButton = MakeButton(L("Quitter NexusWpp", "Quit NexusWpp"), Back, Danger, new Point(30, 494), new Size(170, 34));
+            var quitButton = MakeButton(L("Quitter NexusWpp", "Quit NexusWpp"), Back, Danger, 34);
+            quitButton.Anchor = AnchorStyles.Left;
+            quitButton.MinimumSize = new Size(170, 34);
             quitButton.FlatAppearance.BorderColor = Danger;
             quitButton.Click += delegate { Close(); quitRequested(); };
-            var closeButton = MakeButton(L("Fermer", "Close"), Panel, Ink, new Point(300, 494), new Size(110, 34));
+            var closeButton = MakeButton(L("Fermer", "Close"), Panel, Ink, 34);
+            closeButton.Anchor = AnchorStyles.Right;
+            closeButton.MinimumSize = new Size(110, 34);
             closeButton.FlatAppearance.BorderColor = Line;
             closeButton.Click += delegate { Close(); };
             CancelButton = closeButton;
 
-            Controls.AddRange(new Control[] { title, subtitle, section, preview, chooseButton, resetButton, status, quitButton, closeButton });
+            var footer = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Dock = DockStyle.Fill, Margin = Padding.Empty, BackColor = Back };
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            footer.Controls.Add(quitButton, 0, 0);
+            footer.Controls.Add(closeButton, 1, 0);
+
+            foreach (Control control in new Control[] { title, subtitle, section, preview, chooseButton, resetButton, status, footer })
+            {
+                layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                layout.Controls.Add(control);
+            }
+            // Form padding only applies to docked children: place the content inside it explicitly.
+            layout.Location = new Point(Padding.Left, Padding.Top);
+            Controls.Add(layout);
+            ResumeLayout(false);
+            PerformLayout();
             RefreshPreview();
         }
+
+        // Logical width of the content column (scaled with the DPI like everything else).
+        const float ContentWidth = 384F;
 
         protected override void OnHandleCreated(EventArgs e)
         {
@@ -88,9 +121,11 @@ namespace DesktopHtmlHost
             try { DwmSetWindowAttribute(Handle, 20, ref dark, sizeof(int)); } catch { }
         }
 
-        static Button MakeButton(string text, Color back, Color fore, Point location, Size size)
+        static Button MakeButton(string text, Color back, Color fore, int height)
         {
-            var button = new Button { Text = text, BackColor = back, ForeColor = fore, Location = location, Size = size,
+            // Full column width by default; grows with its text if a translation is longer.
+            var button = new Button { Text = text, BackColor = back, ForeColor = fore, AutoSize = true, MinimumSize = new Size(0, height),
+                Anchor = AnchorStyles.Left | AnchorStyles.Right, Margin = Padding.Empty, Padding = new Padding(12, 0, 12, 0),
                 FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand, Font = new Font("Segoe UI Semibold", 10F) };
             button.FlatAppearance.BorderSize = 1;
             button.FlatAppearance.BorderColor = back;
