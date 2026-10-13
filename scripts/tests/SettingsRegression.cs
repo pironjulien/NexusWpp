@@ -175,7 +175,9 @@ static class SettingsRegression
                 // Windows caps a window at about the screen size: on a small test screen (CI runners use
                 // 1024x768) the largest scales cannot fit, which says nothing about the layout itself.
                 var maxTrack = SystemInformation.MaxWindowTrackSize;
-                if (form.Height >= maxTrack.Height - 2 || form.Width >= maxTrack.Width - 2)
+                var content = form.Controls[0].Bounds;
+                bool capped = form.Height >= maxTrack.Height - 2 || form.Width >= maxTrack.Width - 2;
+                if (capped && (content.Bottom > form.ClientSize.Height || content.Right > form.ClientSize.Width))
                     Console.WriteLine("SKIP every text stays inside the window" + label + " (window capped by a " + maxTrack.Width + "x" + maxTrack.Height + " screen)");
                 else
                     Check(texts.All(c => client.Contains(c.RectangleToScreen(c.ClientRectangle))), "every text stays inside the window" + label);
