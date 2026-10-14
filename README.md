@@ -1,142 +1,142 @@
 # NexusWpp - Native Dynamic Desktop Wallpaper
 
-NexusWpp affiche un cockpit matériel dynamique directement dans le bureau Windows, sans Wallpaper Engine. Le mode officiel est l'hôte natif `nexuswpp.exe`, qui charge `index.html` dans WebView2, s'attache à la couche `WorkerW`/`Progman` du bureau, puis envoie la télémétrie au frontend par messages WebView2.
+NexusWpp displays a dynamic hardware cockpit directly on the Windows desktop, without Wallpaper Engine. The official mode is the native host `nexuswpp.exe`, which loads `index.html` in WebView2, attaches to the desktop's `WorkerW`/`Progman` layer, then sends telemetry to the frontend through WebView2 messages.
 
-## Objectif
+## Goals
 
-- Fond d'écran HTML/CSS/Canvas animé sous les icônes Windows.
-- Démarrage le plus rapide possible à l'ouverture de session.
-- Aucun serveur Node, aucune dépendance npm, aucun Wallpaper Engine.
-- Contrôle cliquable des profils d'alimentation Windows depuis le fond d'écran.
+- Animated HTML/CSS/Canvas wallpaper beneath the Windows icons.
+- Fastest possible startup at sign-in.
+- No Node server, no npm dependencies, no Wallpaper Engine.
+- Clickable control of Windows power plans from the wallpaper.
 
-## Architecture Actuelle
+## Current Architecture
 
-- `Program.cs` et `DesktopForm*.cs` : hôte WinForms/WebView2 découpé par responsabilité (cycle de vie et bureau, WebView2, pause/reprise, télémétrie, réglages, hook souris) ; `NativeMethods.cs` : déclarations Win32.
-- `TelemetryCollector.cs`, `NvidiaTelemetry.cs`, `WindowsGpuTelemetry.cs` : collecte native et validité des capteurs.
-- `telemetry-state.js` : règles de validité des mesures et confirmation des charges élevées.
-- `DesktopVisibility.cs` : détection du bureau couvert, du plein écran et calcul de couverture multi-écrans.
-- `index.html`, `style.css` et les scripts chargés dans l'ordre : `i18n.js` (traductions), `cockpit-state.js` (état partagé, horloge), `radar.js` (radar Canvas, pause), `dashboard.js` (cartes, alertes, historique), `app.js` (messages de l'hôte, démarrage).
-- `compile.ps1` : compile l'hôte et la détection de visibilité en `bin\nexuswpp.exe`.
-- `deploy_local.ps1` : copie l'app dans `C:\nexuswpp` et configure le lancement Windows via `HKLM\...\Run`.
-- `run.bat` : menu local pour démarrer, compiler, déployer ou arrêter l'app.
-- `scripts/benchmark_nexuswpp.ps1` : benchmark multi-run CPU/RAM/startup.
-- `scripts/benchmark_fullscreen_suspend.ps1` : ancien benchmark des versions qui utilisaient le motif de journal « fullscreen foreground detected » ; pour la politique actuelle, utiliser `measure_desktop_suspension.ps1`.
-- `scripts/measure_desktop_suspension.ps1` : mesure CPU/GPU avec bureau visible, fenêtres juxtaposées, plein écran et fenêtres transparentes, puis restaure les fenêtres précédentes.
-- `scripts/test_desktop_coverage.cs` : dix scénarios géométriques indépendants du bureau réel (pas encore exécutés par un script ni par la CI).
+- `Program.cs` and `DesktopForm*.cs`: WinForms/WebView2 host split by responsibility (lifecycle and desktop, WebView2, pause/resume, telemetry, settings, mouse hook); `NativeMethods.cs`: Win32 declarations.
+- `TelemetryCollector.cs`, `NvidiaTelemetry.cs`, `WindowsGpuTelemetry.cs`: native collection and sensor validity.
+- `telemetry-state.js`: measurement validity rules and confirmation of high load.
+- `DesktopVisibility.cs`: detection of a covered desktop, of full screen, and multi-monitor coverage calculation.
+- `index.html`, `style.css` and the scripts loaded in order: `i18n.js` (translations), `cockpit-state.js` (shared state, clock), `radar.js` (Canvas radar, pause), `dashboard.js` (cards, alerts, history), `app.js` (host messages, startup).
+- `compile.ps1`: compiles the host and the visibility detection into `bin\nexuswpp.exe`.
+- `deploy_local.ps1`: copies the app to `C:\nexuswpp` and configures Windows startup via `HKLM\...\Run`.
+- `run.bat`: local menu to start, compile, deploy or stop the app.
+- `scripts/benchmark_nexuswpp.ps1`: multi-run CPU/RAM/startup benchmark.
+- `scripts/benchmark_fullscreen_suspend.ps1`: legacy benchmark for versions that used the "fullscreen foreground detected" log pattern; for the current policy, use `measure_desktop_suspension.ps1`.
+- `scripts/measure_desktop_suspension.ps1`: measures CPU/GPU with the desktop visible, side-by-side windows, full screen and transparent windows, then restores the previous windows.
+- `scripts/test_desktop_coverage.cs`: ten geometric scenarios independent of the real desktop (not yet run by a script or by CI).
 
-## Démarrage Rapide
+## Quick Start
 
-Prérequis:
+Prerequisites:
 
 - Windows 10/11.
-- SDK .NET 8 ou plus récent (gratuit) pour compiler : `NexusWpp.csproj` utilise le compilateur C# actuel mais cible .NET Framework 4.8, intégré à Windows, donc aucun runtime à installer pour les utilisateurs.
+- .NET 8 SDK or newer (free) to compile: `NexusWpp.csproj` uses the current C# compiler but targets .NET Framework 4.8, built into Windows, so users have no runtime to install.
 - Microsoft Edge WebView2 Runtime.
-- NVIDIA est optionnel; les mesures détaillées utilisent le processus isolé `nvidia-smi`, avec les compteurs Windows lorsque cette source est indisponible.
+- NVIDIA is optional; detailed measurements use the isolated `nvidia-smi` process, with Windows counters when that source is unavailable.
 
 ```powershell
 .\compile.ps1
 .\deploy_local.ps1
 ```
 
-Le fichier `VERSION` est la source unique du numéro de l'EXE, de l'installeur et du MSIX. Pour produire un installeur `.exe` autonome:
+The `VERSION` file is the single source of the version number for the EXE, the installer and the MSIX. To produce a standalone `.exe` installer:
 
 ```powershell
 .\scripts\build_installer.ps1
 ```
 
-Le fichier généré est `dist\NexusWppSetup.exe`. Il embarque l'application compilée, les DLL WebView2 SDK et les assets. Au lancement, il demande les droits administrateur, installe dans `C:\nexuswpp`, vérifie le Runtime WebView2 Evergreen, le télécharge depuis Microsoft si nécessaire, configure un seul lancement Windows via `HKLM\...\Run`, ajoute `NexusWpp` au menu Démarrer, inscrit NexusWpp dans Applications installées avec une commande de désinstallation, puis démarre le fond d'écran.
+The generated file is `dist\NexusWppSetup.exe`. It embeds the compiled application, the WebView2 SDK DLLs and the assets. At launch, it requests administrator rights, installs to `C:\nexuswpp`, checks for the WebView2 Evergreen Runtime and downloads it from Microsoft if needed, configures a single Windows startup entry via `HKLM\...\Run`, adds `NexusWpp` to the Start menu, registers NexusWpp in Installed apps with an uninstall command, then starts the wallpaper.
 
-Pour signer l'installeur, installer le Windows SDK puis définir l'une des configurations suivantes avant le build:
+To sign the installer, install the Windows SDK, then set one of the following configurations before the build:
 
 ```powershell
-$env:NEXUSWPP_SIGN_CERT_THUMBPRINT = "THUMBPRINT_CERTIFICAT_CODESIGNING"
+$env:NEXUSWPP_SIGN_CERT_THUMBPRINT = "CODESIGNING_CERTIFICATE_THUMBPRINT"
 .\scripts\build_installer.ps1
 ```
 
-ou:
+or:
 
 ```powershell
 $env:NEXUSWPP_SIGN_PFX = "C:\certs\nexuswpp.pfx"
-$env:NEXUSWPP_SIGN_PFX_PASSWORD = "mot-de-passe"
+$env:NEXUSWPP_SIGN_PFX_PASSWORD = "password"
 .\scripts\build_installer.ps1
 ```
 
-Sans certificat code-signing public, l'installeur fonctionne mais peut afficher un avertissement SmartScreen.
+Without a public code-signing certificate, the installer works but may display a SmartScreen warning.
 
-Pour mettre a jour une installation existante, relancer simplement un `NexusWppSetup.exe` plus recent. L'installeur arrete l'instance active, remplace les fichiers, nettoie les anciens lanceurs, conserve un seul demarrage `HKLM\...\Run`, met a jour le raccourci du menu Demarrer et relance le fond. La desinstallation Windows utilise `C:\nexuswpp\NexusWppSetup.exe /uninstall`.
+To update an existing installation, simply run a newer `NexusWppSetup.exe`. The installer stops the running instance, replaces the files, cleans up old launchers, keeps a single `HKLM\...\Run` startup entry, updates the Start menu shortcut and restarts the wallpaper. Windows uninstallation uses `C:\nexuswpp\NexusWppSetup.exe /uninstall`.
 
-L'installeur configure:
+The installer configures:
 
-- une entrée de démarrage unique `NexusWpp` dans `HKLM\...\Run`;
-- un raccourci `NexusWpp.lnk` dans le menu Démarrer commun;
-- une entrée de désinstallation dans Applications installées.
+- a single `NexusWpp` startup entry in `HKLM\...\Run`;
+- a `NexusWpp.lnk` shortcut in the common Start menu;
+- an uninstall entry in Installed apps.
 
-Le package MSIX configure le lancement Windows via une tache de démarrage packagée `windows.startupTask`, car les entrées `HKLM\...\Run` de l'installeur EXE ne s'appliquent pas au mode Store/MSIX. L'hote natif s'enregistre aussi aupres du Restart Manager Windows pour que le Store puisse relancer NexusWpp automatiquement apres une mise a jour qui ferme l'instance active.
+The MSIX package configures Windows startup through a packaged `windows.startupTask` startup task, because the EXE installer's `HKLM\...\Run` entries do not apply to Store/MSIX mode. The native host also registers with the Windows Restart Manager so that the Store can automatically restart NexusWpp after an update that closes the running instance.
 
-L'application contient un verrou single-instance, donc relancer `NexusWpp` depuis le menu Démarrer ne crée pas deux fonds d'écran.
+The application has a single-instance lock, so relaunching `NexusWpp` from the Start menu does not create two wallpapers.
 
-Une installation Store/MSIX se met à jour avec le package de même identité et un numéro de version supérieur. Ne pas lui ajouter le déploiement EXE, qui utilise un autre emplacement et un autre mécanisme de démarrage.
+A Store/MSIX installation is updated with a package of the same identity and a higher version number. Do not add the EXE deployment to it, as that uses a different location and a different startup mechanism.
 
-## Pause et retour au bureau
+## Pause and return to the desktop
 
-Depuis la version `1.0.24.0`, les badges « Charge élevée » et « Mémoire très utilisée » s’affichent après au moins 90 % pendant cinq secondes, puis disparaissent à 80 % ou moins pendant cinq secondes. Ils partagent une ligne avec le titre, sans clignotement ni tremblement. Une interruption des lectures réinitialise la confirmation.
+Since version `1.0.24.0`, the « Charge élevée » (High load) and « Mémoire très utilisée » (Memory heavily used) badges appear after at least 90% for five seconds, then disappear at 80% or less for five seconds. They share a line with the title, without flickering or jitter. An interruption in readings resets the confirmation.
 
-Une lecture NVIDIA échouée invalide immédiatement les anciennes valeurs. Les capteurs absents affichent « — » et les données périmées sont signalées. Les watts représentent la carte GPU entière, pas la consommation de NexusWpp ; la zone thermique Windows n’est pas une mesure du cœur CPU.
+A failed NVIDIA reading immediately invalidates the old values. Missing sensors display "—" and stale data is flagged. Watts represent the entire GPU card, not NexusWpp's consumption; the Windows thermal zone is not a CPU core measurement.
 
-La transition des jauges passe de 0,55 à 0,18 seconde après profilage A/B dans WebView2. Halos, radar et anneaux rotatifs du logo tournent à 12 images/s. Le benchmark `scripts/profile_graphics.ps1` mesure l’occupation des moteurs GPU du groupe de processus, sans attribution de watts ni du coût du compositeur Windows. Les règles des capteurs et alertes se vérifient avec `scripts/test_features.ps1`.
+The gauge transition goes from 0.55 to 0.18 seconds after A/B profiling in WebView2. Halos, radar and the logo's rotating rings run at 12 frames/s. The `scripts/profile_graphics.ps1` benchmark measures GPU engine utilization for the process group, without attributing watts or the Windows compositor's cost. Sensor and alert rules are verified with `scripts/test_features.ps1`.
 
-La version `1.0.16.0` fige les animations Canvas/CSS, les transitions en cours et l'horloge quand toutes les zones utiles des écrans sont recouvertes par des fenêtres opaques. La télémétrie cesse ses nouvelles collectes. Le DOM, les particules, les valeurs et la surface WebView2 restent en place : aucune dissimulation du contrôle, suspension Chromium, navigation ni reconstruction n'est nécessaire pour revoir le bureau.
+Version `1.0.16.0` freezes Canvas/CSS animations, in-progress transitions and the clock when all useful areas of the screens are covered by opaque windows. Telemetry stops new collections. The DOM, particles, values and WebView2 surface stay in place: no hiding of the control, Chromium suspension, navigation or rebuild is needed to see the desktop again.
 
-La détection s'effectue toutes les 250 ms ; la pause n'est confirmée qu'après 1,5 s de bureau couvert. Pendant la pause, les changements de fenêtres (fermeture, réduction, déplacement, premier plan) relancent la vérification en 60 ms environ. Ce délai concerne la reprise des animations et des mesures ; la scène déjà affichée reste disponible au compositeur Windows. Une collecte terminant après une pause est ignorée. La reprise demande de nouvelles mesures et actualise l'horloge. Un véritable redimensionnement redessine une fois la scène figée.
+Detection runs every 250 ms; the pause is only confirmed after 1.5 s of covered desktop. During the pause, window changes (close, minimize, move, foreground) trigger a re-check in about 60 ms. This delay concerns resuming animations and measurements; the scene already displayed remains available to the Windows compositor. A collection finishing after a pause is ignored. Resuming requests new measurements and refreshes the clock. An actual resize redraws the frozen scene once.
 
-La couverture est calculée sur l'ensemble des écrans sans double comptage des chevauchements. Les fenêtres transparentes, masquées sur un autre bureau virtuel et les surfaces du shell sont exclues. Un jeu plein écran sur un seul moniteur laisse fonctionner le bureau encore visible sur un autre. Le verrouillage ou la déconnexion de session met également le travail en pause.
+Coverage is calculated across all screens without double-counting overlaps. Transparent windows, windows hidden on another virtual desktop and shell surfaces are excluded. A full-screen game on a single monitor lets the desktop still visible on another monitor keep running. Locking or disconnecting the session also pauses the work.
 
-La version locale `1.0.15.0` masquait et suspendait WebView2. Ses mesures de consommation ne validaient pas le retour visuel ; ce comportement est remplacé en `1.0.16.0`.
+Local version `1.0.15.0` hid and suspended WebView2. Its power consumption measurements did not validate the visual return; this behavior is replaced in `1.0.16.0`.
 
 ```powershell
 .\scripts\test_runtime_pause.ps1
 .\scripts\test_desktop_visual_resume.ps1 -Label installed
 ```
 
-Le premier test exécute la page réelle dans WebView2 et vérifie notamment les pixels Canvas, les particules, la première scène et les transitions rapides. Le second capture le bureau composé pendant le retrait de fenêtres maximisées, juxtaposées, plein écran, partielles et transparentes. Il vérifie le chemin du processus packagé, restaure les fenêtres et conserve captures, temps mesurés et limites sous `work\resume-20260925`. Les mesures CPU/GPU se font séparément avec `measure_desktop_suspension.ps1` : une baisse de consommation ou des journaux de reprise seuls ne prouvent pas l'absence de disparition visuelle.
+The first test runs the real page in WebView2 and checks, among other things, Canvas pixels, particles, the first scene and fast transitions. The second captures the composited desktop while maximized, side-by-side, full-screen, partial and transparent windows are removed. It checks the packaged process path, restores the windows and keeps screenshots, measured times and limitations under `work\resume-20260925`. CPU/GPU measurements are done separately with `measure_desktop_suspension.ps1`: a drop in consumption or resume logs alone do not prove the absence of visual disappearance.
 
-## Portabilité
+## Portability
 
-### Résolutions et mise à l'échelle
+### Resolutions and scaling
 
-À partir de la version `1.0.18.0`, la grille respecte les deux dimensions du viewport WebView2 et préserve les marges pour une rangée d'icônes en haut et un espace au-dessus de la barre des tâches. Les cartes adaptent la place de leurs jauges et de leurs mesures à leur taille réelle ; les écrans portrait utilisent deux colonnes sous l'horloge et les commandes. Le radar ajuste uniformément son dessin et ses coordonnées de souris. Les mesures et les boutons restent présents, sans défilement des cartes du bureau.
+Starting with version `1.0.18.0`, the grid respects both dimensions of the WebView2 viewport and preserves margins for a row of icons at the top and space above the taskbar. Cards adapt the room for their gauges and measurements to their actual size; portrait screens use two columns below the clock and the controls. The radar scales its drawing and mouse coordinates uniformly. Measurements and buttons remain present, without scrolling the desktop cards.
 
-La version `1.0.20.0` affine la répartition de cette même réserve verticale : davantage d'espace en haut pour les libellés des icônes qu'en `1.0.18.0`, avec une remontée de 10 pixels à 125 % par rapport à `1.0.19.0`, sans redimensionner les cartes. Une marge haute minimale de 96 pixels CSS conserve la rangée d'icônes sur les petits formats.
+Version `1.0.20.0` refines the distribution of that same vertical reserve: more space at the top for icon labels than in `1.0.18.0`, moved up by 10 pixels at 125% compared with `1.0.19.0`, without resizing the cards. A minimum top margin of 96 CSS pixels keeps the icon row on small formats.
 
 ```powershell
 .\scripts\test_responsive_layout.ps1 -Label current
 ```
 
-Le harnais charge les fichiers livrés dans le véritable Runtime WebView2 Evergreen, avec émulation Chromium du viewport et du ratio de pixels. Il couvre 29 résolutions physiques de 1280×720 à 7680×4320, les échelles 100, 125, 150, 175, 200, 225, 250, 300, 350 et 400 % lorsque la surface logique reste au moins 800×450 en paysage ou 432×768 en portrait. Il inclut les anciens seuils CSS, des variantes sans iGPU/NPU/GPU dédié et un à quatre profils d'alimentation.
+The harness loads the shipped files in the real WebView2 Evergreen Runtime, with Chromium emulation of the viewport and pixel ratio. It covers 29 physical resolutions from 1280×720 to 7680×4320, at scales of 100, 125, 150, 175, 200, 225, 250, 300, 350 and 400% whenever the logical surface remains at least 800×450 in landscape or 432×768 in portrait. It includes the old CSS thresholds, variants without iGPU/NPU/dedicated GPU, and one to four power plans.
 
-Les contrôles portent sur les cartes hors écran, les textes et commandes coupés, les chevauchements, la taille et la circularité des jauges, les nœuds du radar, les coordonnées de souris et le maintien de la pause pendant les redimensionnements. Les données de test restent dans le harnais et ne sont jamais embarquées dans le produit. Les JSON et captures PNG se trouvent dans `work\responsive\<Label>` ; ce test d'émulation ne valide ni l'overscan d'un téléviseur physique ni une topologie de plusieurs moniteurs aux DPI différents.
+The checks cover off-screen cards, clipped text and controls, overlaps, gauge size and circularity, radar nodes, mouse coordinates and keeping the pause during resizes. Test data stays in the harness and is never embedded in the product. The JSON files and PNG screenshots are in `work\responsive\<Label>`; this emulation test validates neither the overscan of a physical TV nor a multi-monitor topology with different DPIs.
 
-### Installation et matériel
+### Installation and hardware
 
-- Le matériel est détecté automatiquement via WMI, Win32, interfaces réseau Windows et `nvidia-smi` quand disponible.
-- Le MSIX est installé par Windows dans `WindowsApps`; seul le mode EXE autonome utilise `C:\nexuswpp`. Les données et le profil WebView2 restent dans le dossier utilisateur local.
-- Le raccourci du menu Démarrer est créé dans le dossier commun Windows, pas dans un chemin utilisateur codé en dur.
-- Le fond d'écran fonctionne sans serveur Node et sans dépendance npm.
-- Le sélecteur d'alimentation confirme le GUID actif Windows et ignore les clics quand une autre application recouvre le panneau.
-- Le premier affichage est directement l'interface réelle, avec des valeurs neutres. La télémétrie remplit ensuite les champs existants dès qu'elle arrive.
+- Hardware is detected automatically via WMI, Win32, Windows network interfaces and `nvidia-smi` when available.
+- The MSIX is installed by Windows in `WindowsApps`; only the standalone EXE mode uses `C:\nexuswpp`. Data and the WebView2 profile stay in the local user folder.
+- The Start menu shortcut is created in the common Windows folder, not in a hard-coded user path.
+- The wallpaper works without a Node server and without npm dependencies.
+- The power plan selector confirms the active Windows GUID and ignores clicks when another application covers the panel.
+- The first display is the real interface right away, with neutral values. Telemetry then fills in the existing fields as soon as it arrives.
 
-## Pourquoi C'est Plus Rapide Qu'Avant
+## Why It Is Faster Than Before
 
-L'ancienne version attendait de trouver `WorkerW` avant d'initialiser WebView2. Au démarrage Windows, cette couche peut arriver tard. La version actuelle précharge WebView2 immédiatement hors écran, cherche `WorkerW` toutes les 100 ms, puis utilise temporairement `Progman` si `WorkerW` tarde trop.
+The old version waited to find `WorkerW` before initializing WebView2. At Windows startup, this layer can show up late. The current version preloads WebView2 off-screen immediately, looks for `WorkerW` every 100 ms, then temporarily uses `Progman` if `WorkerW` takes too long.
 
 ## Notes
 
-- `server.js`, `get-stats.ps1`, `get-startup.ps1` et le flux SSE ne font plus partie de cette architecture.
-- Le mode navigateur simple affiche l'interface, mais sans télémétrie ni changement de profil.
-- Pour connaître le chemin MSIX réel : `(Get-AppxPackage julienpiron.fr.NexusWpp).InstallLocation`.
-- Le rond réseau est calibré sur la vitesse réelle du lien Windows, par exemple `2.5 Gb/s` pour l'Intel I226-V.
+- `server.js`, `get-stats.ps1`, `get-startup.ps1` and the SSE stream are no longer part of this architecture.
+- Plain browser mode displays the interface, but without telemetry or power plan switching.
+- To find the actual MSIX path: `(Get-AppxPackage julienpiron.fr.NexusWpp).InstallLocation`.
+- The network ring is calibrated to the actual Windows link speed, for example `2.5 Gb/s` for the Intel I226-V.
 
-## Mesures utiles
+## Useful measurements
 
 ```powershell
 .\scripts\benchmark_nexuswpp.ps1 -DurationSeconds 18 -Runs 3 -Label current -OutputPath .\scripts\last-benchmark.json
@@ -145,18 +145,18 @@ $package = Get-AppxPackage julienpiron.fr.NexusWpp
 .\scripts\measure_desktop_suspension.ps1 -AppPath (Join-Path $package.InstallLocation nexuswpp.exe) -LogPath "$env:LOCALAPPDATA\Packages\julienpiron.fr.NexusWpp_yq2nr3sn86fpg\LocalCache\Local\NexusWpp\webview_debug.log" -OutputPath .\work\desktop-performance.json
 ```
 
-## Garde-fou benchmark
+## Benchmark guardrail
 
-Avant de garder une optimisation, produire un JSON avant/apres avec `benchmark_nexuswpp.ps1`, puis comparer:
+Before keeping an optimization, produce a before/after JSON with `benchmark_nexuswpp.ps1`, then compare:
 
 ```powershell
 .\scripts\compare_benchmark_result.ps1 -BeforePath .\scripts\last-benchmark-before.json -AfterPath .\scripts\last-benchmark-after.json
 ```
 
-Le verdict est:
+The verdict is:
 
-- `KEEP` si CPU ou RAM baisse de maniere mesurable sans regression.
-- `REJECT` si les erreurs augmentent, si le CPU/RAM regressent au-dela des tolerances, ou si l'attache au bureau ralentit trop.
-- `NEUTRAL` si rien ne regresse, mais que le gain n'est pas significatif.
+- `KEEP` if CPU or RAM drops measurably without regression.
+- `REJECT` if errors increase, if CPU/RAM regress beyond tolerances, or if attaching to the desktop slows down too much.
+- `NEUTRAL` if nothing regresses, but the gain is not significant.
 
-Les champs historiques `SuspendLatencyMs`, `ResumeLatencyMs` et `TelemetryAfterResumeMs` mesuraient la réception des journaux, pas le retour visuel. Les captures du harnais `test_desktop_visual_resume.ps1` constituent la vérification du retour au bureau, complétée par la mesure CPU/GPU séparée.
+The legacy fields `SuspendLatencyMs`, `ResumeLatencyMs` and `TelemetryAfterResumeMs` measured when logs were received, not the visual return. The screenshots from the `test_desktop_visual_resume.ps1` harness are the verification of the return to the desktop, complemented by the separate CPU/GPU measurement.
