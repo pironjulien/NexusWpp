@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-14 — Point d'entrée de contrôle commun
+
+- `test.ps1` à la racine : contrôle complet du projet en une commande, hors ligne et sans rien laisser dans le dépôt (convention commune à tous les dépôts de Julien, lancée pour tous par `NexusInfra\ops\workstation\Test-NexusProjets.ps1`). Mêmes étapes que la CI : compilation puis tests de régression.
+
 ## 2026-10-14 — Automatisations GitHub allégées
 
 - Mises à jour Dependabot automatiques retirées (`.github/dependabot.yml`) ; les alertes de faille
