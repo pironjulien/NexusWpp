@@ -292,8 +292,13 @@ class RuntimePauseRegression : Form
             await Check("formatBattery({present:true,percent:100,ac:true,rateW:null,minutesLeft:-1}) === t('battery.status',{pct:100,source:t('battery.ac')})", "full battery on mains shows no invented power");
             await Check("formatBattery({present:true,percent:50,ac:false,rateW:-8,minutesLeft:42}).endsWith(t('battery.left',{time:'42 MIN'}))", "short remaining time is in minutes");
             await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal'});");
-            await Check("npuTopProcSub.textContent.length >= 4 && 'WindowsStudioEffects'.startsWith(npuTopProcSub.textContent.replace('…', '')) && npuTopProcSub.scrollWidth <= npuTopProcSub.parentElement.clientWidth + 1", "NPU card shows its busiest client process, shortened to fit");
-            await Check("igpuTopProcSub.textContent.length >= 4 && 'msedgewebview2'.startsWith(igpuTopProcSub.textContent.replace('…', '')) && gpuTopProcSub.textContent.length >= 4 && 'Cyberpunk2077'.startsWith(gpuTopProcSub.textContent.replace('…', ''))", "iGPU and GPU cards show their busiest client process");
+            // Busiest process: same label, same slot (last of the 2x2 grid) and "name measure" form on every card.
+            await view.CoreWebView2.ExecuteScriptAsync("window.topShown = (el, name, measure) => { const text = el.textContent, part = text.slice(0, -(measure.length + 1)).replace('…', ''); return text.endsWith(' ' + measure) && part.length >= 4 && name.startsWith(part) && el.scrollWidth <= el.parentElement.clientWidth + 1; };");
+            await Check("topShown(npuTopProcSub, 'WindowsStudioEffects', '42 %')", "NPU card shows its busiest client process and its share, shortened to fit");
+            await Check("topShown(igpuTopProcSub, 'msedgewebview2', '30 %') && topShown(gpuTopProcSub, 'Cyberpunk2077', '71 %')", "iGPU and GPU cards show their busiest client process and its share");
+            await Check("topShown(cpuTopProcSub, 'ApplicationFrameHost', '19 %') && topShown(ramTopProcSub, 'ApplicationFrameHost', num(12, 1) + ' ' + GB)", "CPU and RAM cards use the same name + measure form");
+            await Check("[cpuTopProcSub, igpuTopProcSub, npuTopProcSub, gpuTopProcSub, ramTopProcSub].every(el => { const slot = el.parentElement, slots = [...slot.parentElement.querySelectorAll(':scope > .sub-metric')]; return slots.length === 4 && slots[3] === slot && slot.querySelector('.lbl').dataset.i18n === 'label.topProcess'; })", "busiest process sits in the same slot under the same label on every card");
+            await Check("setAdapterTopProcess(gpuTopProcSub, {name: '', pct: 0}) === undefined && gpuTopProcSub.textContent === t('adapter.idle')", "idle adapter shows the idle word without a measure");
             await Check("specGpuName.textContent.endsWith('@ 15001 MHz')", "GPU memory clock is shown in the card title");
             await Check("vramUsedSub.textContent===num(2,1)+' / 32 '+GB && igpuEncodeSub.textContent==='12 %'", "iGPU card shows VRAM used / total and video encode load");
             exitCode = 0;

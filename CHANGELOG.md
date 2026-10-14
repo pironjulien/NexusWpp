@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-14 — Processus principal harmonisé
+
+- Les cinq cartes (CPU, iGPU, NPU, GPU, RAM) montrent le processus le plus actif de la même façon : libellé « TOP PROCESSUS » partout (« Utilisé par » disparaît), toujours dans la dernière case (ligne 2, à droite), valeur « nom + mesure » (« MsMpEng 1 % », « java 3,2 Go », « dwm 12 % »). Les cartes graphiques et le NPU affichent désormais la part de charge du processus, déjà mesurée par l'hôte. « Aucun » au repos au lieu de « AUCUN ».
+- CPU et RAM : le nom est raccourci juste assez pour tenir dans la case, comme sur les autres cartes (au lieu d'une coupe fixe à 11 ou 13 caractères) ; une lecture manquante garde la dernière valeur, grisée.
+- Carte GPU : la case VRAM est traduite et le texte par défaut de « Puissance GPU » ne dit plus « CORE CLOCK ».
+- Tests : même libellé, même case et même forme « nom + mesure » sur toutes les cartes ; « Aucun » sans mesure au repos.
+
 ## 2026-10-14 — Point d'entrée de contrôle commun
 
 - `test.ps1` à la racine : contrôle complet du projet en une commande, hors ligne et sans rien laisser dans le dépôt (convention commune à tous les dépôts de Julien, lancée pour tous par `NexusInfra\ops\workstation\Test-NexusProjets.ps1`). Mêmes étapes que la CI : compilation puis tests de régression.

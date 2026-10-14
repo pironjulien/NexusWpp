@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -50,16 +50,16 @@
                             <span class="val" id="cpu-temp-sub">-- °C</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl" data-i18n="label.topProcess">TOP PROCESSUS</span>
-                            <span class="val" id="cpu-top-proc-sub">--</span>
-                        </div>
-                        <div class="sub-metric">
                             <span class="lbl" data-i18n="label.clockSpeed">CADENCE</span>
                             <span class="val text-purple" id="cpu-freq-sub">-- GHz</span>
                         </div>
                         <div class="sub-metric">
                             <span class="lbl" data-i18n="label.procThreads">PROC / THREADS</span>
                             <span class="val text-purple" id="cpu-proc-threads-sub">-- / --</span>
+                        </div>
+                        <div class="sub-metric">
+                            <span class="lbl" data-i18n="label.topProcess">TOP PROCESSUS</span>
+                            <span class="val fit-one-line" id="cpu-top-proc-sub">--</span>
                         </div>
                     </div>
                     <!-- Removed chip-name -->
@@ -99,7 +99,7 @@
                                 <span class="val highlight-green" id="igpu-encode-sub">-- %</span>
                             </div>
                             <div class="sub-metric">
-                                <span class="lbl" data-i18n="label.usedBy">UTILISÉ PAR</span>
+                                <span class="lbl" data-i18n="label.topProcess">TOP PROCESSUS</span>
                                 <span class="val highlight-green fit-one-line" id="igpu-top-proc-sub">--</span>
                             </div>
                             <div class="sub-progress-container">
@@ -133,16 +133,16 @@
                                 <span class="val text-cyan" id="npu-used-sub">-- Go</span>
                             </div>
                             <div class="sub-metric">
-                                <span class="lbl" data-i18n="label.usedBy">UTILISÉ PAR</span>
-                                <span class="val text-cyan fit-one-line" id="npu-top-proc-sub">--</span>
-                            </div>
-                            <div class="sub-metric">
                                 <span class="lbl" data-i18n="label.freeMemory">MÉMOIRE LIBRE</span>
                                 <span class="val text-cyan" id="npu-free-sub">-- Go</span>
                             </div>
                             <div class="sub-metric">
                                 <span class="lbl" data-i18n="label.totalMemory">MÉMOIRE TOTALE</span>
                                 <span class="val text-cyan" id="npu-total-sub">-- Go</span>
+                            </div>
+                            <div class="sub-metric">
+                                <span class="lbl" data-i18n="label.topProcess">TOP PROCESSUS</span>
+                                <span class="val text-cyan fit-one-line" id="npu-top-proc-sub">--</span>
                             </div>
                             <div class="sub-progress-container">
                                 <div class="sub-progress-fill npu-util-bar" id="npu-util-bar"></div>
@@ -176,16 +176,16 @@
                             <span class="val" id="gpu-temp-sub">-- °C</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl">VRAM</span>
+                            <span class="lbl" data-i18n="label.vram">VRAM</span>
                             <span class="val" id="gpu-vram-sub">-- Go</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl" data-i18n="label.gpuPower">CORE CLOCK</span>
+                            <span class="lbl" data-i18n="label.gpuPower">PUISSANCE GPU</span>
                             <span class="val" id="gpu-core-sub">-- MHz</span>
                         </div>
 
                         <div class="sub-metric">
-                            <span class="lbl" data-i18n="label.usedBy">UTILISÉ PAR</span>
+                            <span class="lbl" data-i18n="label.topProcess">TOP PROCESSUS</span>
                             <span class="val fit-one-line" id="gpu-top-proc-sub">--</span>
                         </div>
                         <div class="sub-progress-container">
@@ -252,12 +252,12 @@
                             <span class="val" id="ram-cached-sub">-- Go</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl" data-i18n="label.topProcess">TOP PROCESSUS</span>
-                            <span class="val" id="ram-top-proc-sub">--</span>
-                        </div>
-                        <div class="sub-metric">
                             <span class="lbl" data-i18n="label.virtualMemory">MÉMOIRE VIRTUELLE</span>
                             <span class="val text-blue" id="ram-status-sub">-- Go / -- Go</span>
+                        </div>
+                        <div class="sub-metric">
+                            <span class="lbl" data-i18n="label.topProcess">TOP PROCESSUS</span>
+                            <span class="val fit-one-line" id="ram-top-proc-sub">--</span>
                         </div>
                     </div>
                     <!-- Removed chip-name -->

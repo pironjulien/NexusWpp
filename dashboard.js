@@ -46,15 +46,16 @@ function shortProcessName(name, max) {
     return name.length > max ? name.slice(0, max - 1) + "…" : name;
 }
 
-// Longest form of a process name that fits on one line of its slot (narrow cards on small screens),
-// measured on the element itself (the slot does not wrap, see .fit-one-line).
-function fitProcessName(element, name) {
+// Longest form of a process name, followed by its measure, that fits on one line of its slot
+// (narrow cards on small screens), measured on the element itself (the slot does not wrap, see .fit-one-line).
+function fitProcessName(element, name, measure = '') {
+    const suffix = measure ? ` ${measure}` : '';
     const width = element.parentElement ? element.parentElement.clientWidth : 0;
-    let candidate = shortProcessName(name, 16);
+    let candidate = shortProcessName(name, 16) + suffix;
     if (!width) return candidate;
     const previous = element.textContent;
-    for (let max = candidate.length; max >= 4; max--) {
-        candidate = shortProcessName(name, max);
+    for (let max = Math.min(name.length, 16); max >= 4; max--) {
+        candidate = shortProcessName(name, max) + suffix;
         element.textContent = candidate;
         if (element.scrollWidth <= width) break;
     }
@@ -78,10 +79,39 @@ function formatBattery(battery) {
 
 let lastGpuMemoryClock = 0;
 
-// Which program uses an adapter right now. null: no reading (last value kept); empty name: idle.
-function setTopProcess(element, top) {
+// Name and measure last fitted in each slot: a slot resized later (monitor layout, DPI, paused
+// rendering) is fitted again to its new width instead of overflowing.
+const processFits = new Map();
+const processFitSlots = new WeakSet();
+const processFitObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(entries => {
+    for (const entry of entries) {
+        const element = entry.target.querySelector('.fit-one-line');
+        const fit = processFits.get(element);
+        if (!fit) continue;
+        const text = fitProcessName(element, fit.name, fit.measure);
+        if (element.textContent !== text) element.textContent = text;
+    }
+}) : null;
+
+// Busiest process of a card, as "name measure" ("MsMpEng 1 %", "java 3,2 Go").
+// top null: no reading (last value kept); empty name: idle.
+function setTopProcess(element, top, measure) {
     if (!element) return;
-    setHeldText(element, top ? (top.name ? fitProcessName(element, top.name) : t("adapter.idle")) : null);
+    if (top && top.name) {
+        if (processFitObserver && element.parentElement && !processFitSlots.has(element.parentElement)) {
+            processFitSlots.add(element.parentElement);
+            processFitObserver.observe(element.parentElement);
+        }
+        processFits.set(element, { name: top.name, measure });
+    } else if (top) {
+        processFits.set(element, null);
+    }
+    setHeldText(element, top ? (top.name ? fitProcessName(element, top.name, measure) : t("adapter.idle")) : null);
+}
+
+// Adapters (iGPU, GPU, NPU): {"name","pct"} from the host, pct = share of the adapter used by that process.
+function setAdapterTopProcess(element, top) {
+    setTopProcess(element, top, top && top.name ? `${Math.round(Number(top.pct) || 0)} %` : '');
 }
 
 function setHeldText(element, text, placeholder = '—') {
@@ -287,14 +317,9 @@ function updateDOM(stats) {
     }
     if (cpuTopProcSub) {
         const top = (stats.topProcesses && stats.topProcesses.length > 0) ? stats.topProcesses[0] : null;
-        if (top && top.Name) {
-            const logical = Math.max(1, Number(stats.cpu.logical) || 1);
-            const pct = Math.min(99, Math.round((Number(top.PercentProcessorTime) || 0) / logical));
-            const shortName = top.Name.length > 14 ? top.Name.slice(0, 13) + "…" : top.Name;
-            cpuTopProcSub.textContent = `${shortName} ${pct}%`;
-        } else {
-            cpuTopProcSub.textContent = "--";
-        }
+        const logical = Math.max(1, Number(stats.cpu.logical) || 1);
+        const pct = top ? Math.min(99, Math.round((Number(top.PercentProcessorTime) || 0) / logical)) : 0;
+        setTopProcess(cpuTopProcSub, top && top.Name ? { name: top.Name } : null, `${pct} %`);
     }
 
     // 3. GPU Sub-metrics (NVML when available, otherwise real Windows counters fill the slots)
@@ -309,7 +334,7 @@ function updateDOM(stats) {
         track(gpuCard, dgpuVramUsed);
     }
     track(gpuCard, setSensorMetric(gpuCoreSub, t("label.gpuPower"), stats.gpu.powerW, "W", stats, "nvidia", "gpu.powerW"));
-    setTopProcess(gpuTopProcSub, stats.gpu.topProcess);
+    setAdapterTopProcess(gpuTopProcSub, stats.gpu.topProcess);
     // Memory clock lives in the card title, like the RAM speed; the last reading is kept when it drops out.
     if (NexusTelemetry.sensorState(stats, "nvidia") === "fresh" && NexusTelemetry.valid(stats.gpu.memoryClock) && stats.gpu.memoryClock > 0) {
         lastGpuMemoryClock = Math.round(stats.gpu.memoryClock);
@@ -332,14 +357,9 @@ function updateDOM(stats) {
     }
     if (ramTopProcSub) {
         const topRam = stats.topRamProcess;
-        if (topRam && topRam.name) {
-            const ramMb = Number(topRam.ramMb) || 0;
-            const ramText = ramMb >= 1024 ? `${num(ramMb / 1024, 1)} ${GB}` : `${ramMb} ${MB}`;
-            const shortRamName = topRam.name.length > 12 ? topRam.name.slice(0, 11) + "…" : topRam.name;
-            ramTopProcSub.textContent = `${shortRamName} ${ramText}`;
-        } else {
-            ramTopProcSub.textContent = "--";
-        }
+        const ramMb = topRam ? Number(topRam.ramMb) || 0 : 0;
+        const ramText = ramMb >= 1024 ? `${num(ramMb / 1024, 1)} ${GB}` : `${ramMb} ${MB}`;
+        setTopProcess(ramTopProcSub, topRam && topRam.name ? topRam : null, ramText);
     }
     ramStatusSub.textContent = `${num(stats.ram.commitUsedGb)} ${GB} / ${num(stats.ram.commitLimitGb)} ${GB}`;
     ramStatusSub.className = "val text-blue";
@@ -406,7 +426,7 @@ function updateDOM(stats) {
     const totalVramGb = num(stats.igpu.totalMb / 1024, 0);
     // Same form as the GPU card: used / total.
     setHeldText(vramUsedSub, igpuUsedFresh ? `${usedVramGb} / ${totalVramGb} ${GB}` : null);
-    setTopProcess(igpuTopProcSub, stats.igpu.topProcess);
+    setAdapterTopProcess(igpuTopProcSub, stats.igpu.topProcess);
     if (igpuDecodeSub) {
         const decodeFresh = NexusTelemetry.valid(stats.igpu.decodeUtil);
         if (setHeldText(igpuDecodeSub, decodeFresh ? `${Math.min(100, stats.igpu.decodeUtil)} %` : null)) held.add(vramCard);
@@ -426,7 +446,7 @@ function updateDOM(stats) {
     const npuTotalGb = npuTotalMb > 0 ? num(npuTotalMb / 1024, 0) : "0";
     setHeldText(npuUsedSub, npuUsedFresh ? `${npuUsedGb} ${GB}` : null);
     // Which program uses the NPU right now (null: no reading, empty name: measured idle).
-    setTopProcess(npuTopProcSub, npuStats.topProcess);
+    setAdapterTopProcess(npuTopProcSub, npuStats.topProcess);
     setHeldText(npuFreeSub, npuUsedFresh && npuTotalMb > 0 ? `${num(Math.max(0, npuTotalMb - npuStats.usedMb) / 1024, 1)} ${GB}` : null);
     if (npuTotalSub) {
         npuTotalSub.textContent = `${npuTotalGb} ${GB}`;
