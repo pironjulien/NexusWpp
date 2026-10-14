@@ -6,6 +6,7 @@
 - CPU et RAM : le nom est raccourci juste assez pour tenir dans la case, comme sur les autres cartes (au lieu d'une coupe fixe à 11 ou 13 caractères) ; une lecture manquante garde la dernière valeur, grisée.
 - Carte GPU : la case VRAM est traduite et le texte par défaut de « Puissance GPU » ne dit plus « CORE CLOCK ».
 - Tests : même libellé, même case et même forme « nom + mesure » sur toutes les cartes ; « Aucun » sans mesure au repos.
+- Tests de disposition : le programme de test libère WebView2 et se termine à la fin de sa série, au lieu de rester parfois bloqué en verrouillant ses DLL.
 
 ## 2026-10-14 — Point d'entrée de contrôle commun
 

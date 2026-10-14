@@ -22,7 +22,14 @@ class ResponsiveLayout : Form
     static int Main(string[] args)
     {
         Application.EnableVisualStyles();
-        using (var form = new ResponsiveLayout(args)) { Application.Run(form); return form.result; }
+        int exitCode = 1;
+        using (var form = new ResponsiveLayout(args))
+        {
+            Application.Run(form);
+            exitCode = form.result;
+        }
+        Environment.Exit(exitCode);
+        return exitCode;
     }
 
     ResponsiveLayout(string[] args)
@@ -94,6 +101,10 @@ class ResponsiveLayout : Form
             result = failures == 0 ? 0 : 2;
         }
         catch (Exception error) { Console.Error.WriteLine(error); }
-        finally { Close(); }
+        finally
+        {
+            view.Dispose();
+            Close();
+        }
     }
 }
