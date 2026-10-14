@@ -1,17 +1,19 @@
 # Changelog
 
-## 2026-10-14 — Tests WebView2 exclusifs par dépôt
+## 2026-10-14 — 1.0.43.0
 
-- Tests de disposition, de pause et des réglages : un seul lancement à la fois par copie du dépôt (`scripts\test_lock.ps1`, verrou sur fichier dans `work\locks`, libéré par Windows même si le processus est tué). Un second lancement (autre agent, `Test-NexusProjets.ps1`) attend son tour en indiquant qui tient le verrou, au lieu d'écraser les binaires et le profil WebView2 du premier. Cause des arrêts « code -1 sans exception » : un lancement concurrent tuait le programme de test en cours par `Stop-Process -Force`.
-- Tests de disposition : le code de sortie du programme est indiqué en cas d'échec, et un arrêt forcé par un autre processus (-1) est signalé comme tel.
-
-## 2026-10-14 — Processus principal harmonisé
+### Processus principal harmonisé
 
 - Les cinq cartes (CPU, iGPU, NPU, GPU, RAM) montrent le processus le plus actif de la même façon : libellé « TOP PROCESSUS » partout (« Utilisé par » disparaît), toujours dans la dernière case (ligne 2, à droite), valeur « nom + mesure » (« MsMpEng 1 % », « java 3,2 Go », « dwm 12 % »). Les cartes graphiques et le NPU affichent désormais la part de charge du processus, déjà mesurée par l'hôte. « Aucun » au repos au lieu de « AUCUN ».
 - CPU et RAM : le nom est raccourci juste assez pour tenir dans la case, comme sur les autres cartes (au lieu d'une coupe fixe à 11 ou 13 caractères) ; une lecture manquante garde la dernière valeur, grisée.
 - Carte GPU : la case VRAM est traduite et le texte par défaut de « Puissance GPU » ne dit plus « CORE CLOCK ».
 - Tests : même libellé, même case et même forme « nom + mesure » sur toutes les cartes ; « Aucun » sans mesure au repos.
 - Tests de disposition : le programme de test libère WebView2 et se termine à la fin de sa série, au lieu de rester parfois bloqué en verrouillant ses DLL.
+
+### Tests WebView2 exclusifs par dépôt
+
+- Tests de disposition, de pause et des réglages : un seul lancement à la fois par copie du dépôt (`scripts\test_lock.ps1`, verrou sur fichier dans `work\locks`, libéré par Windows même si le processus est tué). Un second lancement (autre agent, `Test-NexusProjets.ps1`) attend son tour en indiquant qui tient le verrou, au lieu d'écraser les binaires et le profil WebView2 du premier. Cause des arrêts « code -1 sans exception » : un lancement concurrent tuait le programme de test en cours par `Stop-Process -Force`.
+- Tests de disposition : le code de sortie du programme est indiqué en cas d'échec, et un arrêt forcé par un autre processus (-1) est signalé comme tel.
 
 ## 2026-10-14 — Point d'entrée de contrôle commun
 
