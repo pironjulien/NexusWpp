@@ -608,7 +608,9 @@ function setRuntimeSuspended(suspended) {
         clearInterval(clockTimer);
         clockTimer = 0;
         if (!canvasHasRendered) redrawCanvas();
+        startPauseHeartbeat();
     } else {
+        stopPauseHeartbeat();
         pausedTransitions.forEach(animation => {
             if (animation.playState === "paused") animation.play();
         });
@@ -634,6 +636,32 @@ function setRuntimeSuspended(suspended) {
             }
         } catch (e) {}
     }
+}
+
+// A desktop-sized WebView2 surface that presents no frame at all while paused makes the
+// NVIDIA driver reorganize the display when frames resume: the AOC (5120x1440, G-SYNC)
+// lost sync for a few seconds after every pause. One frame per second on an invisible
+// pixel keeps the surface alive; the pause stays nearly free.
+let pauseHeartbeatTimer = 0;
+let pauseHeartbeatPixel = null;
+function startPauseHeartbeat() {
+    if (pauseHeartbeatTimer) return;
+    if (!pauseHeartbeatPixel) {
+        pauseHeartbeatPixel = document.createElement("div");
+        pauseHeartbeatPixel.setAttribute("aria-hidden", "true");
+        pauseHeartbeatPixel.style.cssText =
+            "position:fixed;left:0;top:0;width:1px;height:1px;background:#000;opacity:0.01;pointer-events:none;z-index:-1";
+        document.body.appendChild(pauseHeartbeatPixel);
+    }
+    let tick = false;
+    pauseHeartbeatTimer = setInterval(() => {
+        tick = !tick;
+        pauseHeartbeatPixel.style.opacity = tick ? "0.02" : "0.01";
+    }, 1000);
+}
+function stopPauseHeartbeat() {
+    clearInterval(pauseHeartbeatTimer);
+    pauseHeartbeatTimer = 0;
 }
 
 function endResumeSnap() {

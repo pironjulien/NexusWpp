@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-15 — 1.0.44.0
+
+### Fin de l'écran noir au retour de pause
+
+- Deux fenêtres côte à côte (ou rangées par Snap) mettent NexusWpp en pause ; en déplacer, fermer ou réduire une faisait passer tout l'écran au noir quelques secondes (AOC 5120x1440 G-SYNC sur la NVIDIA, sans déconnexion vue par Windows). Cause isolée par essais : la surface WebView2 de la taille du bureau ne présentait plus aucune image pendant la pause, et la reprise brutale faisait réorganiser l'affichage au pilote NVIDIA. Sans NexusWpp, sans pause, ou page qui dessine pendant la pause : plus de noir.
+- Pendant la pause, la page change un pixel invisible une fois par seconde : la surface reste vivante, la pause reste quasi gratuite (une image par seconde au lieu de 12). Vérifié sur le poste : plus d'écran noir.
+- Tests de pause : battement présent pendant la pause, arrêté à la reprise.
+
 ## 2026-10-14 — 1.0.43.0
 
 ### Processus principal harmonisé

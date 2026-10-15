@@ -84,10 +84,12 @@ class RuntimePauseRegression : Form
             await Check("ctx.getImageData(0,0,width,height).data.some((v,i) => i % 4 === 3 && v > 0)", "startup covered contains painted scene pixels before resume");
             await Check("getComputedStyle(document.querySelector('.dashboard')).opacity === '1'", "startup covered keeps dashboard readable");
             await Check("!canvasFrameTimer && !canvasAnimationFrame && !clockTimer", "startup covered has no animation or clock callbacks");
+            await Check("pauseHeartbeatTimer !== 0 && pauseHeartbeatPixel && getComputedStyle(pauseHeartbeatPixel).pointerEvents === 'none'", "pause keeps a one-frame-per-second heartbeat on an invisible pixel");
 
             Control(false);
             await Task.Delay(300);
             await Check("!runtimeSuspended && clockTimer !== 0", "resume restarts clock");
+            await Check("pauseHeartbeatTimer === 0", "resume stops the pause heartbeat");
             await view.CoreWebView2.ExecuteScriptAsync(@"
                 document.querySelector('.gauge-card').classList.add('high-load');
                 setCircularProgress(cpuRing, 75);
