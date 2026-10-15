@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-15 — 1.0.45.0
+
+### Retrait du battement de pause de la 1.0.44.0
+
+- La cause attribuée en 1.0.44.0 était fausse. L'écran noir (AOC 5120x1440 non certifié G-SYNC, VRR forcé par le pilote NVIDIA) venait de G-SYNC : il persistait sans aucune pause de NexusWpp et même avec l'EDID d'usine, et disparaît dès que G-SYNC est désactivé pour cet écran. Les essais A/B précédents étaient trompés par un problème intermittent.
+- Le pixel invisible rafraîchi une fois par seconde pendant la pause est retiré : la pause redevient totale, comme en 1.0.43.0.
+
 ## 2026-10-15 — 1.0.44.0
 
 ### Fin de l'écran noir au retour de pause
