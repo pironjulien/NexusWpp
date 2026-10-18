@@ -1,4 +1,22 @@
-# NexusWpp - Native Dynamic Desktop Wallpaper
+# NexusWpp
+
+**Your PC, at a glance. A live hardware dashboard as your Windows wallpaper.**
+
+[![Microsoft Store](https://img.shields.io/badge/Microsoft%20Store-Get%20it%20free-0078D4?logo=microsoft)](https://apps.microsoft.com/detail/9N2VCVDH7QDX)
+[![Version](https://img.shields.io/badge/version-1.0.45-53fff4)](CHANGELOG.md)
+[![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4)](#quick-start)
+[![License](https://img.shields.io/github/license/pironjulien/NexusWpp)](LICENSE)
+
+![NexusWpp cockpit on the Windows desktop: CPU, GPU, NPU, RAM, SSD and network cards with 60-second history](docs/assets/nexuswpp-cockpit.webp)
+
+CPU, GPU, integrated graphics, NPU, RAM, SSD and network: load, temperatures, memory and throughput, with the last
+60 seconds on every card. Switch power plans from the desktop in one click. It pauses on its own as soon as a window or
+a game covers it. No Wallpaper Engine, no Node server: a native Windows app.
+
+**Get it:** [Microsoft Store](https://apps.microsoft.com/detail/9N2VCVDH7QDX) (free) ·
+**Project page:** [julienpiron.fr/nexuswpp](https://julienpiron.fr/nexuswpp/)
+
+## How it works
 
 NexusWpp displays a dynamic hardware cockpit directly on the Windows desktop, without Wallpaper Engine. The official mode is the native host `nexuswpp.exe`, which loads `index.html` in WebView2, attaches to the desktop's `WorkerW`/`Progman` layer, then sends telemetry to the frontend through WebView2 messages.
 
