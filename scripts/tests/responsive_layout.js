@@ -6,7 +6,7 @@ window.layoutFixture = function (test) {
     const npu = ['full', 'npu-only'].includes(test.hardware);
     const dgpu = ['full', 'dual-gpu', 'minimal'].includes(test.hardware);
     window.layoutExpectedCards = 4 + Number(igpu) + Number(npu) + Number(dgpu);
-    const planNames = ['Utilisation normale', 'Économies d’énergie', 'Performances élevées', 'Performances optimales'];
+    const planNames = ['Utilisation normale', 'Économies d’énergie', 'Performances élevées', 'Performances optimales', 'Mode Dev'];
     const stats = {
         cpu: { utilization: 48, temp: 65, name: 'Intel Core Ultra 9 285K', freqGhz: 5.7, threads: 5462, logical: 24 },
         igpu: { utilization: 35, detected: igpu, name: 'Intel Graphics', usedMb: 2048, totalMb: 32768, decodeUtil: 24, encodeUtil: 12, topProcess: { name: 'msedgewebview2', pct: 30 } },
@@ -82,6 +82,20 @@ window.inspectLayout = function () {
             range.selectNodeContents(element);
             for (const line of range.getClientRects()) {
                 if (!inside(line, bounds, 2)) { issues.push(name(element) + ': text overflow'); break; }
+            }
+        }
+        // A plan name wraps between words, never inside one ("PERFORMANCE / S OPTIMALES"), unless the
+        // button is too narrow even at the 8 px floor of fitPowerPlanLabels (tiny windows).
+        if (element.matches('.btn-lbl') && element.firstChild && parseFloat(getComputedStyle(element).fontSize) > 8) {
+            const text = element.firstChild;
+            for (const match of text.data.matchAll(/\S+/g)) {
+                const word = document.createRange();
+                word.setStart(text, match.index);
+                word.setEnd(text, match.index + match[0].length);
+                if (new Set([...word.getClientRects()].map(line => Math.round(line.top))).size > 1) {
+                    issues.push(name(element) + ': word split ' + match[0]);
+                    break;
+                }
             }
         }
         if (element.matches('.gauge-container')) {

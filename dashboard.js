@@ -653,8 +653,9 @@ function updatePowerPlanButtons(stats) {
 
     if (isPowerPlanSwitching) return;
 
-    const currentGuids = Array.from(powerPlansContainer.children).map(btn => btn.dataset.guid).join(',');
-    const newGuids = stats.powerPlans.map(p => p.guid).join(',');
+    // A renamed plan keeps its GUID: the name is part of the key so its button is rebuilt too.
+    const currentGuids = Array.from(powerPlansContainer.children).map(btn => btn.dataset.guid + '|' + btn.title).join(',');
+    const newGuids = stats.powerPlans.map(p => p.guid + '|' + p.name).join(',');
     if (currentGuids !== newGuids) {
         powerPlansContainer.innerHTML = "";
         stats.powerPlans.forEach(plan => {
@@ -685,7 +686,13 @@ function updatePowerPlanButtons(stats) {
             button.addEventListener("click", () => setPowerPlan(plan.guid));
             powerPlansContainer.appendChild(button);
         });
+        if (powerPlanFitObserver && !powerPlansContainer.dataset.fitObserved) {
+            powerPlansContainer.dataset.fitObserved = '1';
+            powerPlanFitObserver.observe(powerPlansContainer);
+        }
     }
+    // Every update: the base font follows the viewport (clamp on --lvw) even when the container keeps its size.
+    fitPowerPlanLabels();
 
     // Update active classes
     currentPowerPlan = "";
@@ -704,6 +711,27 @@ function updatePowerPlanButtons(stats) {
         }
     });
 }
+
+// Shrinks a plan label just enough for its longest word to fit on one line, so a long name wraps
+// between words ("PERFORMANCES / OPTIMALES") instead of inside one ("PERFORMANCE / S OPTIMALES").
+const labelMeasure = document.createElement("canvas").getContext("2d");
+function fitPowerPlanLabels() {
+    if (!powerPlansContainer) return;
+    powerPlansContainer.querySelectorAll(".btn-lbl").forEach(label => {
+        label.style.fontSize = "";
+        const width = label.clientWidth;
+        if (!width) return;
+        const style = getComputedStyle(label);
+        const size = parseFloat(style.fontSize);
+        labelMeasure.font = `${style.fontWeight} ${size}px ${style.fontFamily}`;
+        const spacing = parseFloat(style.letterSpacing) || 0;
+        const widest = Math.max(...label.textContent.split(/\s+/).filter(Boolean)
+            .map(word => labelMeasure.measureText(word).width + spacing * word.length));
+        // 2 % margin for subpixel rounding; overflow-wrap stays the last resort below 8 px.
+        if (widest > width) label.style.fontSize = Math.max(8, Math.floor(size * width / widest * 0.98 * 10) / 10) + "px";
+    });
+}
+const powerPlanFitObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => fitPowerPlanLabels()) : null;
 
 // Kind sent by the host (plan GUID / Windows personality / power mode); the name is only a
 // fallback for payloads without it.

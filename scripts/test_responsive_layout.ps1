@@ -40,6 +40,12 @@ try {
             }
         }
     }
+    # Five plans (a second row of buttons) on real desktop sizes, with long French names.
+    foreach ($size in @(@(1280,720),@(1920,1080),@(2560,1440),@(5120,1440))) {
+        foreach ($scale in @(1, 1.25)) {
+            $cases.Add(@{ id="plans5-$($size[0])x$($size[1])-$([int]($scale*100))pct"; width=[int][math]::Floor($size[0] / $scale); height=[int][math]::Floor($size[1] / $scale); dpr=$scale; plans=5; hardware='full'; capture=$false })
+        }
+    }
     # Exercise both sides of historical breakpoints, hardware removal, and plan reflow.
     foreach ($size in @(@(1000,900),@(1001,901),@(1280,900),@(1280,901),@(1920,1200),@(1920,1201),@(2500,1400),@(2501,1400),@(800,450),@(432,768))) {
         foreach ($plans in @(1,3,4)) {

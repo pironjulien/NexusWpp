@@ -63,6 +63,8 @@ namespace DesktopHtmlHost
         private volatile int pingTime = -1;
         private volatile bool pingViaGateway;
         private DateTime lastPingTime = DateTime.MinValue;
+        private const int PowerPlansRefreshSeconds = 5;
+        private DateTime lastPowerPlansRefresh = DateTime.UtcNow;
         private volatile bool isPingPending = false;
         private DateTime pingStartedAt = DateTime.MinValue;
 
@@ -683,9 +685,9 @@ namespace DesktopHtmlHost
             return name.Substring(start, end - start).ToLowerInvariant();
         }
 
-        public void UpdatePowerPlansCache()
+        public void UpdatePowerPlansCache(bool allowPowercfg = true)
         {
-            List<PowerPlanInfo> plans = PowerSchemes.EnumeratePlans() ?? ReadPowerPlansFromPowercfg();
+            List<PowerPlanInfo> plans = PowerSchemes.EnumeratePlans() ?? (allowPowercfg ? ReadPowerPlansFromPowercfg() : null);
             if (plans == null || plans.Count == 0) return;
 
             // A single plan (usual on Modern Standby laptops) makes a one-button panel that does
@@ -1258,6 +1260,13 @@ namespace DesktopHtmlHost
 
             int wifiSignal = network.WifiSignal();
 
+            // Plans added, removed or renamed since startup (powercfg, Settings, a driver) show up
+            // without restarting; powrprof only, never a powercfg process every few seconds.
+            if ((DateTime.UtcNow - lastPowerPlansRefresh).TotalSeconds >= PowerPlansRefreshSeconds)
+            {
+                lastPowerPlansRefresh = DateTime.UtcNow;
+                UpdatePowerPlansCache(false);
+            }
             List<PowerPlanInfo> powerPlans = PowerPlans;
             RefreshActivePowerPlan(powerPlans);
 

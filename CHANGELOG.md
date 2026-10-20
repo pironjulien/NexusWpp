@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-20 — 1.0.46.0
+
+### Modes d'alimentation toujours à jour
+
+- Les boutons de mode suivent les modes de Windows sans redémarrer NexusWpp : un mode ajouté, supprimé ou renommé (powercfg, Paramètres, pilote) apparaît ou disparaît en quelques secondes. La liste n'était lue qu'au démarrage : après la suppression de deux modes, le panneau en montrait encore cinq.
+- Un nom long passe à la ligne entre deux mots, plus au milieu d'un mot (« PERFORMANCE / S OPTIMALES ») : l'étiquette réduit juste assez sa police pour que son mot le plus long tienne sur une ligne.
+- Tests de disposition : aucun mot coupé dans les boutons de mode ; cinq modes sur des écrans de bureau réels.
+
 ## 2026-10-20 — Chaîne d'approvisionnement GitHub
 
 - Actions GitHub épinglées par empreinte (SHA + version en commentaire), checkout sans identifiants persistés ;
