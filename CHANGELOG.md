@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-20 — Chaîne d'approvisionnement GitHub
+
+- Actions GitHub épinglées par empreinte (SHA + version en commentaire), checkout sans identifiants persistés ;
+  zizmor sans trouvaille moyenne ni haute.
+- Dependabot ajouté avec un délai de 7 jours (cooldown) et un regroupement des mises à jour : GitHub Actions et NuGet (WebView2).
+- Workflow OpenSSF Scorecard et badge dans le README.
+
 ## 2026-10-15 — 1.0.45.0
 
 ### Retrait du battement de pause de la 1.0.44.0

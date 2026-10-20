@@ -6,6 +6,7 @@
 [![Version](https://img.shields.io/badge/version-1.0.45-53fff4)](CHANGELOG.md)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4)](#quick-start)
 [![License](https://img.shields.io/github/license/pironjulien/NexusWpp)](LICENSE)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/pironjulien/NexusWpp/badge)](https://scorecard.dev/viewer/?uri=github.com/pironjulien/NexusWpp)
 
 ![NexusWpp cockpit on the Windows desktop: CPU, GPU, NPU, RAM, SSD and network cards with 60-second history](docs/assets/nexuswpp-cockpit.webp)
 
