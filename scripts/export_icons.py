@@ -1,7 +1,8 @@
 """Renders the NexusWpp icons from branding/*.svg: icon.ico and the PNGs build_msix.ps1 packs.
 
 The SVGs come from the Nexus icon kit (NexusPublish/communication/icones). Rule of the kit: under 44 px the
-pictogram alone (nexuswpp-icon), from 44 px the pictogram in the julienpiron.fr medallion (nexuswpp-mark).
+medallion cut round with transparent corners (nexuswpp-round), from 44 px the pictogram in the julienpiron.fr
+medallion on its dark square (nexuswpp-mark). The pictogram alone is never shown.
 Run again after replacing the SVGs:  python scripts/export_icons.py   (needs cairosvg)
 """
 from pathlib import Path
@@ -20,7 +21,7 @@ MSIX_SIZES = (16, 20, 24, 30, 32, 36, 40, 44, 48, 60, 64, 72, 80, 96, 256,
 
 
 def kind(size):
-    return 'mark' if size >= MARK_MIN else 'icon'
+    return 'mark' if size >= MARK_MIN else 'round'
 
 
 def render(size):

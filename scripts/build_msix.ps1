@@ -1,4 +1,4 @@
-﻿param(
+param(
     [switch]$SkipSigning
 )
 
@@ -88,7 +88,7 @@ foreach ($file in $binFiles) {
 }
 
 # Logos rendered at their exact size by scripts/export_icons.py from branding/*.svg:
-# the pictogram alone under 44 px, the medallion from 44 px.
+# the medallion cut round under 44 px, the medallion on its dark square from 44 px.
 function New-LogoPng {
     param(
         [string]$Path,
@@ -97,7 +97,7 @@ function New-LogoPng {
     )
 
     if ($Width -ne $Height) { throw "Logo ${Width}x${Height} is not square." }
-    $kind = if ($Width -ge 44) { "mark" } else { "icon" }
+    $kind = if ($Width -ge 44) { "mark" } else { "round" }
     $source = Join-Path $projectRoot ("branding\png\nexuswpp-" + $kind + "-" + $Width + ".png")
     if (!(Test-Path -LiteralPath $source)) { throw "Missing $source : add $Width to MSIX_SIZES in scripts\export_icons.py and run it." }
     Copy-Item -LiteralPath $source -Destination $Path -Force

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using System.IO;
@@ -294,8 +294,8 @@ namespace DesktopHtmlHost
             return Path.Combine(GetAppDataFolder(), "WebView2");
         }
 
-        // icon.ico ships next to the exe with every size, so each place picks its own entry: the pictogram under
-        // 44 px, the medallion above. ExtractAssociatedIcon only gives the large size, which Windows takes from the
+        // icon.ico ships next to the exe with every size, so each place picks its own entry: the round medallion
+        // under 44 px, the medallion on its dark square above. ExtractAssociatedIcon only gives the large size, which Windows takes from the
         // 48 px medallion at 125 % and shrinks into the title bar and the notification area.
         internal static System.Drawing.Icon LoadAppIcon(System.Drawing.Size size)
         {

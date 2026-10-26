@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-27 — 1.0.48.0
+
+### Petites icônes en médaillon rond
+
+- Sous 44 px, l'icône est désormais le médaillon de julienpiron.fr découpé en rond (coins transparents) au lieu du pictogramme seul, selon la nouvelle règle du kit d'icônes Nexus : barre des tâches, zone de notification, barre de titre des réglages, petites tailles du menu Démarrer et de l'exe. À partir de 44 px, rien ne change.
+- `branding/nexuswpp-round.svg` remplace `branding/nexuswpp-icon.svg` ; `scripts/export_icons.py` régénère `icon.ico` et les logos MSIX.
+
 ## 2026-10-26 — 1.0.47.0
 
 ### Nouvelle icône NexusWpp
