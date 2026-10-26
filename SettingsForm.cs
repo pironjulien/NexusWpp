@@ -55,7 +55,7 @@ namespace DesktopHtmlHost
             AutoSize = true;
             AutoSizeMode = AutoSizeMode.GrowOnly; // never jumps smaller when the status text changes
             Padding = new Padding(28, 20, 28, 22);
-            try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
+            Icon = Program.LoadAppIcon(SystemInformation.IconSize);
 
             var layout = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty, BackColor = Back };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, ContentWidth));

@@ -3,7 +3,7 @@
 **Your PC, at a glance. A live hardware dashboard as your Windows wallpaper.**
 
 [![Microsoft Store](https://img.shields.io/badge/Microsoft%20Store-Get%20it%20free-0078D4?logo=microsoft)](https://apps.microsoft.com/detail/9N2VCVDH7QDX)
-[![Version](https://img.shields.io/badge/version-1.0.45-53fff4)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.47-53fff4)](CHANGELOG.md)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4)](#quick-start)
 [![License](https://img.shields.io/github/license/pironjulien/NexusWpp)](LICENSE)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/pironjulien/NexusWpp/badge)](https://scorecard.dev/viewer/?uri=github.com/pironjulien/NexusWpp)

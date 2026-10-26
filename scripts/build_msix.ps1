@@ -87,43 +87,20 @@ foreach ($file in $binFiles) {
     Copy-Item -LiteralPath (Join-Path $projectRoot ("bin\" + $file)) -Destination (Join-Path $packageDir $file) -Force
 }
 
-Add-Type -AssemblyName System.Drawing
+# Logos rendered at their exact size by scripts/export_icons.py from branding/*.svg:
+# the pictogram alone under 44 px, the medallion from 44 px.
 function New-LogoPng {
     param(
         [string]$Path,
         [int]$Width,
-        [int]$Height,
-        [int]$Padding = 0
+        [int]$Height
     )
 
-    $bitmap = New-Object System.Drawing.Bitmap $Width, $Height, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
-    try {
-        $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-        try {
-            $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
-            $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-            $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-            $graphics.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
-            $graphics.Clear([System.Drawing.Color]::Transparent)
-
-            $logo = [System.Drawing.Image]::FromFile((Join-Path $projectRoot "julienpiron.png"))
-            try {
-                $size = [Math]::Min($Width - (2 * $Padding), $Height - (2 * $Padding))
-                if ($size -le 0) { throw "Invalid logo padding for ${Width}x${Height}." }
-                $x = [Math]::Round(($Width - $size) / 2)
-                $y = [Math]::Round(($Height - $size) / 2)
-                $graphics.DrawImage($logo, $x, $y, $size, $size)
-            } finally {
-                $logo.Dispose()
-            }
-        } finally {
-            $graphics.Dispose()
-        }
-
-        $bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
-    } finally {
-        $bitmap.Dispose()
-    }
+    if ($Width -ne $Height) { throw "Logo ${Width}x${Height} is not square." }
+    $kind = if ($Width -ge 44) { "mark" } else { "icon" }
+    $source = Join-Path $projectRoot ("branding\png\nexuswpp-" + $kind + "-" + $Width + ".png")
+    if (!(Test-Path -LiteralPath $source)) { throw "Missing $source : add $Width to MSIX_SIZES in scripts\export_icons.py and run it." }
+    Copy-Item -LiteralPath $source -Destination $Path -Force
 }
 
 function New-ScaledLogoSet {

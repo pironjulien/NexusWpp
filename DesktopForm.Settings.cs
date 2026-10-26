@@ -32,8 +32,7 @@ namespace DesktopHtmlHost
                 ContextMenuStrip = menu,
                 Visible = true
             };
-            try { trayIcon.Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
-            catch { trayIcon.Icon = System.Drawing.SystemIcons.Application; }
+            trayIcon.Icon = Program.LoadAppIcon(SystemInformation.SmallIconSize);
             trayIcon.MouseClick += (sender, e) => { if (e.Button == MouseButtons.Left) ShowSettings(); };
         }
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-26 — 1.0.47.0
+
+### Nouvelle icône NexusWpp
+
+- NexusWpp a sa propre icône, celle de la famille Nexus : un écran vert avec jauge et barres, posé dans le médaillon de julienpiron.fr. Elle remplace le logo π du site dans l'exécutable, la barre des tâches, la zone de notification, la fenêtre de réglages, le menu Démarrer, les tuiles et le paquet Store.
+- Sous 44 px, le pictogramme seul (le médaillon ne se lit plus) ; à partir de 44 px, le médaillon. La barre de titre des réglages et la zone de notification lisent `icon.ico` à leur taille : avant, Windows y réduisait l'image 48 px à 125 %.
+- Source unique dans `branding/` (SVG du kit d'icônes Nexus) : `scripts/export_icons.py` en tire `icon.ico` et chaque logo MSIX à sa taille exacte, au lieu de réduire `julienpiron.png` au moment du paquet.
+- Le logo par défaut du radar du cockpit (`julienpiron.png`, remplaçable dans les réglages) ne change pas.
+
 ## 2026-10-20 — 1.0.46.0
 
 ### Modes d'alimentation toujours à jour

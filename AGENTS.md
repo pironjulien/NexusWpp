@@ -13,6 +13,7 @@
 .\compile.ps1
 .\scripts\build_installer.ps1
 .\scripts\build_msix.ps1
+python .\scripts\export_icons.py   # icon.ico et logos MSIX depuis branding\*.svg (cairosvg)
 .\scripts\tag_release.ps1   # tag annote v<VERSION> sur le commit courant, non pousse (git push origin v<VERSION>)
 ```
 
