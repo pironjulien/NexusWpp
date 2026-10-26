@@ -1,6 +1,7 @@
 """Renders the NexusWpp icons from branding/*.svg: icon.ico and the PNGs build_msix.ps1 packs.
 
-The SVGs come from the Nexus icon kit (NexusPublish/communication/icones). Rule of the kit: under 44 px the
+The SVGs come from the Nexus icon kit (NexusPublish/communication/icones), with the medallion rebuilt at 600 px by
+scripts/make_medallion.py. Rule of the kit: under 44 px the
 medallion cut round with transparent corners (nexuswpp-round), from 44 px the pictogram in the julienpiron.fr
 medallion on its dark square (nexuswpp-mark). The pictogram alone is never shown.
 Run again after replacing the SVGs:  python scripts/export_icons.py   (needs cairosvg)
@@ -42,8 +43,8 @@ def write_ico(path, sizes):
 
 def write_store_logos(out):
     # Partner Center listing logos (Logos Windows Store), uploaded by hand: dist/ is not versioned.
-    # The medallion of the kit embeds a 240 px raster: the 1:1 and 9:16 images use their smallest accepted size
-    # and keep the medallion under 3x, on the dark green of the icon.
+    # The medallion is a 600 px raster: the 1:1 and 9:16 images use their smallest accepted size so it stays at its
+    # native resolution, on the dark green of the icon.
     out.mkdir(parents=True, exist_ok=True)
     for size in (300, 150, 71):
         (out / f'tile-{size}.png').write_bytes(render(size))

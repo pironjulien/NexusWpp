@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-27 — 1.0.49.0
+
+### Médaillon net en grand
+
+- Le médaillon des icônes passe de 240 à 600 px : `scripts/make_medallion.py` le refait à partir de `julienpiron.png` avec le même disque intérieur estompé que le kit d'icônes Nexus. Les grands logos du menu Démarrer et du paquet, l'icône 256 px de l'exe et les logos de la fiche Store ne sont plus flous.
+- `splash.jpg`, livré dans chaque installation sans être utilisé nulle part, est retiré.
+
 ## 2026-10-27 — 1.0.48.0
 
 ### Petites icônes en médaillon rond
