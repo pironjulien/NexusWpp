@@ -39,6 +39,29 @@ def write_ico(path, sizes):
     path.write_bytes(header + entries + b''.join(images))
 
 
+def write_store_logos(out):
+    # Partner Center listing logos (Logos Windows Store), uploaded by hand: dist/ is not versioned.
+    # The medallion of the kit embeds a 240 px raster: the 1:1 and 9:16 images use their smallest accepted size
+    # and keep the medallion under 3x, on the dark green of the icon.
+    out.mkdir(parents=True, exist_ok=True)
+    for size in (300, 150, 71):
+        (out / f'tile-{size}.png').write_bytes(render(size))
+    mark = (BRANDING / 'nexuswpp-mark.svg').read_text(encoding='utf-8')
+    inner = mark[mark.index('>') + 1:mark.rindex('</svg>')]
+    background = '<rect width="100%" height="100%" fill="#07140c"/>'
+
+    def compose(width, height, size, y, title=''):
+        svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}">{background}'
+               f'<svg x="{(width - size) / 2}" y="{y}" width="{size}" height="{size}" viewBox="0 0 108 108">{inner}</svg>'
+               f'{title}</svg>')
+        return cairosvg.svg2png(bytestring=svg.encode('utf-8'), output_width=width, output_height=height)
+
+    (out / 'box-1080x1080.png').write_bytes(compose(1080, 1080, 640, 220))
+    title = ('<text x="360" y="850" text-anchor="middle" font-family="Segoe UI" font-weight="700" font-size="76" '
+             'letter-spacing="4" fill="#4be08a">NEXUSWPP</text>')
+    (out / 'poster-720x1080.png').write_bytes(compose(720, 1080, 560, 190, title))
+
+
 out = BRANDING / 'png'
 out.mkdir(exist_ok=True)
 for stale in out.glob('*.png'):
@@ -46,4 +69,5 @@ for stale in out.glob('*.png'):
 for size in sorted(set(MSIX_SIZES)):
     (out / f'nexuswpp-{kind(size)}-{size}.png').write_bytes(render(size))
 write_ico(ROOT / 'icon.ico', ICO_SIZES)
+write_store_logos(ROOT / 'dist' / 'store-logos')
 print(f'icon.ico ({len(ICO_SIZES)} sizes), {len(set(MSIX_SIZES))} PNG in branding/png')

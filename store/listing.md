@@ -2,6 +2,7 @@
 
 Textes à coller dans Partner Center (Descriptions dans le Store). Chaque fonction citée existe dans l'application.
 Captures : `.\scripts\store_screenshots.ps1` (rendu réel avec la télémétrie réelle du PC) → `dist\store-screenshots\`. Ordre conseillé : cockpit 4K, réglages, logo personnalisé, ultra-large, portrait.
+Logos Windows Store (affiche 9:16, zone 1:1, vignettes 300/150/71) : `python .\scripts\export_icons.py` → `dist\store-logos\`.
 
 ---
 
@@ -49,9 +50,9 @@ Confidentialité : tout est mesuré localement. Pas de compte, pas de publicité
 
 fond d'écran animé, moniteur système, cockpit, CPU GPU, température, NPU, widget bureau
 
-### Nouveautés de cette version (1.0.38.0)
+### Nouveautés de cette version (1.0.47.0)
 
-Historique des 60 dernières secondes dans chaque carte. Réglages depuis l'icône de la zone de notification : logo central personnalisable et bouton Quitter. Télémétrie environ 28 fois plus rapide grâce aux compteurs natifs de Windows, pour une consommation nettement réduite. Interface disponible en anglais, selon la langue de Windows. Économiseur d'énergie : quand il est activé dans Windows, les anneaux du logo s'immobilisent pour économiser la batterie ; les valeurs continuent de se mettre à jour. Moteur d'affichage WebView2 mis à jour. Mesures du disque et du ping corrigées, démarrage et reprise plus fiables.
+Nouvelle icône NexusWpp : un écran avec jauge et barres dans le médaillon de julienpiron.fr, nette dans la barre des tâches, la zone de notification, le menu Démarrer et la fenêtre de réglages.
 
 ---
 
@@ -99,6 +100,6 @@ Privacy: everything is measured locally. No account, no ads, no data collected o
 
 live wallpaper, system monitor, hardware monitor, CPU GPU, temperature, NPU, desktop dashboard
 
-### What's new in this version (1.0.38.0)
+### What's new in this version (1.0.47.0)
 
-Last 60 seconds of history in every card. Settings from the notification area icon: customizable center logo and a Quit button. Telemetry about 28 times faster through native Windows performance counters, for much lower resource use. The interface is now available in English, following your Windows language. Energy saver: when it is on in Windows, the logo rings hold still to save battery; values keep updating. Updated WebView2 display engine. Fixed disk and ping readings, more reliable startup and resume.
+New NexusWpp icon: a screen with a gauge and bars in the julienpiron.fr medallion, crisp in the taskbar, the notification area, the Start menu and the settings window.
