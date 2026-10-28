@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-28 — Politique de sécurité
+
+- `SECURITY.md` : signalement privé par GitHub, délais de réponse et de correction, publication en avis de sécurité.
+
 ## 2026-10-27 — 1.0.49.0
 
 ### Médaillon net en grand
