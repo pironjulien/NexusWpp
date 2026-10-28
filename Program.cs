@@ -75,6 +75,7 @@ namespace DesktopHtmlHost
 
                 RegisterForUpdateRestart(args);
                 CleanupStaleWebView2Processes();
+                System.Threading.Tasks.Task.Run(() => PriorityStartup.ReconcileAsync());
 
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);

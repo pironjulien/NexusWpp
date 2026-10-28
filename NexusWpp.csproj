@@ -32,6 +32,20 @@
     <Reference Include="System.Management" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Drawing" />
+    <!-- dynamic late binding to the Task Scheduler COM API (PriorityStartup.cs). -->
+    <Reference Include="Microsoft.CSharp" />
+    <!-- WinRT StartupTask API of the Store package, from the metadata shipped with Windows. -->
+    <Reference Include="System.Runtime">
+      <HintPath>$(WINDIR)\Microsoft.NET\Framework64\v4.0.30319\System.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>    <Reference Include="Windows.Foundation">
+      <HintPath>$(WINDIR)\System32\WinMetadata\Windows.Foundation.winmd</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Windows.ApplicationModel">
+      <HintPath>$(WINDIR)\System32\WinMetadata\Windows.ApplicationModel.winmd</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>

@@ -50,9 +50,9 @@ Confidentialité : tout est mesuré localement. Pas de compte, pas de publicité
 
 fond d'écran animé, moniteur système, cockpit, CPU GPU, température, NPU, widget bureau
 
-### Nouveautés de cette version (1.0.48.0)
+### Nouveautés de cette version (1.0.50.0)
 
-Nouvelle icône NexusWpp : un écran avec jauge et barres dans le médaillon de julienpiron.fr, jusque dans la barre des tâches, la zone de notification, le menu Démarrer et la fenêtre de réglages, où il s'affiche en rond.
+Démarrage prioritaire, dans les réglages : NexusWpp se lance avec le bureau, avant les autres applications de démarrage, au lieu d'apparaître près d'une minute après la connexion.
 
 ---
 
@@ -100,6 +100,6 @@ Privacy: everything is measured locally. No account, no ads, no data collected o
 
 live wallpaper, system monitor, hardware monitor, CPU GPU, temperature, NPU, desktop dashboard
 
-### What's new in this version (1.0.48.0)
+### What's new in this version (1.0.50.0)
 
-New NexusWpp icon: a screen with a gauge and bars in the julienpiron.fr medallion, down to the taskbar, the notification area, the Start menu and the settings window, where it shows as a round badge.
+Priority startup, in the settings: NexusWpp launches with the desktop, before other startup apps, instead of showing up about a minute after sign-in.

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-28 — 1.0.50.0
+
+### Démarrage prioritaire
+
+- Windows lance la tâche de démarrage d'un paquet Store après toutes les entrées Run et son délai de démarrage : NexusWpp apparaissait environ une minute après la connexion, alors qu'il s'affiche en 2 s une fois lancé.
+- Nouvelle case « Démarrage prioritaire » dans les réglages (version Store) : elle crée une tâche planifiée à l'ouverture de session de l'utilisateur (sans élévation, priorité normale, sans limite de durée) qui lance NexusWpp avec le bureau, comme la haute priorité de Wallpaper Engine mais sans service ni droits administrateur. Désactivée par défaut.
+- Tant que la tâche existe, la tâche de démarrage du paquet est coupée (un seul lancement, pas de réglages ouverts par un second lancement) ; décocher supprime la tâche et la rallume. À chaque lancement, NexusWpp remet les deux en cohérence.
+- Le paquet déclare l'alias `nexuswpp.exe` que lance la tâche. Windows ne retire pas les tâches planifiées à la désinstallation : si NexusWpp est désinstallé avec l'option active, la tâche reste et ne lance plus rien.
+
 ## 2026-10-28 — Politique de sécurité
 
 - `SECURITY.md` : signalement privé par GitHub, délais de réponse et de correction, publication en avis de sécurité.

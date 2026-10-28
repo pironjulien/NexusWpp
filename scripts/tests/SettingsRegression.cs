@@ -145,6 +145,17 @@ static class SettingsRegression
             Check(new[] { "version", "rate", "startup", "startupNote", "logs", "status" }.All(named.ContainsKey), "version, rating, startup and logs controls are present");
             Check(named["version"].Text.Contains(NexusWpp.ReleaseVersion.Value), "version line shows the release version");
             Check(!named.ContainsKey("welcome"), "welcome message is hidden by default");
+            Check(named.ContainsKey("priorityStartup") == PriorityStartup.Available, "priority startup is offered only with the Store alias");
+            var taskXml = new System.Xml.XmlDocument();
+            taskXml.LoadXml(PriorityStartup.BuildTaskXml(@"PC\A&B", @"C:\Users\A&B\AppData\Local\Microsoft\WindowsApps\nexuswpp.exe"));
+            var ns = new System.Xml.XmlNamespaceManager(taskXml.NameTable);
+            ns.AddNamespace("t", "http://schemas.microsoft.com/windows/2004/02/mit/task");
+            Check(taskXml.SelectSingleNode("//t:LogonTrigger/t:UserId", ns).InnerText == @"PC\A&B" &&
+                  taskXml.SelectSingleNode("//t:Exec/t:Command", ns).InnerText.EndsWith(@"A&B\AppData\Local\Microsoft\WindowsApps\nexuswpp.exe") &&
+                  taskXml.SelectSingleNode("//t:Principal/t:RunLevel", ns).InnerText == "LeastPrivilege" &&
+                  taskXml.SelectSingleNode("//t:Settings/t:Priority", ns).InnerText == "4" &&
+                  taskXml.SelectSingleNode("//t:Settings/t:ExecutionTimeLimit", ns).InnerText == "PT0S",
+                  "priority startup task: this user's logon, alias, no elevation, normal priority, no time limit");
             Check(AllControls(form).Where(c => c.GetType().Name == "LogoPreview").All(c => !c.CanSelect && !c.TabStop), "logo preview takes no keyboard focus");
             Check(((Label)named["status"]).LiveSetting == System.Windows.Forms.Automation.AutomationLiveSetting.Polite, "status is a polite live region");
             form.Close();

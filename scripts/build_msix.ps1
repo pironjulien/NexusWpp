@@ -155,10 +155,11 @@ $manifest = @"
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
   xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
   xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap uap10 desktop rescap">
+  IgnorableNamespaces="uap uap3 uap10 desktop rescap">
   <Identity Name="$identityName" Publisher="$publisher" Version="$version" ProcessorArchitecture="x64" />
   <Properties>
     <DisplayName>ms-resource:StoreName</DisplayName>
@@ -195,6 +196,14 @@ $manifest = @"
             Enabled="true"
             DisplayName="NexusWpp" />
         </desktop:Extension>
+        <uap3:Extension
+          Category="windows.appExecutionAlias"
+          Executable="nexuswpp.exe"
+          EntryPoint="Windows.FullTrustApplication">
+          <uap3:AppExecutionAlias>
+            <desktop:ExecutionAlias Alias="nexuswpp.exe" />
+          </uap3:AppExecutionAlias>
+        </uap3:Extension>
       </Extensions>
     </Application>
   </Applications>

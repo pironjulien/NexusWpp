@@ -107,6 +107,18 @@ namespace DesktopHtmlHost
             startupButton.Name = "startup";
             startupButton.FlatAppearance.BorderColor = Line;
             startupButton.Click += delegate { OpenUri("ms-settings:startupapps"); };
+            // Store build: the package startup task waits for every other startup app.
+            CheckBox priorityBox = null;
+            Label priorityNote = null;
+            if (PriorityStartup.Available)
+            {
+                priorityBox = new CheckBox { Name = "priorityStartup", ForeColor = Ink, AutoSize = true, Margin = new Padding(2, 12, 0, 0),
+                    Text = L("Démarrage prioritaire", "Priority startup"), Checked = PriorityStartup.IsEnabled, Cursor = Cursors.Hand };
+                priorityBox.CheckedChanged += TogglePriorityStartup;
+                priorityNote = new Label { Name = "priorityNote", ForeColor = Muted, AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(2, 2, 0, 0),
+                    Text = L("Lance NexusWpp avec le bureau, avant les autres applications de démarrage.",
+                             "Launches NexusWpp with the desktop, before other startup apps.") };
+            }
             var rateButton = MakeButton(L("Noter NexusWpp", "Rate NexusWpp"), Panel, Ink, 36);
             rateButton.Name = "rate";
             rateButton.Margin = new Padding(0, 10, 0, 0);
@@ -138,7 +150,7 @@ namespace DesktopHtmlHost
 
             // Two columns side by side keep the window short enough for 1080p screens at 150 %.
             var logoColumn = Column(LogoColumnWidth, new Padding(0), section, preview, chooseButton, resetButton, status);
-            var appColumn = Column(AppColumnWidth, new Padding(ColumnGap, 0, 0, 0), welcomeLabel, appSection, versionLabel, startupNote, startupButton, rateButton, logsButton);
+            var appColumn = Column(AppColumnWidth, new Padding(ColumnGap, 0, 0, 0), welcomeLabel, appSection, versionLabel, startupNote, startupButton, priorityBox, priorityNote, rateButton, logsButton);
             var body = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty, BackColor = Back };
             body.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             body.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -191,6 +203,38 @@ namespace DesktopHtmlHost
                 Program.LogDebug("Opening " + uri + " failed: " + ex.Message);
                 SetStatus(L("Windows n'a pas pu ouvrir cette page.", "Windows could not open this page."), Danger);
             }
+        }
+
+        async void TogglePriorityStartup(object sender, EventArgs e)
+        {
+            var box = (CheckBox)sender;
+            bool wanted = box.Checked;
+            box.Enabled = false;
+            try
+            {
+                if (wanted)
+                {
+                    await PriorityStartup.EnableAsync();
+                    SetStatus(L("Démarrage prioritaire activé : NexusWpp se lancera avec le bureau.",
+                                "Priority startup on: NexusWpp will launch with the desktop."), Accent);
+                }
+                else if (await PriorityStartup.DisableAsync())
+                    SetStatus(L("Démarrage prioritaire désactivé : NexusWpp démarre avec les autres applications.",
+                                "Priority startup off: NexusWpp starts with the other startup apps."), Muted);
+                else
+                    SetStatus(L("Démarrage prioritaire désactivé. NexusWpp est désactivé dans Paramètres > Applications > Démarrage.",
+                                "Priority startup off. NexusWpp is turned off in Settings > Apps > Startup."), Muted);
+            }
+            catch (Exception ex)
+            {
+                Program.LogDebug("Priority startup change failed: " + ex.Message);
+                SetStatus(L("Windows a refusé de modifier le démarrage prioritaire.", "Windows refused to change priority startup."), Danger);
+            }
+            if (IsDisposed) return;
+            box.CheckedChanged -= TogglePriorityStartup;
+            box.Checked = PriorityStartup.IsEnabled;
+            box.CheckedChanged += TogglePriorityStartup;
+            box.Enabled = true;
         }
 
         void OpenLogsFolder(object sender, EventArgs e)
