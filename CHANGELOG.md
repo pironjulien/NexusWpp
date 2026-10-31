@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-31 — Retrait de Scorecard et CodeQL
+
+- OpenSSF Scorecard (workflow et badge du README) et l'analyse CodeQL de GitHub retirés, comme sur les autres produits Nexus. Restent gitleaks, zizmor et les tests à chaque envoi.
+
 ## 2026-10-28 — 1.0.50.0
 
 ### Démarrage prioritaire
