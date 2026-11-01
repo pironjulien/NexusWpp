@@ -214,7 +214,9 @@ namespace DesktopHtmlHost
             }
         }
 
-        private bool webViewStartedOnce;
+        // Process-wide: the form recreated after an Explorer restart must also retry a failed start
+        // (the lost form's browser process may still hold the user data folder) instead of exiting.
+        private static bool webViewStartedOnce;
         private bool recoveryRetryQueued;
 
         internal enum ProcessFailureAction { LogOnly, Reload, RecreateEnvironment }

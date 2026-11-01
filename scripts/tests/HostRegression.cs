@@ -117,6 +117,8 @@ static class HostRegression
             "browser process exit recreates the environment");
         Check(DesktopForm.ClassifyProcessFailure(CoreWebView2ProcessFailedKind.FrameRenderProcessExited) == DesktopForm.ProcessFailureAction.LogOnly,
             "frame renderer exit is only logged");
+        Check(typeof(DesktopForm).GetField("webViewStartedOnce", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static) != null,
+            "a form recreated after an Explorer restart retries a failed WebView2 start instead of exiting");
     }
 
     static void ShellEvents()

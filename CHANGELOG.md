@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-01 — 1.0.51.0
+
+### Démarrage prioritaire : NexusWpp ne démarrait plus
+
+- Lancé avec le bureau, NexusWpp voyait souvent l'Explorateur redémarrer quelques secondes plus tard. Sa fenêtre était alors recréée, mais la nouvelle fenêtre ignorait que WebView2 avait déjà fonctionné : un échec passager de démarrage (l'ancien moteur libérant encore son dossier) était pris pour une absence de WebView2 et NexusWpp se fermait. La fenêtre recréée réessaie maintenant avec la même temporisation que les autres reprises.
+
 ## 2026-10-31 — Retrait de Scorecard et CodeQL
 
 - OpenSSF Scorecard (workflow et badge du README) et l'analyse CodeQL de GitHub retirés, comme sur les autres produits Nexus. Restent gitleaks, zizmor et les tests à chaque envoi.
