@@ -6,7 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Management;
 using System.Threading.Tasks;
-using System.Web.Script.Serialization;
+using System.Text.Json;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -16,7 +16,6 @@ using Microsoft.Web.WebView2.WinForms;
 class GraphicsProfile : Form
 {
     readonly WebView2 view = new WebView2 { Dock = DockStyle.Fill };
-    readonly JavaScriptSerializer json = new JavaScriptSerializer();
     readonly string project, assets, output;
     int result = 1;
     bool ready;
@@ -51,7 +50,7 @@ class GraphicsProfile : Form
         return sample;
     }
     async Task<string> Script(string expression) {
-        string response=await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Runtime.evaluate",json.Serialize(new {expression=expression,returnByValue=true,awaitPromise=true}));
+        string response=await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Runtime.evaluate",JsonSerializer.Serialize(new {expression=expression,returnByValue=true,awaitPromise=true}));
         if(response.Contains("\"exceptionDetails\""))throw new Exception(response);
         return response;
     }
@@ -87,7 +86,7 @@ class GraphicsProfile : Form
             for (int run=0; run<3; run++) {
                 var order = (run % 2 == 0 ? variants.Keys : variants.Keys.Reverse()).ToArray();
                 foreach (string label in order) {
-                    await Script("profileStyle.textContent=" + json.Serialize(variants[label]));
+                    await Script("profileStyle.textContent=" + JsonSerializer.Serialize(variants[label]));
                     await Script("profileTick=0; dataPackets.length=0; coreParticles.length=0; Object.keys(lastPacketNodeTime).forEach(k=>delete lastPacketNodeTime[k]); setRuntimeSuspended(false); wakeCanvas();");
                     await Task.Delay(3000);
                     var before = await Task.Run((Func<Sample>)Snapshot);
@@ -105,7 +104,7 @@ class GraphicsProfile : Form
                     string state=await Script("({hidden:document.hidden,paused:runtimeSuspended,ticks:profileTick,valid:profileTick>=20,framesRunning:isCanvasLoopRunning,packets:dataPackets.length})");
                     if(state.Contains("\"hidden\":true") || state.Contains("\"paused\":true") || state.Contains("\"valid\":false")) throw new Exception("Invalid profile workload: "+state);
                     results.Add(row); Console.WriteLine(label+" run "+(run+1)+" GPU "+row.gpuMax+" CPU "+row.cpuCores+" "+state);
-                    File.WriteAllText(Path.Combine(output,"results.json"),json.Serialize(new { runtime=env.BrowserVersionString, results=results }));
+                    File.WriteAllText(Path.Combine(output,"results.json"),JsonSerializer.Serialize(new { runtime=env.BrowserVersionString, results=results }));
                 }
             }
             result=0;

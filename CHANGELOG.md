@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-04 — 1.0.52.0
+
+### Passage à .NET 10
+
+- NexusWpp tourne désormais sur .NET 10, comme les autres produits Nexus, au lieu du .NET Framework 4.8. Le paquet Store et l'installeur embarquent le runtime : rien à installer de plus. Le paquet Store passe de quelques Mo à 57 Mo (138 Mo une fois installé, contre 3 Mo).
+- Démarrage prioritaire : l'API StartupTask du paquet passe par la projection WinRT du SDK Windows au lieu des métadonnées de Windows.
+- La lecture des modes d'alimentation par `powercfg` déclare le jeu de caractères OEM de la console (850 en français), que .NET ne connaît pas sans le fournisseur de pages de code.
+- Les bancs de tests (`scripts/csc.ps1`) compilent sur .NET 10 et le sérialiseur JSON de .NET ; l'installeur seul reste en .NET Framework 4.8 (`scripts/csc_netfx.ps1`) pour se lancer avant toute installation.
+- `scripts/publish_host.ps1` publie l'hôte autonome pour le MSIX, l'installeur et le déploiement local ; la CI installe le SDK .NET 10. CodeQL et Scorecard restent actifs.
+
 ## 2026-11-01 — 1.0.51.0
 
 ### Démarrage prioritaire : NexusWpp ne démarrait plus

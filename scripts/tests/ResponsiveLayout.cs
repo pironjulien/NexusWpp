@@ -3,7 +3,8 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Threading.Tasks;
-using System.Web.Script.Serialization;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -13,7 +14,6 @@ using Microsoft.Web.WebView2.WinForms;
 class ResponsiveLayout : Form
 {
     readonly WebView2 view = new WebView2 { Dock = DockStyle.Fill };
-    readonly JavaScriptSerializer json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
     readonly string project, output, casesPath, language;
     bool ready;
     int result = 1;
@@ -47,7 +47,7 @@ class ResponsiveLayout : Form
     async Task Script(string code)
     {
         var response = await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Runtime.evaluate",
-            json.Serialize(new { expression = code, awaitPromise = true, returnByValue = true }));
+            JsonSerializer.Serialize(new { expression = code, awaitPromise = true, returnByValue = true }));
         if (response.Contains("\"exceptionDetails\"")) throw new Exception(response);
     }
 
@@ -69,32 +69,33 @@ class ResponsiveLayout : Form
             for (int i = 0; i < 100 && !ready; i++) await Task.Delay(100);
             if (!ready) throw new Exception("Page did not initialize");
             await Script(File.ReadAllText(Path.Combine(project, "scripts", "tests", "responsive_layout.js")));
-            var cases = json.Deserialize<List<Dictionary<string, object>>>(File.ReadAllText(casesPath));
-            var results = new List<object>();
+            var cases = JsonNode.Parse(File.ReadAllText(casesPath)).AsArray();
+            var results = new JsonArray();
             int failures = 0;
-            foreach (var item in cases)
+            foreach (JsonObject item in cases)
             {
-                int w = Convert.ToInt32(item["width"]), h = Convert.ToInt32(item["height"]);
-                double dpr = Convert.ToDouble(item["dpr"]);
+                int w = (int)item["width"], h = (int)item["height"];
+                double dpr = (double)item["dpr"];
+                string id = (string)item["id"];
                 await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Emulation.setDeviceMetricsOverride",
-                    json.Serialize(new { width = w, height = h, deviceScaleFactor = dpr, mobile = false,
+                    JsonSerializer.Serialize(new { width = w, height = h, deviceScaleFactor = dpr, mobile = false,
                         screenWidth = w, screenHeight = h }));
-                await Script("layoutFixture(" + json.Serialize(item) + ")");
+                await Script("layoutFixture(" + item.ToJsonString() + ")");
                 await Script("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
                 var raw = await view.CoreWebView2.ExecuteScriptAsync("inspectLayout()");
-                var measurement = json.Deserialize<Dictionary<string, object>>(raw);
-                measurement["case"] = item;
+                var measurement = JsonNode.Parse(raw).AsObject();
+                measurement["case"] = item.DeepClone();
                 results.Add(measurement);
-                var issues = (System.Collections.ArrayList)measurement["issues"];
+                var issues = measurement["issues"].AsArray();
                 if (issues.Count > 0) failures++;
-                if (item.ContainsKey("capture") && Convert.ToBoolean(item["capture"]))
+                if (item.ContainsKey("capture") && (bool)item["capture"])
                 {
                     var response = await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", "{\"format\":\"png\",\"captureBeyondViewport\":false}");
-                    var screenshot = json.Deserialize<Dictionary<string, object>>(response);
-                    File.WriteAllBytes(Path.Combine(output, item["id"] + ".png"), Convert.FromBase64String((string)screenshot["data"]));
+                    var screenshot = JsonNode.Parse(response);
+                    File.WriteAllBytes(Path.Combine(output, id + ".png"), Convert.FromBase64String((string)screenshot["data"]));
                 }
-                Console.WriteLine((issues.Count == 0 ? "PASS " : "FAIL ") + item["id"] + " (" + issues.Count + " issues)");
-                File.WriteAllText(Path.Combine(output, "results.json"), json.Serialize(new {
+                Console.WriteLine((issues.Count == 0 ? "PASS " : "FAIL ") + id + " (" + issues.Count + " issues)");
+                File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new {
                     runtime = environment.BrowserVersionString, tested = results.Count, failures = failures, results = results }));
             }
             Console.WriteLine("RESULT " + results.Count + " cases, " + failures + " failures. " + output);

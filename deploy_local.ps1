@@ -64,9 +64,11 @@ if ($LASTEXITCODE -ne 0) { throw "icacls failed to secure $localFolder" }
 
 # 1.8 Clean up obsolete files and leftovers in destination directory C:\nexuswpp
 Write-Host "Cleaning up obsolete files in C:\nexuswpp..." -ForegroundColor Yellow
-$allowedFiles = @(& (Join-Path $PSScriptRoot 'scripts\application_files.ps1')) + @(
-    "nexuswpp.exe",
-    "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll", "WebView2Loader.dll",
+# The self-contained host (nexuswpp.exe, its .NET 10 runtime and WebView2), published alone.
+$binSrc = Join-Path $PSScriptRoot "work\deploy-host"
+if (Test-Path $binSrc) { Remove-Item $binSrc -Recurse -Force }
+& (Join-Path $PSScriptRoot 'scripts\publish_host.ps1') -Destination $binSrc
+$allowedFiles = @(& (Join-Path $PSScriptRoot 'scripts\application_files.ps1')) + @(Get-ChildItem -Path $binSrc | ForEach-Object { $_.Name }) + @(
     "webview_debug.log"
 )
 Get-ChildItem -Path $localFolder | ForEach-Object {
@@ -93,12 +95,12 @@ foreach ($file in $filesToCopy) {
     }
 }
 
-# 2.5 Copy binary host files and WebView2 dependencies robustly
-$binSrc = Join-Path $PSScriptRoot "bin"
+# 2.5 Copy the published host robustly
 if (Test-Path $binSrc) {
-    Get-ChildItem -Path $binSrc -File | ForEach-Object {
-        $dest = Join-Path $localFolder $_.Name
+    Get-ChildItem -Path $binSrc -File -Recurse | ForEach-Object {
+        $dest = Join-Path $localFolder $_.FullName.Substring($binSrc.Length + 1)
         try {
+            New-Item -ItemType Directory -Path (Split-Path -Parent $dest) -Force | Out-Null
             Copy-Item -Path $_.FullName -Destination $dest -Force -ErrorAction Stop
             Write-Host "Synced binary: $($_.Name) -> local folder" -ForegroundColor Green
         } catch {
@@ -110,7 +112,7 @@ if (Test-Path $binSrc) {
         }
     }
 } else {
-    throw "Binary host folder not found at $binSrc. You must run compile.ps1 first."
+    throw "Published host folder not found at $binSrc."
 }
 
 # 3. Clean up any old unused launch files if they exist

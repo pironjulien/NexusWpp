@@ -3,7 +3,6 @@ using System.IO;
 using System.Security.Principal;
 using System.Threading.Tasks;
 using Windows.ApplicationModel;
-using Windows.Foundation;
 
 namespace DesktopHtmlHost
 {
@@ -28,22 +27,9 @@ namespace DesktopHtmlHost
             get { return Program.IsPackaged && File.Exists(LauncherPath); }
         }
 
-        // The split WinMetadata files lack the unified "Windows" assembly that the framework's
-        // await extensions expect, so WinRT operations are bridged to a Task here.
-        static Task<T> Run<T>(IAsyncOperation<T> operation)
-        {
-            var result = new TaskCompletionSource<T>();
-            operation.Completed = (op, status) =>
-            {
-                if (status == AsyncStatus.Completed) result.TrySetResult(op.GetResults());
-                else result.TrySetException(op.ErrorCode ?? new OperationCanceledException());
-            };
-            return result.Task;
-        }
-
         static Task<StartupTask> PackageStartupTask()
         {
-            return Run(StartupTask.GetAsync(StartupTaskId));
+            return StartupTask.GetAsync(StartupTaskId).AsTask();
         }
 
         static dynamic RootFolder()
@@ -92,7 +78,7 @@ namespace DesktopHtmlHost
         {
             try { RootFolder().DeleteTask(TaskName, 0); } catch { }
             StartupTask startup = await PackageStartupTask();
-            StartupTaskState state = startup.State == StartupTaskState.Disabled ? await Run(startup.RequestEnableAsync()) : startup.State;
+            StartupTaskState state = startup.State == StartupTaskState.Disabled ? await startup.RequestEnableAsync() : startup.State;
             Program.LogDebug("Priority startup disabled; package startup task " + state + ".");
             return state == StartupTaskState.Enabled || state == StartupTaskState.EnabledByPolicy;
         }

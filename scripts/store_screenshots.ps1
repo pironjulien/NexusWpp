@@ -10,7 +10,7 @@ foreach ($dll in @('Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.Wi
     Copy-Item -LiteralPath (Join-Path $project ('bin\' + $dll)) -Destination $toolDir -Force
 }
 $binary = Join-Path $toolDir 'StoreScreenshots.exe'
-$refs = @('/reference:System.Windows.Forms.dll', '/reference:System.Drawing.dll', '/reference:System.Web.Extensions.dll', '/reference:System.Management.dll',
+$refs = @('/reference:System.Windows.Forms.dll', '/reference:System.Drawing.dll', '/reference:System.Management.dll',
     "/reference:$toolDir\Microsoft.Web.WebView2.Core.dll", "/reference:$toolDir\Microsoft.Web.WebView2.WinForms.dll")
 $sources = & (Join-Path $PSScriptRoot 'host_sources.ps1')
 & (Join-Path $PSScriptRoot 'csc.ps1') /nologo /target:winexe /platform:x64 /main:StoreScreenshots "/out:$binary" @refs @sources (Join-Path $PSScriptRoot 'tests\StoreScreenshots.cs')

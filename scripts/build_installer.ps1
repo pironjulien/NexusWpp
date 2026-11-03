@@ -7,7 +7,7 @@ $payloadZip = Join-Path $distDir "NexusWppPayload.zip"
 $installerExe = Join-Path $distDir "NexusWppSetup.exe"
 $installerSource = Join-Path $projectRoot "installer\NexusWppInstaller.cs"
 $installerManifest = Join-Path $projectRoot "installer\NexusWppInstaller.manifest"
-$cscScript = Join-Path $PSScriptRoot "csc.ps1"
+$cscScript = Join-Path $PSScriptRoot "csc_netfx.ps1"
 
 function Get-SignToolPath {
     $command = Get-Command signtool.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source
@@ -51,8 +51,6 @@ function Get-LocalCodeSigningCert {
 
 $signToolPath = Get-SignToolPath
 
-& (Join-Path $projectRoot "compile.ps1")
-
 if (-not [IO.Path]::GetFullPath($payloadDir).StartsWith([IO.Path]::GetFullPath($distDir) + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid payload directory.' }
 if (Test-Path -LiteralPath $payloadDir) {
     Remove-Item -LiteralPath $payloadDir -Recurse -Force
@@ -65,20 +63,8 @@ foreach ($file in $payloadFiles) {
     Copy-Item -LiteralPath (Join-Path $projectRoot $file) -Destination (Join-Path $payloadDir $file) -Force
 }
 
-$binFiles = @(
-    "nexuswpp.exe",
-    "Microsoft.Web.WebView2.Core.dll",
-    "Microsoft.Web.WebView2.WinForms.dll",
-    "WebView2Loader.dll"
-)
-
-foreach ($file in $binFiles) {
-    $src = Join-Path $projectRoot ("bin\" + $file)
-    if (!(Test-Path -LiteralPath $src)) {
-        throw "Missing binary payload file: $src"
-    }
-    Copy-Item -LiteralPath $src -Destination (Join-Path $payloadDir $file) -Force
-}
+# The self-contained host: nexuswpp.exe, its .NET 10 runtime and WebView2.
+& (Join-Path $PSScriptRoot 'publish_host.ps1') -Destination $payloadDir
 
 Compress-Archive -Path (Join-Path $payloadDir "*") -DestinationPath $payloadZip -Force
 

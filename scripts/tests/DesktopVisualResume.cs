@@ -12,7 +12,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
-using System.Web.Script.Serialization;
+using System.Text.Json;
 using System.Windows.Forms;
 
 internal static class DesktopVisualResume
@@ -559,7 +559,7 @@ internal static class DesktopVisualResume
 
     static void WriteResult()
     {
-        JavaScriptSerializer serializer = new JavaScriptSerializer { MaxJsonLength = 64 * 1024 * 1024 };
+        var serializer = new JsonSerializerOptions { IncludeFields = true };
         object payload = new
         {
             Label = Options.ContainsKey("--label") ? Options["--label"] : null,
@@ -579,7 +579,7 @@ internal static class DesktopVisualResume
             },
             Scenarios = Scenarios
         };
-        File.WriteAllText(Path.Combine(output, "result.json"), serializer.Serialize(payload), new UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(output, "result.json"), JsonSerializer.Serialize(payload, serializer), new UTF8Encoding(false));
     }
 
     static void WriteIndex()

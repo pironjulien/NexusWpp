@@ -1,6 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $project = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
-$hostBinary = Join-Path $project 'bin\nexuswpp.exe'
+# The host code is nexuswpp.dll; nexuswpp.exe is only the .NET launcher.
+$hostBinary = Join-Path $project 'bin\nexuswpp.dll'
 if (-not (Test-Path -LiteralPath $hostBinary)) { throw 'Run compile.ps1 first.' }
 $testDir = Join-Path $project 'bin\mouse-hook-tests'
 New-Item -ItemType Directory -Path $testDir -Force | Out-Null

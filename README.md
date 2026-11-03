@@ -47,7 +47,7 @@ NexusWpp displays a dynamic hardware cockpit directly on the Windows desktop, wi
 Prerequisites:
 
 - Windows 10/11.
-- .NET 8 SDK or newer (free) to compile: `NexusWpp.csproj` uses the current C# compiler but targets .NET Framework 4.8, built into Windows, so users have no runtime to install.
+- .NET 10 SDK (free) to compile: `NexusWpp.csproj` targets .NET 10 and is published self-contained, so the Store package and the installer ship the runtime and users have nothing to install. Only the installer bootstrapper (`scripts/csc_netfx.ps1`) still targets the .NET Framework 4.8 built into Windows, so it runs before anything is installed.
 - Microsoft Edge WebView2 Runtime.
 - NVIDIA is optional; detailed measurements use the isolated `nvidia-smi` process, with Windows counters when that source is unavailable.
 

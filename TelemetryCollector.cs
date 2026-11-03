@@ -707,6 +707,13 @@ namespace DesktopHtmlHost
             PowerPlans = PowerSchemes.Sort(plans);
         }
 
+        // Console tools write in the OEM code page (850 in French), which .NET only knows through the code pages provider.
+        private static Encoding OemEncoding()
+        {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            return Encoding.GetEncoding(CultureInfo.CurrentCulture.TextInfo.OEMCodePage);
+        }
+
         // Fallback when powrprof cannot enumerate: powercfg from System32 (never resolved through PATH).
         private static List<PowerPlanInfo> ReadPowerPlansFromPowercfg()
         {
@@ -717,7 +724,7 @@ namespace DesktopHtmlHost
                 ProcessStartInfo startInfo = new ProcessStartInfo(powercfg, "/list")
                 {
                     RedirectStandardOutput = true,
-                    StandardOutputEncoding = Encoding.GetEncoding(CultureInfo.CurrentCulture.TextInfo.OEMCodePage),
+                    StandardOutputEncoding = OemEncoding(),
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };

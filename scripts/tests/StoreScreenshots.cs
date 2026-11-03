@@ -3,7 +3,8 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Threading.Tasks;
-using System.Web.Script.Serialization;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Windows.Forms;
 using DesktopHtmlHost;
 using Microsoft.Web.WebView2.Core;
@@ -14,7 +15,6 @@ using Microsoft.Web.WebView2.WinForms;
 class StoreScreenshots : Form
 {
     readonly WebView2 view = new WebView2 { Dock = DockStyle.Fill };
-    readonly JavaScriptSerializer json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
     readonly TelemetryCollector collector = new TelemetryCollector();
     readonly string project, output, language;
     readonly int warmupSeconds;
@@ -64,10 +64,10 @@ class StoreScreenshots : Form
     async Task CaptureShot(string name, int w, int h, double scale)
     {
         await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Emulation.setDeviceMetricsOverride",
-            json.Serialize(new { width = w, height = h, deviceScaleFactor = scale, mobile = false, screenWidth = w, screenHeight = h }));
+            JsonSerializer.Serialize(new { width = w, height = h, deviceScaleFactor = scale, mobile = false, screenWidth = w, screenHeight = h }));
         await FeedTelemetry(4);
         var response = await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", "{\"format\":\"png\",\"captureBeyondViewport\":false}");
-        var screenshot = json.Deserialize<Dictionary<string, object>>(response);
+        var screenshot = JsonNode.Parse(response);
         string path = Path.Combine(output, name + "-" + language + ".png");
         File.WriteAllBytes(path, Convert.FromBase64String((string)screenshot["data"]));
         Console.WriteLine("SAVED " + path);

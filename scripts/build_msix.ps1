@@ -62,29 +62,19 @@ if (!(Test-Path -LiteralPath $signTool)) {
     throw "signtool.exe not found. Install the Windows SDK or add signtool.exe to PATH."
 }
 
-& (Join-Path $projectRoot "compile.ps1")
-
 if (-not [IO.Path]::GetFullPath($packageDir).StartsWith([IO.Path]::GetFullPath((Join-Path $projectRoot 'dist')) + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid package directory.' }
 if (Test-Path -LiteralPath $packageDir) {
     Remove-Item -LiteralPath $packageDir -Recurse -Force
 }
 New-Item -ItemType Directory -Path $assetsDir -Force | Out-Null
 
+# The self-contained host: nexuswpp.exe, its .NET 10 runtime and WebView2.
+& (Join-Path $PSScriptRoot 'publish_host.ps1') -Destination $packageDir
+
 $payloadFiles = & (Join-Path $PSScriptRoot 'application_files.ps1')
 
 foreach ($file in $payloadFiles) {
     Copy-Item -LiteralPath (Join-Path $projectRoot $file) -Destination (Join-Path $packageDir $file) -Force
-}
-
-$binFiles = @(
-    "nexuswpp.exe",
-    "Microsoft.Web.WebView2.Core.dll",
-    "Microsoft.Web.WebView2.WinForms.dll",
-    "WebView2Loader.dll"
-)
-
-foreach ($file in $binFiles) {
-    Copy-Item -LiteralPath (Join-Path $projectRoot ("bin\" + $file)) -Destination (Join-Path $packageDir $file) -Force
 }
 
 # Logos rendered at their exact size by scripts/export_icons.py from branding/*.svg:

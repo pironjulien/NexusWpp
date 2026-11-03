@@ -208,7 +208,7 @@ class RuntimePauseRegression : Form
                 requestAnimationFrame(frame); })";
             await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal'});setRuntimeSuspended(false);endResumeSnap();");
             string steps = await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Runtime.evaluate",
-                "{\"expression\":" + new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(countSpinnerSteps) + ",\"awaitPromise\":true,\"returnByValue\":true}");
+                "{\"expression\":" + System.Text.Json.JsonSerializer.Serialize(countSpinnerSteps) + ",\"awaitPromise\":true,\"returnByValue\":true}");
             Console.WriteLine("SPINNER STEPS IN 2 S " + steps);
             int stepCount = int.Parse(System.Text.RegularExpressions.Regex.Match(steps, "\"value\":(\\d+)").Groups[1].Value);
             if (stepCount < 18 || stepCount > 26) throw new Exception("logo rings do not step at 12 Hz (" + stepCount + " steps in 2 s)");
