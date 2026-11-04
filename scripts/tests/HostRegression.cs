@@ -162,6 +162,18 @@ static class HostRegression
             Location = new Point(-32000, -32000);
             Size = new Size(100, 100);
         }
+        // Off-screen and never activated, like the real wallpaper (WS_EX_NOACTIVATE): the run keeps
+        // the foreground and the keyboard of whoever is using the PC.
+        protected override bool ShowWithoutActivation { get { return true; } }
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams cp = base.CreateParams;
+                cp.ExStyle |= 0x08000000; // WS_EX_NOACTIVATE
+                return cp;
+            }
+        }
         protected override void OnFormClosing(FormClosingEventArgs e) { closing = true; base.OnFormClosing(e); }
         protected override void OnHandleDestroyed(EventArgs e)
         {
