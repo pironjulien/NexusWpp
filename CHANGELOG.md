@@ -2,6 +2,8 @@
 
 ## Non publié
 
+## 2026-11-04 — 1.0.55.0
+
 ### Fréquence du GPU en direct
 
 - Le titre de la carte GPU affiche la fréquence actuelle du cœur graphique, lue par NVML à chaque relevé du GPU (toutes les 5 s sur secteur, 15 s sur batterie), comme la vitesse de la carte CPU : « GPU RTX 4080 SUPER · 210 MHz » au repos, plus de 2 000 MHz en charge. La fréquence mémoire nominale de la 1.0.54.0 (« @ 11501 MHz ») disparaît, avec sa lecture NVML (`nvmlDeviceGetMaxClockInfo`) et WDDM (`MaxMemoryFrequency`).
