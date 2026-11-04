@@ -27,10 +27,24 @@ sealed class GraphicsProfile : Form
     GraphicsProfile(string[] args) {
         project = args[0]; assets = args[1]; output = args[2];
         Text = "NexusWpp — mesure graphique A/B";
-        ClientSize = new Size(1600, 950); StartPosition = FormStartPosition.CenterScreen;
+        ClientSize = new Size(1600, 950); ShowInTaskbar = false;
+        StartPosition = FormStartPosition.Manual; Location = new Point(-20000, -20000);
         Controls.Add(view); Shown += Run;
     }
-    sealed class Counter { public double Time, Stamp; }
+
+    // Off-screen and never activated: the run must not take the keyboard focus or the
+    // foreground from whoever is using the PC.
+    const int WS_EX_NOACTIVATE = 0x08000000;
+    protected override bool ShowWithoutActivation { get { return true; } }
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            CreateParams cp = base.CreateParams;
+            cp.ExStyle |= WS_EX_NOACTIVATE;
+            return cp;
+        }
+    }    sealed class Counter { public double Time, Stamp; }
     sealed class Sample { public Dictionary<string, Counter> Gpu = new Dictionary<string, Counter>(); public double Cpu; public DateTime At; }
     Sample Snapshot() {
         var ids = new HashSet<int> { Environment.ProcessId };

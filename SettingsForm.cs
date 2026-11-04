@@ -259,6 +259,20 @@ namespace DesktopHtmlHost
             try { status.AccessibilityObject.RaiseLiveRegionChanged(); } catch { }
         }
 
+        // Test hook: the regression suite shows the window off screen without ever taking the foreground.
+        [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+        internal bool ShowInactive { get; init; }
+        protected override bool ShowWithoutActivation { get { return ShowInactive; } }
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams cp = base.CreateParams;
+                if (ShowInactive) cp.ExStyle |= 0x08000000; // WS_EX_NOACTIVATE
+                return cp;
+            }
+        }
+
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);

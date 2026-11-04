@@ -39,6 +39,19 @@ sealed class RuntimePauseRegression : Form
         Shown += Run;
     }
 
+    // Off-screen and never activated: the run must not take the keyboard focus or the
+    // foreground from whoever is using the PC.
+    const int WS_EX_NOACTIVATE = 0x08000000;
+    protected override bool ShowWithoutActivation { get { return true; } }
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            CreateParams cp = base.CreateParams;
+            cp.ExStyle |= WS_EX_NOACTIVATE;
+            return cp;
+        }
+    }
     async Task Check(string expression, string label)
     {
         string actual = await view.CoreWebView2.ExecuteScriptAsync("Boolean(" + expression + ")");

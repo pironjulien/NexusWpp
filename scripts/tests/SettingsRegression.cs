@@ -130,7 +130,7 @@ static class SettingsRegression
 
         // Settings window renders off screen; the image is kept for a visual check.
         Application.EnableVisualStyles();
-        using (var form = new SettingsForm(Path.Combine(project, "julienpiron.png"), () => { }, () => { }))
+        using (var form = new SettingsForm(Path.Combine(project, "julienpiron.png"), () => { }, () => { }) { ShowInactive = true })
         {
             form.StartPosition = FormStartPosition.Manual;
             form.Location = new Point(-20000, -20000);
@@ -168,7 +168,7 @@ static class SettingsRegression
         foreach (bool scaleLayout in new[] { true, false })
         foreach (float scale in new[] { 1f, 1.25f, 1.5f, 1.75f, 2f })
         {
-            using (var form = new SettingsForm(Path.Combine(project, "julienpiron.png"), () => { }, () => { }, welcome))
+            using (var form = new SettingsForm(Path.Combine(project, "julienpiron.png"), () => { }, () => { }, welcome) { ShowInactive = true })
             {
                 form.StartPosition = FormStartPosition.Manual;
                 form.Location = new Point(-20000, -20000);
