@@ -1,8 +1,9 @@
 """Renders the NexusWpp icons from branding/*.svg: icon.ico and the PNGs build_msix.ps1 packs.
 
 The SVGs are the HD ones of the Nexus icon kit (NexusHarness/NexusCommunication/icones/svg/hd, copied here by its
-sync_icons.py): the pictogram in the julienpiron.fr medallion on a transparent background, the same at every size
-(nexuswpp-round is identical to nexuswpp-mark). The pictogram alone is never shown.
+sync_icons.py): above 32 px the pictogram in the julienpiron.fr medallion on a transparent background
+(nexuswpp-mark), at 32 px and less the small icon, plain silver ring and enlarged pictogram, without the ring's
+unreadable lettering (nexuswpp-round). The pictogram alone is never shown.
 Run again after replacing the SVGs:  python scripts/export_icons.py   (needs cairosvg)
 """
 from pathlib import Path
@@ -11,7 +12,7 @@ import cairosvg
 
 ROOT = Path(__file__).resolve().parent.parent
 BRANDING = ROOT / 'branding'
-MARK_MIN = 44
+MARK_MIN = 33
 
 ICO_SIZES = (16, 20, 24, 32, 48, 64, 128, 256)
 # Every pixel size build_msix.ps1 asks for: Square44x44Logo targetsizes, then the 100/125/150/200/400 scales of

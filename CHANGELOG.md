@@ -32,6 +32,7 @@
 ### Icône sans carré sombre
 
 - L'icône (appli, Store, MSIX, installeur) est le médaillon de julienpiron.fr sur fond transparent à toutes les tailles, comme sur le site : plus de carré sombre autour, et le losange en bas du cerclage reste entier (il était estompé avec les circuits intérieurs). Les SVG de `branding\` viennent du kit d'icônes Nexus (`sync_icons.py`) ; `scripts\make_medallion.py`, devenu inutile, est retiré.
+- À 32 px et moins (barre des tâches, menu Démarrer, Explorateur, petites entrées de `icon.ico`), une petite icône remplace le médaillon : le cerclage argent tracé net, sans l'inscription « JULIENPIRON.FR » illisible à cette taille, et le pictogramme agrandi.
 
 ### 24 images par seconde réelles, moins de mises en page
 
