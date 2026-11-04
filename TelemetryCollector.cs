@@ -167,8 +167,9 @@ namespace DesktopHtmlHost
         private string pdhProcessCpu = ProcessRanking.CpuV2, pdhProcessPrivateBytes = ProcessRanking.RamV2;
         // Task Manager "Cached": the three standby lists plus the modified page list.
         private const string PdhModifiedPages = @"\Memory\Modified Page List Bytes";
-        // Reads from disk to bring back pages that were not in memory: Resource Monitor's
-        // "Hard Faults/sec", the sign that RAM is really short (0 most of the time).
+        // Reads from disk of pages that were not in memory (page file and memory-mapped files, so
+        // programs starting count too): Resource Monitor's "Hard Faults/sec". Lasting high values
+        // with a full memory are the sign that RAM is really short.
         private const string PdhHardFaults = @"\Memory\Page Reads/sec";
         // Task Manager CPU utilization: work done relative to the base frequency (above 100 % in turbo, capped).
         private const string PdhCpuUtility = @"\Processor Information(_Total)\% Processor Utility";

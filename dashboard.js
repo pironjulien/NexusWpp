@@ -383,7 +383,8 @@ function updateDOM(stats) {
 
     // The card gives the global state, like the GPU memory: in use / usable (Task Manager "In use"),
     // hard faults per second (Resource Monitor: reads from disk of pages that were not in RAM,
-    // the sign that memory really runs short, 0 most of the time) and the speed the modules run at.
+    // page file and mapped files; lasting high values with a full memory mean RAM runs short) and
+    // the speed the modules run at.
     const usedRamText = stats.ram.usedGb !== undefined && stats.ram.usedGb !== "" ? num(stats.ram.usedGb, 1) : null;
     const usableRamGb = Number(stats.ram.usedGb) + Number(stats.ram.availableGb);
     setHeldText(ramUsedSub, usedRamText !== null && usableRamGb > 0 ? `${usedRamText} / ${num(usableRamGb, 1)} ${GB}` : null);
