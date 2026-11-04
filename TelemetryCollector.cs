@@ -83,7 +83,14 @@ namespace DesktopHtmlHost
         private volatile ProcessUsage[] cachedTopProcesses = Array.Empty<ProcessUsage>();
         private volatile ProcessUsage? cachedTopRamProcess;
         private long cachedCompressedMb = -1; // Memory Compression store size (Task Manager's "Compressed")
-        private int cachedIgpuApps = -1, cachedDgpuApps = -1;
+        // Topology and adapter state that change rarely: CPU sets read once, the iGPU hybrid flag
+        // once a minute.
+        private Dictionary<string, int> cpuEfficiencyClasses = new Dictionary<string, int>();
+        private long igpuAdapterFlags = -1;
+        private long lastAdapterStateMs = -1;
+        // Busiest application over about 10 minutes: memory of all its processes (by name), averaged.
+        private readonly Dictionary<string, double> ramAverages = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        private volatile ProcessUsage? cachedTopRamAverage;
         private int topProcessCounter = 3; // first ranking on the first collection
         private bool topProcessUpdatePending;
 
@@ -200,6 +207,8 @@ namespace DesktopHtmlHost
             coreBusyTimeAvailable = perf.Add(PdhCoreBusyTime);
             diskCountersAvailable = perf.Add(PdhDiskRead) & perf.Add(PdhDiskWrite) & perf.Add(PdhDiskIdle) & perf.Add(PdhDiskLatency);
             physicalDisks = PhysicalDisks.Discover(SystemDrive);
+            try { cpuEfficiencyClasses = CpuTopology.EfficiencyClasses(); }
+            catch (Exception ex) { Program.LogDebug("CPU sets error: " + ex.Message); }
             lastDiskDiscoveryMs = collectClock.ElapsedMilliseconds;
             network.AddCounters(perf);
             WindowsGpuTelemetry.AddCounters(perf);
@@ -1039,6 +1048,7 @@ namespace DesktopHtmlHost
                     var pidNames = new Dictionary<int, string>();
                     ProcessRanking.Rank(cpuRows, ramRows, Environment.ProcessorCount, out var top, out var topRam, pidNames, out long compressedMb);
                     Interlocked.Exchange(ref cachedCompressedMb, compressedMb);
+                    cachedTopRamAverage = ProcessRanking.UpdateAverages(ramAverages, ramRows, 4.0);
                     cachedTopProcesses = top;
                     cachedTopRamProcess = topRam;
                     // Also on Windows 10 (no pid in the names): the lookup cache then restarts every 4 s.
@@ -1130,7 +1140,7 @@ namespace DesktopHtmlHost
             long ramPoolPagedBytes = cachedRamPoolPagedBytes;
             long ramPoolNonPagedBytes = cachedRamPoolNonPagedBytes;
             bool perfSampled = perf != null && perf.Collect();
-            int cpuMaxCoreLoad = -1;
+            int cpuPerformanceLoad = -1, cpuEfficiencyLoad = -1;
 
             network.Update(perf, perfSampled);
             if (perf != null && perfSampled)
@@ -1138,7 +1148,8 @@ namespace DesktopHtmlHost
                 // Task Manager CPU utilization when the counter exists; GetSystemTimes (busy time) otherwise.
                 double? utility = perf.Value(PdhCpuUtility);
                 if (utility.HasValue) cpuLoad = (int)Math.Round(Math.Max(0, Math.Min(100, utility.Value)));
-                cpuMaxCoreLoad = BusiestCore(coreBusyTimeAvailable ? perf.Instances(PdhCoreBusyTime) : null);
+                var coreRows = coreBusyTimeAvailable ? perf.Instances(PdhCoreBusyTime) : null;
+                CpuTopology.Loads(cpuEfficiencyClasses, coreRows, out cpuPerformanceLoad, out cpuEfficiencyLoad);
 
                 double? modified = perf.Value(PdhModifiedPages);
                 if (modified.HasValue)
@@ -1206,8 +1217,7 @@ namespace DesktopHtmlHost
                 cachedDgpuMemBytes = counters[1].DedicatedBytes;
                 cachedNpuUtil = npuUtil = counters[2].Utilization;
                 cachedNpuTopPid = counters[2].TopPid;
-                cachedIgpuTopPid = counters[0].TopPid; cachedIgpuTopPct = counters[0].TopPct; cachedIgpuApps = counters[0].Apps;
-                cachedDgpuApps = counters[1].Apps;
+                cachedIgpuTopPid = counters[0].TopPid; cachedIgpuTopPct = counters[0].TopPct;
                 cachedDgpuTopPid = counters[1].TopPid; cachedDgpuTopPct = counters[1].TopPct;
                 cachedNpuTopPct = counters[2].TopPct;
                 cachedNpuMemBytes = npuMemBytes = counters[2].SharedBytes;
@@ -1279,6 +1289,12 @@ namespace DesktopHtmlHost
                     gpuMemClock = wddmSample.MemoryClockMhz ?? -1;
                     gpuFanRpm = wddmSample.FanRpm ?? -1;
                 }
+            }
+            long stateNow = collectClock.ElapsedMilliseconds;
+            if (lastAdapterStateMs < 0 || stateNow - lastAdapterStateMs >= 60000)
+            {
+                lastAdapterStateMs = stateNow;
+                igpuAdapterFlags = GpuAdapterState.AdapterType(igpuLuidValue);
             }
             double igpuTemp = -1;
             if (igpuLuidValue != 0)
@@ -1372,7 +1388,9 @@ namespace DesktopHtmlHost
                 json.WriteStartObject("cpu");
                 json.WriteNumber("utilization", cpuLoad);
                 json.WriteNumber("temp", cpuTemp);
-                json.WriteNumber("maxCoreUtilization", cpuMaxCoreLoad);
+                // Hybrid processors: average busy time of the performance and of the efficiency cores.
+                json.WriteNumber("pCoreUtilization", cpuPerformanceLoad);
+                json.WriteNumber("eCoreUtilization", cpuEfficiencyLoad);
                 json.WriteString("name", CpuInfo ?? "");
                 json.WriteString("freqGhz", cpuFreqGhzStr);
                 json.WriteString("baseSpeedGhz", CpuBaseSpeed ?? "");
@@ -1399,7 +1417,7 @@ namespace DesktopHtmlHost
                 json.WriteString("driver", IgpuDriver ?? "");
                 json.WriteString("driverDate", IgpuDriverDate ?? "");
                 WriteTopProcess(json, igpuDetected, windowsGpuFresh, cachedIgpuTopPid, cachedIgpuTopPct);
-                json.WriteNumber("apps", windowsGpuFresh ? cachedIgpuApps : -1);
+                if (igpuAdapterFlags >= 0) json.WriteBoolean("hybrid", GpuAdapterState.IsHybridIntegrated(igpuAdapterFlags)); else json.WriteNull("hybrid");
                 json.WriteNumber("encodeUtil", igpuEncodeUtil);
                 json.WriteEndObject();
 
@@ -1432,7 +1450,6 @@ namespace DesktopHtmlHost
                 json.WriteString("driverDate", DgpuDriverDate ?? "");
                 json.WriteNumber("fanRpm", gpuFanRpm);
                 WriteTopProcess(json, dgpuDetected, windowsGpuFresh, cachedDgpuTopPid, cachedDgpuTopPct);
-                json.WriteNumber("apps", windowsGpuFresh ? cachedDgpuApps : -1);
                 json.WriteNumber("fanPct", nv != null && nv.FanPercent.HasValue ? Math.Round(nv.FanPercent.Value) : -1);
                 json.WriteEndObject();
 
@@ -1496,6 +1513,15 @@ namespace DesktopHtmlHost
                     json.WriteEndObject();
                 }
                 json.WriteEndArray();
+                // Over about 10 minutes, every process of an application counted together.
+                var topRamAverage = cachedTopRamAverage;
+                json.WriteStartObject("topRamAverage");
+                if (topRamAverage != null)
+                {
+                    json.WriteString("name", topRamAverage.Name ?? "");
+                    json.WriteNumber("ramMb", topRamAverage.RamMb);
+                }
+                json.WriteEndObject();
                 json.WriteStartObject("topRamProcess");
                 if (topRamProcess != null)
                 {
@@ -1523,21 +1549,6 @@ namespace DesktopHtmlHost
         // A non-finite double would make the whole message invalid JSON: report it as unavailable.
         private static double Finite(double value) { return double.IsFinite(value) ? value : -1; }
         // Task Manager "Active time": the share of the interval the disk was not idle.
-        // Busiest logical processor, 0-100; -1 without a per-core reading.
-        // One saturated thread shows here even when the average load stays low.
-        internal static int BusiestCore(List<KeyValuePair<string, double>>? cores)
-        {
-            double busiest = -1;
-            if (cores != null)
-            {
-                foreach (var core in cores)
-                {
-                    if (!core.Key.Contains("_Total", StringComparison.Ordinal)) busiest = Math.Max(busiest, core.Value);
-                }
-            }
-            return busiest < 0 ? -1 : (int)Math.Round(Math.Min(100, busiest));
-        }
-
         internal static long DiskActiveTime(double idlePercent) { return (long)Math.Round(100.0 - Math.Max(0.0, Math.Min(100.0, idlePercent))); }
         // Dedicated + shared usage of an adapter; -1 when neither counter was read.
         internal static long AdapterMemoryBytes(WindowsGpuSample sample)

@@ -333,15 +333,20 @@ function updateDOM(stats) {
     const npuLoad = track(npuCard, setGauge("npu.util", npuRing, npuVal, npuGaugeContainer, npuStats.utilization));
     const gpuLoad = track(gpuCard, setGauge("gpu.util", gpuRing, gpuVal, gpuGaugeContainer, stats.gpu.utilization));
 
-    // 2. CPU Sub-metrics: busiest logical processor (the caches without that counter), then the
-    // ACPI thermal zone beside it when Windows exposes one. That zone is the board's sensor, not
-    // the CPU die (fixed at 28 °C on some desktops), hence its label "TEMPÉRATURE (ACPI)"; Windows
-    // gives no other temperature without a driver. The clock moves down when the zone is shown.
+    // 2. CPU Sub-metrics, four on every card. Hybrid processors: average load of the performance
+    // and of the efficiency cores (Windows CPU sets); others: cores / threads. Then the ACPI
+    // thermal zone beside it when Windows exposes one. That zone is the board's sensor, not the CPU
+    // die (fixed at 28 °C on some desktops), hence its label "TEMPÉRATURE (ACPI)"; Windows gives
+    // no other temperature without a driver. The clock moves down when the zone is shown.
     const cpuZone = cpuZoneShown(stats);
-    if (NexusTelemetry.valid(stats.cpu.maxCoreUtilization) || lastValues.has('cpu.maxCore')) {
-        const busiest = track(cpuCard, lastValues.take('cpu.maxCore', stats.cpu.maxCoreUtilization));
-        setSubMetric(cpuTempSub, t('label.busiestCore'), cpuTempSub.textContent);
-        setHeldText(cpuTempSub, busiest.stale ? null : `${Math.min(100, busiest.value)} %`);
+    if (NexusTelemetry.valid(stats.cpu.pCoreUtilization) && NexusTelemetry.valid(stats.cpu.eCoreUtilization)) {
+        setSubMetric(cpuTempSub, t('label.coreTypes'), `${stats.cpu.pCoreUtilization} % / ${stats.cpu.eCoreUtilization} %`);
+        cpuTempSub.classList.remove('sensor-unavailable');
+        cpuTempSub.title = '';
+    } else if (stats.cpu.cores > 0 && stats.cpu.logical > 0) {
+        setSubMetric(cpuTempSub, t('label.coresThreads'), `${stats.cpu.cores} / ${stats.cpu.logical}`);
+        cpuTempSub.classList.remove('sensor-unavailable');
+        cpuTempSub.title = '';
     } else {
         setSubMetric(cpuTempSub, t("label.cacheL2L3"), `${formatCacheSize(stats.cpu.l2Cache)} / ${formatCacheSize(stats.cpu.l3Cache)}`);
         cpuTempSub.classList.remove('sensor-unavailable');
@@ -383,13 +388,14 @@ function updateDOM(stats) {
     }
     track(gpuCard, setSensorMetric(gpuCoreSub, t("label.gpuPower"), stats.gpu.powerW, "W", stats, "nvidia", "gpu.powerW"));
     setAdapterTopProcess(gpuTopProcSub, stats.gpu.topProcess);
-    setHeldText(gpuAppsSub, NexusTelemetry.valid(stats.gpu.apps) ? num(stats.gpu.apps) : null);
-    // Fan speed: NVML gives the % of the maximum the driver asks of the fans (0 % when they stop at
-    // idle); the WDDM sensors of other GPUs give revolutions per minute, when the driver reports them.
-    if (NexusTelemetry.valid(stats.gpu.fanRpm) && !NexusTelemetry.valid(stats.gpu.fanPct)) {
-        track(gpuCard, setSensorMetric(gpuFanSub, t("label.fans"), stats.gpu.fanRpm, t("unit.rpm"), stats, "nvidia", "gpu.fanRpm"));
-    } else {
-        track(gpuCard, setSensorMetric(gpuFanSub, t("label.fans"), stats.gpu.fanPct, "%", stats, "nvidia", "gpu.fan"));
+    // Fan speed after the temperature, in the same slot ("25 °C · 30 %"): NVML gives the % of the
+    // maximum the driver asks of the fans (0 % when they stop at idle); WDDM sensors of other GPUs
+    // give revolutions per minute when the driver reports them.
+    const fan = NexusTelemetry.valid(stats.gpu.fanPct) ? `${num(stats.gpu.fanPct)} %`
+        : NexusTelemetry.valid(stats.gpu.fanRpm) ? `${num(stats.gpu.fanRpm)} ${t("unit.rpm")}` : "";
+    if (fan && gpuTempSub.textContent !== "—" && !gpuTempSub.classList.contains("sensor-unavailable")) {
+        gpuTempSub.textContent += ` · ${fan}`;
+        gpuTempSub.title = t("sensor.fans");
     }
     // Live graphics clock in the card title, read like the CPU speed. NVML reports it; the WDDM
     // sensors of other GPUs do not, and a stale reading is not shown: no clock rather than an old one.
@@ -413,6 +419,13 @@ function updateDOM(stats) {
     const compressedMb = Number(stats.ram.compressedMb);
     setHeldText(ramCompressedSub, NexusTelemetry.valid(compressedMb)
         ? compressedMb >= 1024 ? `${num(compressedMb / 1024, 1)} ${GB}` : `${num(compressedMb)} ${MB}` : null);
+    // Busiest application over about 10 minutes, all its processes together (host average).
+    const ramAverage = stats.topRamAverage;
+    if (ramAverageSub) {
+        const averageMb = ramAverage ? Number(ramAverage.ramMb) || 0 : 0;
+        setTopProcess(ramAverageSub, ramAverage && ramAverage.name ? ramAverage : null,
+            averageMb >= 1024 ? `${num(averageMb / 1024, 1)} ${GB}` : `${averageMb} ${MB}`);
+    }
     if (ramTopProcSub) {
         const topRam = stats.topRamProcess;
         const ramMb = topRam ? Number(topRam.ramMb) || 0 : 0;
@@ -424,6 +437,12 @@ function updateDOM(stats) {
     const disks = Array.isArray(stats.disks) && stats.disks.length ? stats.disks : [stats.disk];
     disks.forEach((disk, index) => updateDiskCard(diskCardView(index), disk, index, track));
     for (let index = disks.length; index < diskCardViews.length; index++) setDiskCardShown(diskCardViews[index], false);
+    // One map node per card: every disk has its node, with its active time.
+    let diskNodesChanged = false;
+    for (let index = 1; index < Math.max(disks.length, diskCardViews.length); index++) {
+        diskNodesChanged = setDiskNodeShown(index, index < disks.length) || diskNodesChanged;
+    }
+    if (diskNodesChanged) { syncTelemetryLayoutAfterResize(true); needsRender = true; }
 
     // Network circular gauge & absolute speed rendering
     // -1: rates unreadable this tick; the gauge then counts nothing and the texts hold the last reading.
@@ -437,12 +456,6 @@ function updateDOM(stats) {
         setHtmlIfChanged(netVal, `0<span>${KB}/s</span>`);
     } else if (totalNetKb < 1024) {
         setHtmlIfChanged(netVal, `${num(totalNetKb)}<span>${KB}/s</span>`);
-    // One map node per card: every disk has its node, with its active time.
-    let diskNodesChanged = false;
-    for (let index = 1; index < Math.max(disks.length, diskCardViews.length); index++) {
-        diskNodesChanged = setDiskNodeShown(index, index < disks.length) || diskNodesChanged;
-    }
-    if (diskNodesChanged) { syncTelemetryLayoutAfterResize(true); needsRender = true; }
     } else {
         setHtmlIfChanged(netVal, `${num(totalNetKb / 1024, 1)}<span>${MB}/s</span>`);
     }
@@ -485,7 +498,9 @@ function updateDOM(stats) {
     // Same readings as the GPU card where Windows gives them: apps drawing or computing on it, the
     // memory, then the busier of the two video engines (decode, encode), 0 % except while a video
     // plays or is recorded. Its temperature, when the driver reports one, goes in the title.
-    setHeldText(igpuAppsSub, NexusTelemetry.valid(stats.igpu.apps) ? num(stats.igpu.apps) : null);
+    // Hybrid rendering, as Windows declares the adapter (D3DKMT adapter type): the discrete GPU can
+    // draw for windows shown through the iGPU. "—" when Windows does not say.
+    setHeldText(igpuHybridSub, stats.igpu.hybrid === true ? t("state.on") : stats.igpu.hybrid === false ? t("state.off") : null);
     if (igpuVideoSub) {
         const videoFresh = NexusTelemetry.valid(stats.igpu.decodeUtil) && NexusTelemetry.valid(stats.igpu.encodeUtil);
         if (setHeldText(igpuVideoSub, videoFresh ? `${Math.min(100, Math.max(stats.igpu.decodeUtil, stats.igpu.encodeUtil))} %` : null)) held.add(vramCard);

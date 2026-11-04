@@ -2,6 +2,16 @@
 
 ## Non publié
 
+### Quatre cases par carte
+
+- Chaque carte a exactement quatre cases de détail, avec des libellés sur une ligne ; un test le vérifie.
+- CPU : « CŒURS P / E 52 % / 27 % », la charge moyenne des cœurs performance et des cœurs efficacité des processeurs hybrides (classes d'efficacité des ensembles de CPU de Windows, `GetSystemCpuSetInformation`, lues une fois, appliquées au temps d'activité par processeur logique déjà relevé), au lieu de « Cœur le plus chargé ». Sur un processeur non hybride : « CŒURS / THREADS 8 / 16 ». Puis la température ACPI, la vitesse et le processus en tête.
+- iGPU : « RENDU HYBRIDE Activé / Désactivé », ce que Windows déclare de l'adaptateur (type D3DKMT, `KMTQAITYPE_ADAPTERTYPE`, sans droits administrateur, relu une fois par minute) : le GPU dédié peut calculer la 3D des fenêtres affichées par l'iGPU. Activé sur ce PC (UHD 770 « HybridIntegrated », RTX 4080 SUPER « HybridDiscrete »). Puis la mémoire partagée, la vidéo et le processus en tête ; « Applis sur ce GPU » disparaît.
+- GPU : la vitesse des ventilateurs rejoint la température (« TEMPÉRATURE 25 °C · 0 % ») ; « Applis sur ce GPU » et la case « Ventilateurs » disparaissent. Puis la mémoire GPU, la consommation et le processus en tête. Resizable BAR serait lisible par NVML (BAR1 de 16 Go, égal à la VRAM, sur ce PC) mais n'a pas de case.
+- RAM : « EN TÊTE SUR 10 MIN », l'application qui a le plus de mémoire en moyenne sur environ 10 minutes, tous ses processus ensemble (moyenne glissante en mémoire, calculée sur le classement des processus déjà relevé toutes les 4 s). Le profil XMP / EXPO n'est pas affiché : Windows donne pour ces barrettes la même vitesse nominale et configurée (6400 MT/s), ce qui ne permet pas de savoir si un profil est appliqué.
+- SSD : « TEMPS DE RÉPONSE » devient « LATENCE », comme sur la carte réseau.
+- Réseau : réception et envoi dans la même colonne, comme lecture et écriture sur les SSD (type de connexion et latence dans l'autre).
+
 ### Un nœud par carte
 
 - Le centre a un nœud par carte affichée : CPU, iGPU, GPU, NPU s'il existe, RAM, réseau et chaque disque (« SSD C: », « SSD D: », « HDD E: »), avec son temps d'activité. Un disque ajouté ou retiré ajoute ou retire son nœud, et l'orbite répartit de 5 à 10 nœuds sans chevauchement. Testé avec et sans NPU, de 1 à 4 disques (test de disposition, 804 cas).
@@ -21,8 +31,7 @@
 
 - RAM : la vitesse (6400 MT/s), qui ne change jamais, retourne dans le titre (« RAM DDR5 · 6400 MT/s »). « Memory Compression », le magasin de mémoire compressée de Windows, n'est plus le « Processus en tête » (il était toujours premier sans rien dire des applications) : sa taille s'affiche dans une case « MÉMOIRE COMPRESSÉE », et le processus en tête est la vraie application la plus gourmande. « Défauts matériels/s » disparaît, avec sa lecture.
 - iGPU : « Mémoire dédiée », presque jamais utilisée, disparaît. La température du pilote, quand il en donne une (WDDM), passe dans le titre, comme la fréquence du GPU.
-- iGPU et GPU : nouvelle case « APPLIS SUR CE GPU » (« APPS ON THIS GPU »), le nombre de processus qui utilisent vraiment ce GPU, tiré des compteurs GPU Engine déjà lus : au moins un moteur graphique, de calcul ou vidéo à 1 % ou plus sur l'échantillon (les moteurs de copie, qu'utilise toute fenêtre ouverte, ne comptent pas).
-- GPU : nouvelle case « VENTILATEURS », la vitesse demandée aux ventilateurs par le pilote NVIDIA (NVML `nvmlDeviceGetFanSpeed`, en % du maximum, 0 % quand ils sont arrêtés au repos) ; en tr/min par WDDM pour les autres GPU quand le pilote la donne. Les cases « Ventilateurs » et « Applis » ne s'affichent que dans une carte GPU de plus de 200 px de haut (troisième rangée de cases) : une carte plus basse garde ses quatre cases principales.
+- GPU : vitesse des ventilateurs lue par NVIDIA (NVML `nvmlDeviceGetFanSpeed`, en % du maximum, 0 % quand ils sont arrêtés au repos), en tr/min par WDDM pour les autres GPU quand le pilote la donne.
 - Nœud réseau : une décimale sous 1 % (« 0,02 % »), un entier au-dessus.
 
 ### Une carte par disque

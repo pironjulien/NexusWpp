@@ -32,6 +32,32 @@ namespace DesktopHtmlHost
 
         // Ranks every process: the four busiest by CPU (share of all logical processors) and the
         // largest private working set. pidNames receives pid -> name when the instances carry a pid.
+        // Exponential average of each application's memory (all its processes by name) over about
+        // 10 minutes, one update per ranking (every `seconds`); the largest one, or null. Names gone
+        // fade out and are dropped under 1 MB. The compressed memory store is left out.
+        internal static ProcessUsage? UpdateAverages(Dictionary<string, double> averages, List<KeyValuePair<string, double>> ramRows, double seconds)
+        {
+            double weight = 1 - Math.Exp(-seconds / 600.0);
+            var current = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            foreach (var row in ramRows)
+            {
+                ParseInstance(row.Key, out string name, out int pid);
+                if (IsAggregate(name, pid) || name == MemoryCompression) continue;
+                current[name] = current.GetValueOrDefault(name) + Math.Max(0, row.Value) / (1024 * 1024);
+            }
+            foreach (var name in averages.Keys.ToList())
+            {
+                double next = averages[name] * (1 - weight) + current.GetValueOrDefault(name) * weight;
+                if (next < 1 && !current.ContainsKey(name)) averages.Remove(name); else averages[name] = next;
+                current.Remove(name);
+            }
+            // A newcomer starts from its first reading, as an average over one sample.
+            foreach (var entry in current) averages[entry.Key] = entry.Value;
+            if (averages.Count == 0) return null;
+            var best = averages.OrderByDescending(entry => entry.Value).First();
+            return new ProcessUsage(best.Key, 0, (long)Math.Round(best.Value));
+        }
+
         internal static void Rank(List<KeyValuePair<string, double>> cpuRows, List<KeyValuePair<string, double>> ramRows, int cpuCount,
             out ProcessUsage[] top, out ProcessUsage? topRam, Dictionary<int, string>? pidNames)
         {

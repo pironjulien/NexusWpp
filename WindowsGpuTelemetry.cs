@@ -13,7 +13,6 @@ namespace DesktopHtmlHost
         internal int Utilization=-1, Decode=-1, Encode=-1;
         internal long SharedBytes=-1, DedicatedBytes=-1;
         internal int TopPid=-1, TopPct; // busiest process on this adapter
-        internal int Apps=-1; // processes using this adapter (one engine at 1 % or more)
     }
     internal static class WindowsGpuTelemetry
     {
@@ -31,13 +30,8 @@ namespace DesktopHtmlHost
         // Busiest process on an adapter: per process, its busiest engine of the given kinds
         // (instances are "pid_<pid>_luid_..._engtype_<kind>"). pid -1 when nothing runs.
         internal static void TopProcess(IEnumerable<GpuEngineReading> rows,string luid,string[] kinds,out int pid,out int pct) {
-            TopProcess(rows,luid,kinds,out pid,out pct,out _);
-        }
-        // apps: processes with at least one of these engines at 1 % or more over the sample, the
-        // ones really drawing or computing on the adapter (a window that is merely open reads 0 %).
-        internal static void TopProcess(IEnumerable<GpuEngineReading> rows,string luid,string[] kinds,out int pid,out int pct,out int apps) {
-            pid=-1;pct=0;apps=0;
-            if(string.IsNullOrEmpty(luid)){apps=-1;return;}
+            pid=-1;pct=0;
+            if(string.IsNullOrEmpty(luid))return;
             var perEngine=new Dictionary<string,long>();
             foreach(var row in rows) {
                 if(row.Name==null||row.Name.IndexOf(luid,StringComparison.OrdinalIgnoreCase)<0)continue;
@@ -50,14 +44,11 @@ namespace DesktopHtmlHost
                 string key=p+"|"+row.Name.Substring(row.Name.IndexOf(luid,StringComparison.OrdinalIgnoreCase));
                 long old;perEngine.TryGetValue(key,out old);perEngine[key]=old+Math.Max(0,row.Utilization);
             }
-            var active=new HashSet<int>();
             foreach(var entry in perEngine) {
                 int p=int.Parse(entry.Key.AsSpan(0,entry.Key.IndexOf('|')),CultureInfo.InvariantCulture);
                 int value=(int)Math.Min(100,entry.Value);
-                if(value>=1)active.Add(p);
                 if(value>pct){pct=value;pid=p;}
             }
-            apps=active.Count;
             if(pct<1){pid=-1;pct=0;}
         }
 
@@ -82,8 +73,8 @@ namespace DesktopHtmlHost
                 foreach(var engine in engines) rows.Add(new GpuEngineReading {Name=engine.Key,Utilization=(int)Math.Round(Math.Max(0,engine.Value))});
                 for(int i=0;i<3;i++) {result[i].Utilization=i==2?BusiestNpuEngine(rows,luids[i]):BusiestEngine(rows,luids[i],"3D");result[i].Decode=BusiestEngine(rows,luids[i],"VideoDecode");result[i].Encode=BusiestEngine(rows,luids[i],"VideoEncode");}
                 // Copy engines are left out: every desktop app (and dwm) uses them at a trickle.
-                TopProcess(rows,luids[0],GraphicsKinds,out result[0].TopPid,out result[0].TopPct,out result[0].Apps);
-                TopProcess(rows,luids[1],GraphicsKinds,out result[1].TopPid,out result[1].TopPct,out result[1].Apps);
+                TopProcess(rows,luids[0],GraphicsKinds,out result[0].TopPid,out result[0].TopPct);
+                TopProcess(rows,luids[1],GraphicsKinds,out result[1].TopPid,out result[1].TopPct);
                 TopProcess(rows,luids[2],NpuKinds,out result[2].TopPid,out result[2].TopPct);
             }
             var shared=perf.Instances(SharedUsage);var dedicated=perf.Instances(DedicatedUsage);

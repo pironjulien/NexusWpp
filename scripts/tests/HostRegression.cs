@@ -226,9 +226,20 @@ static class HostRegression
     // Telemetry semantics matched to Task Manager, then one real collection of this machine.
     static void Telemetry()
     {
-        Check(TelemetryCollector.BusiestCore([new("0,0", 12.5), new("0,1", 131), new("0,_Total", 140), new("_Total", 150)]) == 100 &&
-              TelemetryCollector.BusiestCore([new("0,0", 7.4), new("0,_Total", 50)]) == 7 && TelemetryCollector.BusiestCore([]) == -1 && TelemetryCollector.BusiestCore(null) == -1,
-            "busiest core: per-processor busy time capped at 100, totals ignored");
+        var classes = new Dictionary<string, int> { ["0,0"] = 1, ["0,1"] = 1, ["0,2"] = 0, ["0,3"] = 0 };
+        CpuTopology.Loads(classes, [new("0,0", 50), new("0,1", 70), new("0,2", 10), new("0,3", 131), new("0,_Total", 99)], out int pLoad, out int eLoad);
+        Check(pLoad == 60 && eLoad == 55, "P and E core loads average their own processors, capped at 100");
+        CpuTopology.Loads([], [new("0,0", 50)], out pLoad, out eLoad);
+        Check(pLoad == -1 && eLoad == -1, "a processor with one core type has no P / E loads");
+        var cpuSets = new byte[64];
+        foreach (int i in new[] { 0, 1 }) { BitConverter.GetBytes(32).CopyTo(cpuSets, i * 32); cpuSets[i * 32 + 14] = (byte)i; cpuSets[i * 32 + 18] = (byte)(1 - i); }
+        var parsed = new Dictionary<string, int>();
+        CpuTopology.Parse(cpuSets, parsed);
+        Check(parsed.Count == 2 && parsed["0,0"] == 1 && parsed["0,1"] == 0, "CPU sets give each logical processor its efficiency class");
+        var live = CpuTopology.EfficiencyClasses();
+        Console.WriteLine("INFO CPU sets: " + live.Count + " logical processors in " + System.Linq.Enumerable.Count(System.Linq.Enumerable.Distinct(live.Values)) + " classes (0 = not hybrid)");
+        Check(GpuAdapterState.IsHybridIntegrated(0x232B) && !GpuAdapterState.IsHybridIntegrated(0x2313) && GpuAdapterState.IsHybridDiscrete(0x2313) && !GpuAdapterState.IsHybridIntegrated(-1),
+            "hybrid rendering read from the D3DKMT adapter type flags (UHD 770 and RTX 4080 SUPER values)");
         Check(TelemetryCollector.DiskInstanceNumber("0 C:") == 0 && TelemetryCollector.DiskInstanceNumber("12 D: E:") == 12 && TelemetryCollector.DiskInstanceNumber("_Total") == -1,
             "physical disk counter instances map to disk numbers");
         var temperature = new byte[64]; temperature[12] = 1; temperature[26] = 48;

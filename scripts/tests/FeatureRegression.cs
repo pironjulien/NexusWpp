@@ -58,8 +58,15 @@ static class FeatureRegression
                 new GpuEngineReading{Name="pid_42_luid_0x0_0xGPU_phys_0_eng_0_engtype_3D",Utilization=0},
                 new GpuEngineReading{Name="pid_43_luid_0x0_0xGPU_phys_0_eng_3_engtype_Copy",Utilization=5},
                 new GpuEngineReading{Name="pid_44_luid_0x0_0xIGPU_phys_0_eng_0_engtype_3D",Utilization=30}};
-            WindowsGpuTelemetry.TopProcess(gpuClients,"luid_0x0_0xGPU",GraphicsKinds,out topPid,out topPct,out int apps);
-            Check(apps==2 && topPid==40,"apps on a GPU: processes with an engine at 1 % or more, copy engines and other adapters left out");
+            WindowsGpuTelemetry.TopProcess(gpuClients,"luid_0x0_0xGPU",GraphicsKinds,out topPid,out topPct);
+            Check(topPid==40 && topPct==12,"top GPU process ignores copy engines and other adapters");
+            var averages=new System.Collections.Generic.Dictionary<string,double>(StringComparer.OrdinalIgnoreCase);
+            var ramSample=new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string,double>>{new("chrome:1",600L<<20),new("chrome:2",600L<<20),new("game:3",1000L<<20),new("Memory Compression:4",4000L<<20)};
+            var first=ProcessRanking.UpdateAverages(averages,ramSample,4);
+            Check(first!=null && first.Name=="chrome" && first.RamMb==1200,"an application's processes count together, the compressed store left out");
+            ramSample.RemoveAt(0);ramSample.RemoveAt(0);
+            ProcessRanking.UpdateAverages(averages,ramSample,4);
+            Check(averages["chrome"]<1200 && averages["chrome"]>1150,"an application that closes fades out over about 10 minutes");
 
             // Battery power flow (CallNtPowerInformation SystemBatteryState).
             Check(System.Runtime.InteropServices.Marshal.SizeOf<BatteryState.SYSTEM_BATTERY_STATE>()==32,"SYSTEM_BATTERY_STATE is 32 bytes");

@@ -90,7 +90,7 @@ function dimGauges() {
 
     vramUsedSub.textContent = `0.0 ${GB}`;
     if (igpuTopProcSub) igpuTopProcSub.textContent = `--`;
-    if (igpuAppsSub) igpuAppsSub.textContent = `—`;
+    if (igpuHybridSub) igpuHybridSub.textContent = `—`;
     if (igpuVideoSub) igpuVideoSub.textContent = `—`;
     if (npuUsedSub) npuUsedSub.textContent = `0.0 ${GB}`;
     if (npuTopProcSub) npuTopProcSub.textContent = `--`;

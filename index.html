@@ -46,7 +46,7 @@
                     <!-- Sub-metrics Grid for CPU -->
                     <div class="card-sub-metrics">
                         <div class="sub-metric">
-                            <span class="lbl" data-i18n="label.busiestCore">CŒUR LE PLUS CHARGÉ</span>
+                            <span class="lbl" data-i18n="label.coreTypes">CŒURS P / E</span>
                             <span class="val" id="cpu-temp-sub">-- %</span>
                         </div>
                         <div class="sub-metric">
@@ -88,8 +88,8 @@
                         <div class="card-sub-metrics">
                             <!-- Same readings as the GPU card where Windows gives them: apps, memory, engine, busiest process. -->
                             <div class="sub-metric">
-                                <span class="lbl" data-i18n="label.gpuApps">APPLIS SUR CE GPU</span>
-                                <span class="val highlight-green" id="igpu-apps-sub">—</span>
+                                <span class="lbl" data-i18n="label.hybridRendering">RENDU HYBRIDE</span>
+                                <span class="val highlight-green" id="igpu-hybrid-sub">—</span>
                             </div>
                             <div class="sub-metric">
                                 <span class="lbl" data-i18n="label.sharedMemory">MÉMOIRE PARTAGÉE</span>
@@ -184,14 +184,6 @@
                             <span class="lbl" data-i18n="label.gpuPower">CONSOMMATION</span>
                             <span class="val" id="gpu-core-sub">—</span>
                         </div>
-                        <div class="sub-metric when-room">
-                            <span class="lbl" data-i18n="label.fans">VENTILATEURS</span>
-                            <span class="val" id="gpu-fan-sub">—</span>
-                        </div>
-                        <div class="sub-metric when-room">
-                            <span class="lbl" data-i18n="label.gpuApps">APPLIS SUR CE GPU</span>
-                            <span class="val" id="gpu-apps-sub">—</span>
-                        </div>
                         <div class="sub-metric">
                             <span class="lbl" data-i18n="label.topProcess">PROCESSUS EN TÊTE</span>
                             <span class="val fit-one-line" id="gpu-top-proc-sub">--</span>
@@ -260,6 +252,10 @@
                             <span class="val text-blue" id="ram-compressed-sub">—</span>
                         </div>
                         <div class="sub-metric">
+                            <span class="lbl" data-i18n="label.topProcessAverage">EN TÊTE SUR 10 MIN</span>
+                            <span class="val fit-one-line" id="ram-average-sub">—</span>
+                        </div>
+                        <div class="sub-metric">
                             <span class="lbl" data-i18n="label.topProcess">PROCESSUS EN TÊTE</span>
                             <span class="val fit-one-line" id="ram-top-proc-sub">--</span>
                         </div>
@@ -297,7 +293,7 @@
                             <span class="val text-green" id="ssd-read-sub">0.0 Mo/s</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl" data-i18n="label.responseTime">TEMPS DE RÉPONSE</span>
+                            <span class="lbl" data-i18n="label.latency">LATENCE</span>
                             <span class="val" id="ssd-response-sub">-- ms</span>
                         </div>
                         <div class="sub-metric">
@@ -330,21 +326,20 @@
                     <!-- Sub-metrics Grid for Network -->
                     <div class="card-sub-metrics">
                         <div class="sub-metric">
-                            <span class="lbl" data-i18n="label.download">RÉCEPTION</span>
-                            <span class="val text-orange" id="net-wifi-sub">-- KB/s</span>
-                        </div>
-                        <div class="sub-metric">
-                            <span class="lbl" data-i18n="label.upload">ENVOI</span>
-                            <span class="val text-orange" id="net-lan-sub">-- KB/s</span>
-                        </div>
-
-                        <div class="sub-metric">
                             <span class="lbl" data-i18n="label.connectionType">TYPE DE CONNEXION</span>
                             <span class="val" id="net-type-sub">--</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl" data-i18n="label.ping">LATENCE</span>
+                            <span class="lbl" data-i18n="label.download">RÉCEPTION</span>
+                            <span class="val text-orange" id="net-wifi-sub">-- KB/s</span>
+                        </div>
+                        <div class="sub-metric">
+                            <span class="lbl" data-i18n="label.latency">LATENCE</span>
                             <span class="val" id="net-ping-sub">-- ms</span>
+                        </div>
+                        <div class="sub-metric">
+                            <span class="lbl" data-i18n="label.upload">ENVOI</span>
+                            <span class="val text-orange" id="net-lan-sub">-- KB/s</span>
                         </div>
                     </div>
                     <!-- Removed chip-name -->
