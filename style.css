@@ -379,7 +379,7 @@ body {
 
 /* The GPU card has two more readings (fans, apps): a third row, shown when the card has room for
    it; a short card keeps its four main readings. */
-@container gauge (max-height: 300px) { .sub-metric.when-room { display: none; } }
+@container gauge (max-height: 200px) { .sub-metric.when-room { display: none; } }
 
 /* Last 60 s of the card's activity, behind its content. */
 .history-line {
