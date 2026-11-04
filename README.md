@@ -50,7 +50,7 @@ Prerequisites:
 - Windows 10/11.
 - .NET 10 SDK (free) to compile: `NexusWpp.csproj` targets .NET 10 and is published self-contained, so the Store package and the installer ship the runtime and users have nothing to install. The installer (`installer/NexusWppInstaller.csproj`) is one self-contained, compressed .NET 10 executable that embeds the application.
 - Microsoft Edge WebView2 Runtime.
-- NVIDIA is optional; detailed measurements use the isolated `nvidia-smi` process, with Windows counters when that source is unavailable.
+- NVIDIA is optional; detailed measurements come from NVML, the library of the NVIDIA driver, with Windows counters when that source is unavailable.
 
 ```powershell
 .\compile.ps1
@@ -152,7 +152,7 @@ The checks cover off-screen cards, clipped text and controls, overlaps, gauge si
 
 ### Installation and hardware
 
-- Hardware is detected automatically via WMI, Win32, Windows network interfaces and `nvidia-smi` when available.
+- Hardware is detected automatically via WMI, Win32, Windows network interfaces and NVML (NVIDIA driver) when available.
 - The MSIX is installed by Windows in `WindowsApps`; only the standalone EXE mode uses `C:\nexuswpp`. Data and the WebView2 profile stay in the local user folder.
 - The Start menu shortcut is created in the common Windows folder, not in a hard-coded user path.
 - The wallpaper works without a Node server and without npm dependencies.

@@ -1,5 +1,6 @@
 # Builds csc-style arguments (/out:, /target:, /main:, /reference:, sources...) as a .NET 10 Windows
 # project, so the test and tool harnesses compile against the same runtime as the host.
+# Unsafe blocks are on, as in the host (LibraryImport stubs).
 # The output folder receives <name>.exe with its runtime files; it runs on the installed .NET 10
 # desktop runtime (the shipped app itself is self-contained, see NexusWpp.csproj).
 $ErrorActionPreference = 'Stop'
@@ -9,7 +10,7 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
 }
 
 $project = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
-$out = $null; $outputType = 'Exe'; $main = $null; $platform = 'AnyCPU'; $unsafe = 'false'; $icon = $null; $manifest = $null
+$out = $null; $outputType = 'Exe'; $main = $null; $platform = 'AnyCPU'; $unsafe = 'true'; $icon = $null; $manifest = $null
 $sources = [System.Collections.Generic.List[string]]::new()
 $references = [System.Collections.Generic.List[string]]::new()
 $packages = [System.Collections.Generic.List[string]]::new()

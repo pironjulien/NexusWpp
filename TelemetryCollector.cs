@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Globalization;
 using System.Threading;
+using System.Text.Json;
 
 namespace DesktopHtmlHost
 {
@@ -69,8 +70,10 @@ namespace DesktopHtmlHost
         private DateTime pingStartedAt = DateTime.MinValue;
 
         // Process lists and cached top processes
-        private string cachedTopProcessesJson = "[]";
-        private string cachedTopRamProcessJson = "{}";
+        private sealed record ProcessUsage(string Name, int CpuPercent, long RamMb);
+        // Replaced as a whole by the ranking worker; read once per collection.
+        private volatile ProcessUsage[] cachedTopProcesses = Array.Empty<ProcessUsage>();
+        private volatile ProcessUsage cachedTopRamProcess;
         private int topProcessCounter = 3; // first ranking on the first collection
         private bool topProcessUpdatePending = false;
 
@@ -92,19 +95,23 @@ namespace DesktopHtmlHost
         private long cachedDgpuMemBytes = 0;
         private int cachedIgpuDecodeUtil = 0;
 
-        // NVIDIA telemetry is queried out of process so a faulty display driver cannot corrupt
-        // the wallpaper host. Windows performance counters remain the fast utilization source.
+        // NVIDIA sensors come from NVML (NvidiaTelemetry.cs), the driver library itself.
+        // Windows performance counters remain the fast utilization source.
         private readonly NvidiaTelemetry nvidiaTelemetry = new NvidiaTelemetry();
         private int cachedNpuTopPid = -1, cachedNpuTopPct = 0;
         private int cachedIgpuEncodeUtil = -1;
         private int cachedIgpuTopPid = -1, cachedIgpuTopPct = 0, cachedDgpuTopPid = -1, cachedDgpuTopPct = 0;
 
         // Busiest client of an adapter: {"name","pct"}; empty name = measured idle; null = no reading.
-        private string TopProcessJson(bool detected, bool fresh, int pid, int pct)
+        private void WriteTopProcess(Utf8JsonWriter json, bool detected, bool fresh, int pid, int pct)
         {
-            if (!detected || !fresh) return "null";
+            json.WritePropertyName("topProcess");
+            if (!detected || !fresh) { json.WriteNullValue(); return; }
             string name = pid > 0 ? ProcessName(pid) : "";
-            return string.Format(CultureInfo.InvariantCulture, "{{\"name\":{0},\"pct\":{1}}}", JsonString(name), name.Length > 0 ? pct : 0);
+            json.WriteStartObject();
+            json.WriteString("name", name);
+            json.WriteNumber("pct", name.Length > 0 ? pct : 0);
+            json.WriteEndObject();
         }
         private readonly Dictionary<int, string> processNames = new Dictionary<int, string>();
 
@@ -936,28 +943,10 @@ namespace DesktopHtmlHost
                         processes.Add(new Tuple<string, int, long>(name, cpuPercent, ramMb));
                     }
 
-                    var topList = processes.OrderByDescending(p => p.Item2).Take(4).ToList();
-
-                    StringBuilder sb = new StringBuilder();
-                    sb.Append("[");
-                    for (int i = 0; i < topList.Count; i++)
-                    {
-                        if (i > 0) sb.Append(",");
-                        sb.AppendFormat(CultureInfo.InvariantCulture, "{{\"Name\":{0},\"PercentProcessorTime\":{1},\"WorkingSetPrivate\":{2}}}", 
-                            JsonString(topList[i].Item1), topList[i].Item2 * cpuCount, topList[i].Item3 * (long)1024 * 1024);
-                    }
-                    sb.Append("]");
-
                     var topRam = processes.OrderByDescending(p => p.Item3).FirstOrDefault();
-                    string topRamJson = topRam != null
-                        ? string.Format(CultureInfo.InvariantCulture, "{{\"name\":{0},\"ramMb\":{1}}}", JsonString(topRam.Item1), topRam.Item3)
-                        : "{}";
-                    
-                    lock (this)
-                    {
-                        cachedTopProcessesJson = sb.ToString();
-                        cachedTopRamProcessJson = topRamJson;
-                    }
+                    cachedTopProcesses = processes.OrderByDescending(p => p.Item2).Take(4)
+                        .Select(p => new ProcessUsage(p.Item1, p.Item2, p.Item3)).ToArray();
+                    cachedTopRamProcess = topRam != null ? new ProcessUsage(topRam.Item1, topRam.Item2, topRam.Item3) : null;
                 }
                 catch (Exception ex)
                 {
@@ -968,39 +957,6 @@ namespace DesktopHtmlHost
                     topProcessUpdatePending = false;
                 }
             });
-        }
-
-        private static string JsonString(string value)
-        {
-            if (value == null) return "\"\"";
-            StringBuilder sb = new StringBuilder(value.Length + 2);
-            sb.Append('"');
-            foreach (char c in value)
-            {
-                switch (c)
-                {
-                    case '\\': sb.Append(@"\\"); break;
-                    case '"': sb.Append("\\\""); break;
-                    case '\b': sb.Append(@"\b"); break;
-                    case '\f': sb.Append(@"\f"); break;
-                    case '\n': sb.Append(@"\n"); break;
-                    case '\r': sb.Append(@"\r"); break;
-                    case '\t': sb.Append(@"\t"); break;
-                    default:
-                        if (c < 32)
-                        {
-                            sb.Append("\\u");
-                            sb.Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
-                        }
-                        else
-                        {
-                            sb.Append(c);
-                        }
-                        break;
-                }
-            }
-            sb.Append('"');
-            return sb.ToString();
         }
 
         // Rate readings (CPU load, PDH rates, network bytes) are deltas since the previous sample.
@@ -1218,8 +1174,8 @@ namespace DesktopHtmlHost
             bool dgpuSuspended = DevicePower.IsSuspended(dgpuInstanceId);
             bool saveEnergy = !acLine || energySaver;
 
-            // NVIDIA metrics are isolated in nvidia-smi. A driver crash can only terminate the
-            // short-lived helper process, never this wallpaper process.
+            // NVIDIA metrics come from NVML in process (no helper process every 5 s); the reads
+            // are throttled and skipped while the GPU is suspended.
             NvidiaSample nv = nvidiaTelemetry.Read(GpuName, dgpuSuspended, saveEnergy);
             bool nvidiaStatsSuccess = nv != null;
             int gpuUtil = nv != null && nv.Utilization.HasValue ? (int)Math.Round(nv.Utilization.Value) : dgpuUtil;
@@ -1230,9 +1186,9 @@ namespace DesktopHtmlHost
             int gpuFanRpm = -1;
             string gpuSensorStatus = nvidiaTelemetry.Status;
             long gpuSensorAgeMs = nvidiaTelemetry.AgeMs;
-            string gpuSensorProvider = "nvidia-smi";
+            string gpuSensorProvider = NvidiaTelemetry.Provider;
 
-            // AMD and Intel discrete GPUs (or NVIDIA without nvidia-smi): driver-reported WDDM
+            // AMD and Intel discrete GPUs (or NVIDIA without NVML): driver-reported WDDM
             // sensors. Only what the driver reports; watts are not exposed there (the driver gives
             // a share of its power budget), so the power slot stays unavailable.
             if (!nvidiaTelemetry.IsAvailable(GpuName) && dgpuLuidValue != 0)
@@ -1282,67 +1238,8 @@ namespace DesktopHtmlHost
             List<PowerPlanInfo> powerPlans = PowerPlans;
             RefreshActivePowerPlan(powerPlans);
 
-            // Generate JSON payload
-            StringBuilder sb = new StringBuilder();
-            sb.Append("{");
-            
-            double sampledAt = (DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalMilliseconds;
-            // "nvidia" is the discrete GPU sensor source read by the page, whatever its provider.
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"sampledAt\":{0:F0},\"sources\":{{\"nvidia\":{{\"status\":{1},\"ageMs\":{2},\"provider\":{5}}},\"windowsGpu\":{{\"status\":{3}}},\"cpuTemperature\":{{\"status\":{4},\"label\":\"Zone thermique Windows\"}}}},",
-                sampledAt, JsonString(gpuSensorStatus), gpuSensorAgeMs,
-                JsonString(windowsGpuFresh ? "fresh" : lastGpuPerfTime == DateTime.MinValue ? "unavailable" : "stale"),
-                JsonString(cpuTemperatureStatus), JsonString(gpuSensorProvider));
-
-            // CPU (real frequency from the performance counter; empty when it cannot be read)
-            string cpuFreqGhzStr = cpuFreqGhz > 0 ? cpuFreqGhz.ToString("F2", CultureInfo.InvariantCulture) : "";
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"cpu\":{{\"utilization\":{0},\"temp\":{1},\"name\":{2},\"freqGhz\":\"{3}\",\"baseSpeedGhz\":\"{4}\",\"cores\":{5},\"logical\":{6},\"threads\":{7},\"handles\":0,\"l2Cache\":{8},\"l3Cache\":{9}}},",
-                cpuLoad, cpuTemp, JsonString(CpuInfo), cpuFreqGhzStr, CpuBaseSpeed, CpuCores, CpuLogical, threadsCount, JsonString(CpuL2Cache), JsonString(CpuL3Cache));
-
-            // igpu: memory budget registered by the driver (dedicated carve-out + shared system
-            // memory, as in Task Manager); Windows sets the shared part to half of the RAM, which
-            // is the fallback when the registry value is missing.
-            long igpuTotalMb = igpuMemoryBudgetBytes > 0 ? igpuMemoryBudgetBytes / (1024 * 1024) : (long)(ramTotalPhys / 1024 / 1024 / 2);
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"igpu\":{{\"detected\":{0},\"utilization\":{1},\"decodeUtil\":{2},\"usedMb\":{3},\"totalMb\":{4},\"totalGb\":{5},\"name\":{6},\"driver\":{7},\"driverDate\":{8},\"topProcess\":{9},\"encodeUtil\":{10}}},",
-                igpuDetected ? "true" : "false", igpuUtil, igpuDecodeUtil, windowsGpuFresh && igpuMemBytes >= 0 ? igpuMemBytes / (1024 * 1024) : -1, igpuTotalMb, igpuTotalMb / 1024, JsonString(IgpuInfo), JsonString(IgpuDriver), JsonString(IgpuDriverDate), TopProcessJson(igpuDetected, windowsGpuFresh, cachedIgpuTopPid, cachedIgpuTopPct), igpuEncodeUtil);
-
-            // npu
-            long npuTotalMb = (long)(ramTotalPhys / 1024 / 1024 / 2);
-            string npuTop = TopProcessJson(NpuDetected, windowsGpuFresh, cachedNpuTopPid, cachedNpuTopPct);
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"npu\":{{\"detected\":{0},\"utilization\":{1},\"usedMb\":{2},\"totalMb\":{3},\"totalGb\":{4},\"name\":{5},\"topProcess\":{6}}},",
-                NpuDetected ? "true" : "false", npuUtil, windowsGpuFresh && npuMemBytes >= 0 ? npuMemBytes / (1024 * 1024) : -1, npuTotalMb, npuTotalMb / 1024, JsonString(NpuName), npuTop);
-
-            // vram
-            int vramPct = vramTotal > 0 ? (int)Math.Round(Math.Min(100.0, (double)vramUsed / vramTotal * 100)) : 0;
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"vram\":{{\"utilization\":{0},\"usedMb\":{1},\"totalMb\":{2},\"totalGb\":{3}}},",
-                vramFresh ? vramPct : -1, vramFresh ? (long)(vramUsed / (1024 * 1024)) : -1, vramTotal / (1024 * 1024), vramTotal / 1024 / 1024 / 1024);
-
-            // gpu
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"gpu\":{{\"detected\":{0},\"utilization\":{1},\"temp\":{2},\"coreClock\":{3},\"memoryClock\":{4},\"powerW\":{5},\"name\":{6},\"driver\":{7},\"driverDate\":{8},\"fanRpm\":{9},\"topProcess\":{10}}},",
-                dgpuDetected ? "true" : "false", gpuUtil, gpuTemp, gpuCoreClock, gpuMemClock, gpuPowerW, JsonString(GpuName), JsonString(DgpuDriver), JsonString(DgpuDriverDate), gpuFanRpm, TopProcessJson(dgpuDetected, windowsGpuFresh, cachedDgpuTopPid, cachedDgpuTopPct));
-
-            // ram
-            string commitUsedGbStr = (commitUsedBytes / (1024.0 * 1024.0 * 1024.0)).ToString("F1", CultureInfo.InvariantCulture);
-            string commitLimitGbStr = (commitLimitBytes / (1024.0 * 1024.0 * 1024.0)).ToString("F1", CultureInfo.InvariantCulture);
-            string cachedGbStr = (ramCachedBytes / (1024.0 * 1024.0 * 1024.0)).ToString("F1", CultureInfo.InvariantCulture);
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"ram\":{{\"utilization\":{0},\"totalGb\":{1},\"commitUsedGb\":\"{2}\",\"commitLimitGb\":\"{3}\",\"cachedGb\":\"{4}\",\"poolPagedMb\":{5},\"poolNonPagedMb\":{6},\"speedMts\":{7},\"activity\":{8},\"type\":{9},\"modules\":{10}}},",
-                ramLoad, TotalRamGb, commitUsedGbStr, commitLimitGbStr, cachedGbStr, ramPoolPagedBytes / (1024 * 1024), ramPoolNonPagedBytes / (1024 * 1024), RamSpeedMts, ramActivityVal, JsonString(RamType), RamModules);
-
-            // disk
-            string diskFreeGbStr = diskFreeGb.ToString("F1", CultureInfo.InvariantCulture);
-            // Unavailable readings are the number -1, never a placeholder throughput.
-            string diskReadMbStr = diskReadMbNum >= 0 ? "\"" + diskReadMbNum.ToString("F1", CultureInfo.InvariantCulture) + "\"" : "-1";
-            string diskWriteMbStr = diskWriteMbNum >= 0 ? "\"" + diskWriteMbNum.ToString("F1", CultureInfo.InvariantCulture) + "\"" : "-1";
-            string diskResponseMsStr = diskResponse >= 0 ? (diskResponse * 1000.0).ToString("F1", CultureInfo.InvariantCulture) : "-1";
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"disk\":{{\"freeGb\":{0},\"utilization\":{1},\"storagePercent\":{2},\"totalGb\":{3},\"readMb\":{4},\"writeMb\":{5},\"responseTimeMs\":{6},\"name\":{7},\"drive\":{8}}},",
-                diskFreeGbStr, diskActiveTime, diskStoragePercent, (int)diskTotalGb, diskReadMbStr, diskWriteMbStr, diskResponseMsStr, JsonString(DiskName), JsonString(SystemDrive));
-
-            // network
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"network\":{{\"lan\":{0},\"wifi\":{1},\"name\":{2},\"type\":{3},\"linkSpeedMbps\":{4},\"signal\":{5}}},",
-                network.TxKBps, network.RxKBps, JsonString(network.Name), JsonString(network.Type), network.LinkSpeedMbps, wifiSignal);
-
-            // battery
-            // Charge/discharge power (W, + charging / - discharging) and Windows' remaining-time estimate.
-            string batteryRate = "null";
+            // battery: charge/discharge power (W, + charging / - discharging) and Windows' remaining-time estimate.
+            double? batteryRateW = null;
             int batteryMinutes = -1;
             if (batteryPresent)
             {
@@ -1350,42 +1247,200 @@ namespace DesktopHtmlHost
                 if (BatteryState.TryRead(out state))
                 {
                     if (state.RateMilliwatts != int.MinValue && state.RateMilliwatts != 0)
-                        batteryRate = (state.RateMilliwatts / 1000.0).ToString("F1", CultureInfo.InvariantCulture);
+                        batteryRateW = Math.Round(state.RateMilliwatts / 1000.0, 1);
                     if (!acLine && state.EstimatedSeconds > 0 && state.EstimatedSeconds < 7 * 24 * 3600)
                         batteryMinutes = (int)(state.EstimatedSeconds / 60);
                 }
             }
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"battery\":{{\"present\":{0},\"percent\":{1},\"ac\":{2},\"rateW\":{4},\"minutesLeft\":{5}}},\"energySaver\":{3},",
-                batteryPresent ? "true" : "false", batteryPercent, acLine ? "true" : "false", energySaver ? "true" : "false", batteryRate, batteryMinutes);
 
-            // global/uptime/ping (real Windows uptime, not the process lifetime)
-            sb.AppendFormat(CultureInfo.InvariantCulture, "\"uptime\":{0},\"ping\":{1},\"pingVia\":{4},\"totalProcesses\":{2},\"motherboard\":{3},",
-                Win32.GetTickCount64() / 1000, pingTime, processesCount, JsonString(MotherboardInfo), pingViaGateway ? "\"gateway\"" : "\"internet\"");
+            // igpu: memory budget registered by the driver (dedicated carve-out + shared system
+            // memory, as in Task Manager); Windows sets the shared part to half of the RAM, which
+            // is the fallback when the registry value is missing.
+            long igpuTotalMb = igpuMemoryBudgetBytes > 0 ? igpuMemoryBudgetBytes / (1024 * 1024) : (long)(ramTotalPhys / 1024 / 1024 / 2);
+            long npuTotalMb = (long)(ramTotalPhys / 1024 / 1024 / 2);
+            int vramPct = vramTotal > 0 ? (int)Math.Round(Math.Min(100.0, (double)vramUsed / vramTotal * 100)) : 0;
+            // CPU: real frequency from the performance counter; empty when it cannot be read.
+            string cpuFreqGhzStr = cpuFreqGhz > 0 ? cpuFreqGhz.ToString("F2", CultureInfo.InvariantCulture) : "";
+            string windowsGpuStatus = windowsGpuFresh ? "fresh" : lastGpuPerfTime == DateTime.MinValue ? "unavailable" : "stale";
+            double sampledAt = Math.Round((DateTime.UtcNow - DateTime.UnixEpoch).TotalMilliseconds);
+            ProcessUsage[] topProcesses = cachedTopProcesses;
+            ProcessUsage topRamProcess = cachedTopRamProcess;
+            int cpuCount = Math.Max(1, Environment.ProcessorCount);
 
-            // topProcesses
-            string topProcessesStr;
-            string topRamProcessStr;
-            lock (this)
+            // Field names and types are the contract read by telemetry-state.js, dashboard.js and app.js.
+            return JsonText.Write(json =>
             {
-                topProcessesStr = cachedTopProcessesJson;
-                topRamProcessStr = cachedTopRamProcessJson;
-            }
-            sb.AppendFormat(System.Globalization.CultureInfo.InvariantCulture, "\"topProcesses\":{0},", topProcessesStr);
-            sb.AppendFormat(System.Globalization.CultureInfo.InvariantCulture, "\"topRamProcess\":{0},", topRamProcessStr);
+                json.WriteStartObject();
+                json.WriteNumber("sampledAt", sampledAt);
+                // "nvidia" is the discrete GPU sensor source read by the page, whatever its provider.
+                json.WriteStartObject("sources");
+                json.WriteStartObject("nvidia");
+                json.WriteString("status", gpuSensorStatus);
+                json.WriteNumber("ageMs", gpuSensorAgeMs);
+                json.WriteString("provider", gpuSensorProvider);
+                json.WriteEndObject();
+                json.WriteStartObject("windowsGpu");
+                json.WriteString("status", windowsGpuStatus);
+                json.WriteEndObject();
+                json.WriteStartObject("cpuTemperature");
+                json.WriteString("status", cpuTemperatureStatus);
+                json.WriteString("label", "Zone thermique Windows");
+                json.WriteEndObject();
+                json.WriteEndObject();
 
-            // powerPlans
-            sb.Append("\"powerPlans\":[");
-            for (int i = 0; i < powerPlans.Count; i++)
-            {
-                if (i > 0) sb.Append(",");
-                sb.AppendFormat(CultureInfo.InvariantCulture, "{{\"guid\":{0},\"name\":{1},\"active\":{2},\"kind\":{3},\"mode\":{4}}}",
-                    JsonString(powerPlans[i].Guid), JsonString(powerPlans[i].Name), powerPlans[i].Active ? "true" : "false",
-                    JsonString(powerPlans[i].Kind), powerPlans[i].Overlay ? "\"overlay\"" : "\"plan\"");
-            }
-            sb.Append("]");
+                json.WriteStartObject("cpu");
+                json.WriteNumber("utilization", cpuLoad);
+                json.WriteNumber("temp", cpuTemp);
+                json.WriteString("name", CpuInfo ?? "");
+                json.WriteString("freqGhz", cpuFreqGhzStr);
+                json.WriteString("baseSpeedGhz", CpuBaseSpeed ?? "");
+                json.WriteNumber("cores", CpuCores);
+                json.WriteNumber("logical", CpuLogical);
+                json.WriteNumber("threads", threadsCount);
+                json.WriteNumber("handles", 0);
+                json.WriteString("l2Cache", CpuL2Cache ?? "");
+                json.WriteString("l3Cache", CpuL3Cache ?? "");
+                json.WriteEndObject();
 
-            sb.Append("}");
-            return sb.ToString();
+                json.WriteStartObject("igpu");
+                json.WriteBoolean("detected", igpuDetected);
+                json.WriteNumber("utilization", igpuUtil);
+                json.WriteNumber("decodeUtil", igpuDecodeUtil);
+                json.WriteNumber("usedMb", windowsGpuFresh && igpuMemBytes >= 0 ? igpuMemBytes / (1024 * 1024) : -1);
+                json.WriteNumber("totalMb", igpuTotalMb);
+                json.WriteNumber("totalGb", igpuTotalMb / 1024);
+                json.WriteString("name", IgpuInfo ?? "");
+                json.WriteString("driver", IgpuDriver ?? "");
+                json.WriteString("driverDate", IgpuDriverDate ?? "");
+                WriteTopProcess(json, igpuDetected, windowsGpuFresh, cachedIgpuTopPid, cachedIgpuTopPct);
+                json.WriteNumber("encodeUtil", igpuEncodeUtil);
+                json.WriteEndObject();
+
+                json.WriteStartObject("npu");
+                json.WriteBoolean("detected", NpuDetected);
+                json.WriteNumber("utilization", npuUtil);
+                json.WriteNumber("usedMb", windowsGpuFresh && npuMemBytes >= 0 ? npuMemBytes / (1024 * 1024) : -1);
+                json.WriteNumber("totalMb", npuTotalMb);
+                json.WriteNumber("totalGb", npuTotalMb / 1024);
+                json.WriteString("name", NpuName ?? "");
+                WriteTopProcess(json, NpuDetected, windowsGpuFresh, cachedNpuTopPid, cachedNpuTopPct);
+                json.WriteEndObject();
+
+                json.WriteStartObject("vram");
+                json.WriteNumber("utilization", vramFresh ? vramPct : -1);
+                json.WriteNumber("usedMb", vramFresh ? (long)(vramUsed / (1024 * 1024)) : -1);
+                json.WriteNumber("totalMb", vramTotal / (1024 * 1024));
+                json.WriteNumber("totalGb", vramTotal / 1024 / 1024 / 1024);
+                json.WriteEndObject();
+
+                json.WriteStartObject("gpu");
+                json.WriteBoolean("detected", dgpuDetected);
+                json.WriteNumber("utilization", gpuUtil);
+                json.WriteNumber("temp", Finite(gpuTemp));
+                json.WriteNumber("coreClock", Finite(gpuCoreClock));
+                json.WriteNumber("memoryClock", Finite(gpuMemClock));
+                json.WriteNumber("powerW", Finite(gpuPowerW));
+                json.WriteString("name", GpuName ?? "");
+                json.WriteString("driver", DgpuDriver ?? "");
+                json.WriteString("driverDate", DgpuDriverDate ?? "");
+                json.WriteNumber("fanRpm", gpuFanRpm);
+                WriteTopProcess(json, dgpuDetected, windowsGpuFresh, cachedDgpuTopPid, cachedDgpuTopPct);
+                json.WriteEndObject();
+
+                json.WriteStartObject("ram");
+                json.WriteNumber("utilization", ramLoad);
+                json.WriteNumber("totalGb", TotalRamGb);
+                json.WriteString("commitUsedGb", Gigabytes(commitUsedBytes));
+                json.WriteString("commitLimitGb", Gigabytes(commitLimitBytes));
+                json.WriteString("cachedGb", Gigabytes(ramCachedBytes));
+                json.WriteNumber("poolPagedMb", ramPoolPagedBytes / (1024 * 1024));
+                json.WriteNumber("poolNonPagedMb", ramPoolNonPagedBytes / (1024 * 1024));
+                json.WriteNumber("speedMts", RamSpeedMts);
+                json.WriteNumber("activity", ramActivityVal);
+                json.WriteString("type", RamType ?? "");
+                json.WriteNumber("modules", RamModules);
+                json.WriteEndObject();
+
+                // Unavailable disk readings are the number -1, never a placeholder throughput.
+                json.WriteStartObject("disk");
+                json.WriteNumber("freeGb", Math.Round(diskFreeGb, 1));
+                json.WriteNumber("utilization", diskActiveTime);
+                json.WriteNumber("storagePercent", diskStoragePercent);
+                json.WriteNumber("totalGb", (int)diskTotalGb);
+                WriteRate(json, "readMb", diskReadMbNum);
+                WriteRate(json, "writeMb", diskWriteMbNum);
+                json.WriteNumber("responseTimeMs", diskResponse >= 0 && double.IsFinite(diskResponse) ? Math.Round(diskResponse * 1000.0, 1) : -1);
+                json.WriteString("name", DiskName ?? "");
+                json.WriteString("drive", SystemDrive);
+                json.WriteEndObject();
+
+                json.WriteStartObject("network");
+                json.WriteNumber("lan", network.TxKBps);
+                json.WriteNumber("wifi", network.RxKBps);
+                json.WriteString("name", network.Name ?? "");
+                json.WriteString("type", network.Type ?? "");
+                json.WriteNumber("linkSpeedMbps", network.LinkSpeedMbps);
+                json.WriteNumber("signal", wifiSignal);
+                json.WriteEndObject();
+
+                json.WriteStartObject("battery");
+                json.WriteBoolean("present", batteryPresent);
+                json.WriteNumber("percent", batteryPercent);
+                json.WriteBoolean("ac", acLine);
+                if (batteryRateW.HasValue) json.WriteNumber("rateW", batteryRateW.Value); else json.WriteNull("rateW");
+                json.WriteNumber("minutesLeft", batteryMinutes);
+                json.WriteEndObject();
+                json.WriteBoolean("energySaver", energySaver);
+
+                // Real Windows uptime, not the process lifetime.
+                json.WriteNumber("uptime", Win32.GetTickCount64() / 1000);
+                json.WriteNumber("ping", pingTime);
+                json.WriteString("pingVia", pingViaGateway ? "gateway" : "internet");
+                json.WriteNumber("totalProcesses", processesCount);
+                json.WriteString("motherboard", MotherboardInfo ?? "");
+
+                json.WriteStartArray("topProcesses");
+                foreach (var process in topProcesses)
+                {
+                    json.WriteStartObject();
+                    json.WriteString("Name", process.Name ?? "");
+                    json.WriteNumber("PercentProcessorTime", process.CpuPercent * cpuCount);
+                    json.WriteNumber("WorkingSetPrivate", process.RamMb * 1024L * 1024L);
+                    json.WriteEndObject();
+                }
+                json.WriteEndArray();
+                json.WriteStartObject("topRamProcess");
+                if (topRamProcess != null)
+                {
+                    json.WriteString("name", topRamProcess.Name ?? "");
+                    json.WriteNumber("ramMb", topRamProcess.RamMb);
+                }
+                json.WriteEndObject();
+
+                json.WriteStartArray("powerPlans");
+                foreach (var plan in powerPlans)
+                {
+                    json.WriteStartObject();
+                    json.WriteString("guid", plan.Guid ?? "");
+                    json.WriteString("name", plan.Name ?? "");
+                    json.WriteBoolean("active", plan.Active);
+                    json.WriteString("kind", plan.Kind ?? "");
+                    json.WriteString("mode", plan.Overlay ? "overlay" : "plan");
+                    json.WriteEndObject();
+                }
+                json.WriteEndArray();
+                json.WriteEndObject();
+            });
+        }
+
+        // A non-finite double would make the whole message invalid JSON: report it as unavailable.
+        private static double Finite(double value) { return double.IsFinite(value) ? value : -1; }
+        private static string Gigabytes(long bytes) { return (bytes / (1024.0 * 1024.0 * 1024.0)).ToString("F1", CultureInfo.InvariantCulture); }
+        // Throughput as a one-decimal string, or the number -1 when unavailable.
+        private static void WriteRate(Utf8JsonWriter json, string name, double megabytes)
+        {
+            if (megabytes >= 0 && double.IsFinite(megabytes)) json.WriteString(name, megabytes.ToString("F1", CultureInfo.InvariantCulture));
+            else json.WriteNumber(name, -1);
         }
     }
 }

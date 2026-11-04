@@ -2,6 +2,13 @@
 
 ## Non publié
 
+### Télémétrie moins coûteuse
+
+- Les capteurs NVIDIA (charge, température, fréquences, consommation, VRAM) sont lus par NVML, la bibliothèque du pilote NVIDIA (`nvml.dll` de System32, via `LibraryImport`), au lieu de lancer `nvidia-smi.exe` toutes les 5 s. Mêmes champs, même rythme (5 s sur secteur, 15 s sur batterie, recul jusqu'à 60 s après échec, aucune lecture d'un GPU en veille) ; sans NVML, les capteurs WDDM prennent le relais comme avant. La source affichée devient `nvml`.
+- Le message de télémétrie envoyé à la page est écrit par `Utf8JsonWriter` au lieu d'environ 60 champs positionnels assemblés à la main ; même structure JSON, et une valeur non finie ne peut plus rendre le message invalide. Le double `JsonString` disparaît (réponse du changement de plan d'alimentation comprise).
+- Les drapeaux partagés avec le pool de threads (`telemetryCollectPending`, `runtimeSuspended`, `isClosing`) sont `volatile`.
+- Mesuré hors écran sur 2 min (RTX 4080 SUPER, collecteur de l'hôte chaque seconde) : 1,8 s → 1,06 s de CPU (−41 %), 44 → 0 processus enfants, collecte moyenne 15,7 → 7,0 ms.
+
 ### Affichage net sur plusieurs écrans
 
 - NexusWpp et son installeur sont désormais conscients du DPI de chaque écran (per-monitor v2, `<ApplicationHighDpiMode>` appliqué par `ApplicationConfiguration.Initialize()`), au lieu du seul DPI système (`SetProcessDPIAware`). Windows n'étire plus leur image : le fond reste net sur des écrans à mises à l'échelle différentes, ou après un changement d'échelle sans fermer la session.

@@ -9,7 +9,7 @@ graph TD
     EXE --> HOOK[WH_MOUSE_LL selective click hook]
     EXE --> TEL[Native telemetry collector]
     TEL --> WMI[WMI / Win32 APIs]
-    TEL --> NVIDIA[Isolated nvidia-smi process when available]
+    TEL --> NVIDIA[NVML from the NVIDIA driver when available]
     TEL --> POWER[powrprof plans and power mode overlays]
     WV --> UI[index.html + style.css + cockpit-state.js / radar.js / dashboard.js / app.js]
     TEL --> MSG[PostWebMessageAsJson]
@@ -38,8 +38,8 @@ Telemetry is collected in `TelemetryCollector.cs`. `NvidiaTelemetry.cs` isolates
 - Disk: PDH `LogicalDisk(%SystemDrive%)` read/write bytes, `% Disk Time` and `Avg. Disk sec/Transfer`
 - Network: PDH `Network Interface(*)` byte rates of the physical adapters; identity (name, type, address, link speed, gateway) enumerated only on Windows network change notifications or every 30 s; offline sends type `none` with empty fields. Wi-Fi signal from `wlan_intf_opcode_rssi` (dBm, not gated by location consent). Async ping to `1.1.1.1`, then `8.8.8.8`; the local gateway is a last resort reported as `pingVia: "gateway"` so LAN latency is never shown as internet latency
 - GPU/iGPU: DirectX adapter registry (name, LUID, `DedicatedVideoMemory`: 1 GiB or more is discrete, AMD APU names stay integrated) plus GPU performance counters
-- NVIDIA details: isolated `nvidia-smi` process (temperature, clocks, power, VRAM), every 5 s on mains, 15 s on battery or energy saver, backing off up to 60 s after failures, and never while the GPU is runtime-suspended (PnP power state D1-D3)
-- Other discrete GPUs (AMD, Intel Arc, NVIDIA without nvidia-smi): driver-reported WDDM sensors through `D3DKMTQueryAdapterInfo(ADAPTERPERFDATA)` (temperature, memory clock, fan), the Task Manager source; values only when the driver reports them
+- NVIDIA details: NVML (`nvml.dll` from System32, loaded in process through `LibraryImport`, no helper process) for utilisation, temperature, clocks, power and VRAM, every 5 s on mains, 15 s on battery or energy saver, backing off up to 60 s after failures, and never while the GPU is runtime-suspended (PnP power state D1-D3)
+- Other discrete GPUs (AMD, Intel Arc, NVIDIA without NVML): driver-reported WDDM sensors through `D3DKMTQueryAdapterInfo(ADAPTERPERFDATA)` (temperature, memory clock, fan), the Task Manager source; values only when the driver reports them
 - System uptime: `GetTickCount64`
 - Power plans: `PowerEnumerate`/`PowerReadFriendlyName` (fallback `powercfg /list` from System32), `PowerGetActiveScheme`, `PowerSetActiveScheme`; buttons ordered by kind (plan GUID, name words, then personality). With a single plan (Modern Standby laptops), the three Windows power modes through `PowerGetEffectiveOverlayScheme`/`PowerSetActiveOverlayScheme`
 - Rate readings are rebased after a gap of more than 2.5 s between samples (pause, sleep) instead of averaging the gap

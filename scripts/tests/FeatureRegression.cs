@@ -6,15 +6,15 @@ class FeatureRegression
     static void Check(bool value,string name) {if(!value)throw new Exception(name);Console.WriteLine("PASS "+name);}
     static int Main(string[] args) {
         try {
-            var sample=NvidiaSample.Parse("53, 64, 1785, [N/A], 3.87, 16376, 900");
+            var sample=NvidiaSample.Create(53,64,1785,null,3.87,16376,900);
             Check(sample!=null && sample.PowerWatts==3.87 && sample.MemoryClock==null && sample.Utilization==53,"unsupported field preserves other NVIDIA readings");
-            Check(NvidiaSample.Parse("N/A,N/A,N/A,N/A,N/A,N/A,N/A")==null,"fully unavailable NVIDIA sample");
-            sample=NvidiaSample.Parse("101, -2, 1200, 500, NaN, 8192, 9000");
+            Check(NvidiaSample.Create(null,null,null,null,null,null,null)==null,"fully unavailable NVIDIA sample");
+            sample=NvidiaSample.Create(101,-2,1200,500,double.NaN,8192,9000);
             Check(sample.Utilization==null && sample.Temperature==null && sample.PowerWatts==null && sample.UsedMiB==null,"non-finite, invalid ranges and inconsistent VRAM rejected");
-            var nv=new NvidiaTelemetry();nv.Accept(NvidiaSample.Parse("0,31,210,405,3.8,16384,256"),0);
+            var nv=new NvidiaTelemetry();nv.Accept(NvidiaSample.Create(0,31,210,405,3.8,16384,256),0);
             Check(nv.Current!=null && nv.Status=="fresh","successful sensor sample cached");
             nv.Accept(null,10);Check(nv.Current==null && nv.Status=="stale","failed read invalidates all previous live values immediately");
-            nv.Accept(NvidiaSample.Parse("1,32,N/A,N/A,4.1,N/A,N/A"),20);
+            nv.Accept(NvidiaSample.Create(1,32,null,null,4.1,null,null),20);
             Check(nv.Current.PowerWatts==4.1 && nv.Current.CoreClock==null,"recovery never revives old unsupported fields");
             var engines=new[]{new GpuEngineReading{Name="pid_1_luid_A_phys_0_eng_0_engtype_3D",Utilization=30},new GpuEngineReading{Name="pid_2_luid_A_phys_0_eng_0_engtype_3D",Utilization=40},new GpuEngineReading{Name="pid_1_luid_A_phys_0_eng_1_engtype_3D",Utilization=50},new GpuEngineReading{Name="pid_1_luid_B_phys_0_eng_0_engtype_3D",Utilization=99}};
             Check(WindowsGpuTelemetry.BusiestEngine(engines,"luid_A","3D")==70,"GPU processes aggregate within each engine, separate engines and adapters stay distinct");
@@ -113,11 +113,25 @@ class FeatureRegression
                 }
             }
 
-            // nvidia-smi back-off.
-            Check(NvidiaTelemetry.NextIntervalMs(0,false)==5000 && NvidiaTelemetry.NextIntervalMs(0,true)==15000,"nvidia-smi every 5 s on mains, 15 s on battery or energy saver");
-            Check(NvidiaTelemetry.NextIntervalMs(1,false)==10000 && NvidiaTelemetry.NextIntervalMs(9,false)==60000,"failed nvidia-smi runs back off up to 60 s");
+            // NVML back-off.
+            Check(NvidiaTelemetry.NextIntervalMs(0,false)==5000 && NvidiaTelemetry.NextIntervalMs(0,true)==15000,"NVML read every 5 s on mains, 15 s on battery or energy saver");
+            Check(NvidiaTelemetry.NextIntervalMs(1,false)==10000 && NvidiaTelemetry.NextIntervalMs(9,false)==60000,"failed NVML reads back off up to 60 s");
             var other=new NvidiaTelemetry();
-            Check(!other.IsAvailable("AMD Radeon RX 7800 XT") && other.Read("AMD Radeon RX 7800 XT",false,false)==null && other.Status=="unavailable","nvidia-smi is never spawned for another vendor");
+            Check(!other.IsAvailable("AMD Radeon RX 7800 XT") && other.Read("AMD Radeon RX 7800 XT",false,false)==null && other.Status=="unavailable","NVML is never loaded for another vendor");
+            Check(NvidiaTelemetry.Provider=="nvml","the page is told the real sensor provider");
+            // Live NVML reading on this PC (an NVIDIA adapter with its driver), or nothing at all.
+            using(var dx=Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\DirectX")) {
+                if(dx!=null) foreach(var key in dx.GetSubKeyNames()) using(var sub=dx.OpenSubKey(key)) {
+                    string adapter=Convert.ToString(sub.GetValue("Description"));
+                    if(string.IsNullOrEmpty(adapter)||adapter.IndexOf("NVIDIA",StringComparison.OrdinalIgnoreCase)<0)continue;
+                    var nvLive=new NvidiaTelemetry();
+                    if(!nvLive.IsAvailable(adapter)){Console.WriteLine("INFO NVML absent for "+adapter);continue;}
+                    var nvRead=nvLive.Read(adapter,false,false);
+                    Console.WriteLine("INFO NVML {0}: {1}",adapter,nvRead==null?"no reading ("+nvLive.Status+")":string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                        "util={0} temp={1} core={2} mem={3} power={4} vram={5}/{6} MiB",nvRead.Utilization,nvRead.Temperature,nvRead.CoreClock,nvRead.MemoryClock,nvRead.PowerWatts,nvRead.UsedMiB,nvRead.TotalMiB));
+                    Check(nvRead!=null && nvLive.Status=="fresh" && nvRead.Temperature>0 && nvRead.TotalMiB>0 && nvRead.UsedMiB<=nvRead.TotalMiB,"live NVML reading of "+adapter);
+                }
+            }
 
             // Network: identity filter, PDH instance names, Wi-Fi signal without location consent.
             Check(NetworkTelemetry.PdhInstanceName("Intel(R) Wi-Fi 6E AX211 160MHz")=="Intel[R] Wi-Fi 6E AX211 160MHz" && NetworkTelemetry.PdhInstanceName("Realtek PCIe GbE #2")=="Realtek PCIe GbE _2","adapter descriptions map to PDH instance names");

@@ -50,12 +50,16 @@ namespace DesktopHtmlHost
 
             try
             {
-                string payload = string.Format(CultureInfo.InvariantCulture,
-                    "{{\"control\":\"POWER_RESULT\",\"requestedGuid\":{0},\"activeGuid\":{1},\"success\":{2},\"error\":{3}}}",
-                    JsonString(guidStr),
-                    JsonString(activeGuid),
-                    success ? "true" : "false",
-                    JsonString(error));
+                string payload = JsonText.Write(json =>
+                {
+                    json.WriteStartObject();
+                    json.WriteString("control", "POWER_RESULT");
+                    json.WriteString("requestedGuid", guidStr ?? "");
+                    json.WriteString("activeGuid", activeGuid ?? "");
+                    json.WriteBoolean("success", success);
+                    json.WriteString("error", error ?? "");
+                    json.WriteEndObject();
+                });
                 PostWebMessageAsJsonSafe(payload, "Power result post");
             }
             catch (Exception ex)
@@ -64,30 +68,6 @@ namespace DesktopHtmlHost
             }
 
             TelemetryTimer_Tick(null, null);
-        }
-
-        private static string JsonString(string value)
-        {
-            if (value == null) return "\"\"";
-            StringBuilder sb = new StringBuilder(value.Length + 2);
-            sb.Append('"');
-            foreach (char c in value)
-            {
-                switch (c)
-                {
-                    case '\\': sb.Append(@"\\"); break;
-                    case '"': sb.Append("\\\""); break;
-                    case '\r': sb.Append(@"\r"); break;
-                    case '\n': sb.Append(@"\n"); break;
-                    case '\t': sb.Append(@"\t"); break;
-                    default:
-                        if (c < 32) sb.Append("\\u" + ((int)c).ToString("x4", CultureInfo.InvariantCulture));
-                        else sb.Append(c);
-                        break;
-                }
-            }
-            sb.Append('"');
-            return sb.ToString();
         }
 
         private void TelemetryTimer_Tick(object sender, EventArgs e)

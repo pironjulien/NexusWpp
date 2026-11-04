@@ -41,9 +41,10 @@ namespace DesktopHtmlHost
         private System.Windows.Forms.Timer telemetryTimer;
         private TelemetryCollector telemetryCollector;
         private bool telemetryReady = false;
-        private bool telemetryCollectPending = false;
+        // volatile: telemetryCollectPending, runtimeSuspended and isClosing are also used from the thread pool.
+        private volatile bool telemetryCollectPending = false;
         private System.Windows.Forms.Timer fullscreenTimer;
-        private bool runtimeSuspended = false;
+        private volatile bool runtimeSuspended = false;
         // Suspend only after the desktop stays covered this long; resume on the first visible check.
         private const int SuspendConfirmMs = 1500;
         private int coveredSince;
@@ -53,7 +54,7 @@ namespace DesktopHtmlHost
         private bool sessionInactive = false;
         private int telemetryGeneration = 0;
         private string fullscreenReason = "";
-        private bool isClosing = false;
+        private volatile bool isClosing = false;
         private bool displayOff = false;
         private ShellEventWindow shellEvents;
 
