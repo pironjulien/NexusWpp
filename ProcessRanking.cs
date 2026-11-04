@@ -35,6 +35,16 @@ namespace DesktopHtmlHost
         internal static void Rank(List<KeyValuePair<string, double>> cpuRows, List<KeyValuePair<string, double>> ramRows, int cpuCount,
             out ProcessUsage[] top, out ProcessUsage? topRam, Dictionary<int, string>? pidNames)
         {
+            Rank(cpuRows, ramRows, cpuCount, out top, out topRam, pidNames, out _);
+        }
+
+        // Windows' compressed memory store, always the largest "process" and not an application:
+        // left out of the busiest RAM process, its size is reported apart (-1 when not running).
+        internal const string MemoryCompression = "Memory Compression";
+
+        internal static void Rank(List<KeyValuePair<string, double>> cpuRows, List<KeyValuePair<string, double>> ramRows, int cpuCount,
+            out ProcessUsage[] top, out ProcessUsage? topRam, Dictionary<int, string>? pidNames, out long compressedMb)
+        {
             cpuCount = Math.Max(1, cpuCount);
             // Same instance key and the same occurrence of that key in both arrays.
             var ram = new Dictionary<string, Queue<double>>(StringComparer.Ordinal);
@@ -54,7 +64,9 @@ namespace DesktopHtmlHost
                 processes.Add(new ProcessUsage(name, cpuPercent, (long)(Math.Max(0, ramBytes) / (1024 * 1024))));
             }
             top = processes.OrderByDescending(p => p.CpuPercent).Take(4).ToArray();
-            topRam = processes.OrderByDescending(p => p.RamMb).FirstOrDefault();
+            var store = processes.FirstOrDefault(p => p.Name == MemoryCompression);
+            compressedMb = store != null ? store.RamMb : -1;
+            topRam = processes.Where(p => p.Name != MemoryCompression).OrderByDescending(p => p.RamMb).FirstOrDefault();
         }
     }
 }

@@ -250,7 +250,7 @@ body {
     opacity: 0.76;
 }
 
-#ssd-card::before {
+.gauge-card[id^="ssd-card"]::before {
     background:
         radial-gradient(circle at 0% 50%, rgba(0, 199, 190, 0.098), transparent 46%),
         radial-gradient(circle at 14% 50%, rgba(191, 90, 255, 0.054), transparent 38%),
@@ -351,6 +351,35 @@ body {
 .accelerator-row.no-npu.no-igpu {
     display: none;
 }
+
+/* One card per fixed disk, side by side in the space of one card: a PC with several disks keeps
+   the height of every other card. */
+.disk-row {
+    flex: 1;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: clamp(6px, calc(0.8 * var(--lvw)), 16px);
+    min-height: 0;
+}
+
+/* Four disks: two rows of two, so each card keeps a readable dial (when they are all shown). */
+@container layout (min-width: 501px) and (min-height: 461px) {
+    .disk-row:has(> .gauge-card:nth-child(4):not(.card-hidden)) {
+        grid-auto-flow: row;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* Windows too small for several disk cards side by side (under 500 x 460 CSS px): the system disk
+   only, the others come back as soon as there is room. */
+@container layout (max-width: 500px) or (max-height: 460px) {
+    .disk-row > .gauge-card:not(:first-child) { display: none; }
+}
+
+/* The GPU card has two more readings (fans, apps): a third row, shown when the card has room for
+   it; a short card keeps its four main readings. */
+@container gauge (max-height: 300px) { .sub-metric.when-room { display: none; } }
 
 /* Last 60 s of the card's activity, behind its content. */
 .history-line {
@@ -486,7 +515,7 @@ body {
 #npu-ring { filter: drop-shadow(0 0 3px var(--npu-glow)); }
 #gpu-ring { filter: drop-shadow(0 0 3px var(--gpu-glow)); }
 #ram-ring { filter: drop-shadow(0 0 3px var(--ram-color)); }
-#ssd-ring { filter: drop-shadow(0 0 3px var(--disk-color)); }
+.ring-fill[id^="ssd-ring"] { filter: drop-shadow(0 0 3px var(--disk-color)); }
 #net-ring { filter: drop-shadow(0 0 3px #ff9f0a); }
 
 .gauge-value {
@@ -961,6 +990,7 @@ body {
         grid-auto-rows: minmax(0, 1fr);
     }
     .column-left, .column-right, .accelerator-row { display: contents; }
+    .disk-row { order: 6; }
     .accelerator-row.no-npu.no-igpu { display: none; }
     .column-center { grid-column: 1 / -1; grid-row: 1; }
     .gauge-card { height: auto; }
@@ -969,7 +999,6 @@ body {
     #vram-card { order: 3; }
     #npu-card { order: 4; }
     #gpu-card { order: 5; }
-    #ssd-card { order: 6; }
     #net-card { order: 7; }
     .column-center {
         display: grid;

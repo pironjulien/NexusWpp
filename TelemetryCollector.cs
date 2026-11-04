@@ -39,7 +39,6 @@ namespace DesktopHtmlHost
         public string NpuDriver = "";
         public string NpuDriverDate = "";
         public bool NpuDetected;
-        public string DiskName = "";
 
         private string igpuLuid = "";
         private string dgpuLuid = "";
@@ -83,6 +82,8 @@ namespace DesktopHtmlHost
         // Replaced as a whole by the ranking worker; read once per collection.
         private volatile ProcessUsage[] cachedTopProcesses = Array.Empty<ProcessUsage>();
         private volatile ProcessUsage? cachedTopRamProcess;
+        private long cachedCompressedMb = -1; // Memory Compression store size (Task Manager's "Compressed")
+        private int cachedIgpuApps = -1, cachedDgpuApps = -1;
         private int topProcessCounter = 3; // first ranking on the first collection
         private bool topProcessUpdatePending;
 
@@ -167,10 +168,7 @@ namespace DesktopHtmlHost
         private string pdhProcessCpu = ProcessRanking.CpuV2, pdhProcessPrivateBytes = ProcessRanking.RamV2;
         // Task Manager "Cached": the three standby lists plus the modified page list.
         private const string PdhModifiedPages = @"\Memory\Modified Page List Bytes";
-        // Reads from disk of pages that were not in memory (page file and memory-mapped files, so
-        // programs starting count too): Resource Monitor's "Hard Faults/sec". Lasting high values
-        // with a full memory are the sign that RAM is really short.
-        private const string PdhHardFaults = @"\Memory\Page Reads/sec";
+
         // Task Manager CPU utilization: work done relative to the base frequency (above 100 % in turbo, capped).
         private const string PdhCpuUtility = @"\Processor Information(_Total)\% Processor Utility";
         // Busy time of each logical processor. Not "% Processor Utility": scaled by the turbo clock,
@@ -193,7 +191,7 @@ namespace DesktopHtmlHost
         {
             perf = new PdhQuery();
             foreach (string path in new[] { PdhModifiedPages, PdhStandbyNormal, PdhStandbyReserve, PdhStandbyCore, PdhPoolPaged,
-                PdhPoolNonPaged, PdhHardFaults, PdhThreads, PdhProcesses, PdhCpuPerformance, PdhCpuFrequency, PdhCpuUtility })
+                PdhPoolNonPaged, PdhThreads, PdhProcesses, PdhCpuPerformance, PdhCpuFrequency, PdhCpuUtility })
             {
                 perf.Add(path);
             }
@@ -201,6 +199,8 @@ namespace DesktopHtmlHost
             if (!perf.Add(PdhThermalZones)) cpuThermalPerfUnavailable = true;
             coreBusyTimeAvailable = perf.Add(PdhCoreBusyTime);
             diskCountersAvailable = perf.Add(PdhDiskRead) & perf.Add(PdhDiskWrite) & perf.Add(PdhDiskIdle) & perf.Add(PdhDiskLatency);
+            physicalDisks = PhysicalDisks.Discover(SystemDrive);
+            lastDiskDiscoveryMs = collectClock.ElapsedMilliseconds;
             network.AddCounters(perf);
             WindowsGpuTelemetry.AddCounters(perf);
             perf.Collect(); // baseline for rate counters
@@ -230,12 +230,102 @@ namespace DesktopHtmlHost
             return !string.IsNullOrEmpty(drive) && System.Text.RegularExpressions.Regex.IsMatch(drive, "^[A-Za-z]:$")
                 ? drive.ToUpperInvariant() : "C:";
         }
-        private static readonly string PdhDiskRead = @"\LogicalDisk(" + SystemDrive + @")\Disk Read Bytes/sec";
-        private static readonly string PdhDiskWrite = @"\LogicalDisk(" + SystemDrive + @")\Disk Write Bytes/sec";
+        // Every physical disk in one counter array: instances are "<disk number> <letters>" ("0 C:", "1 D:").
+        private const string PdhDiskRead = @"\PhysicalDisk(*)\Disk Read Bytes/sec";
+        private const string PdhDiskWrite = @"\PhysicalDisk(*)\Disk Write Bytes/sec";
         // Task Manager "Active time" is 100 - % Idle Time (% Disk Time is a queue length that exceeds 100).
-        private static readonly string PdhDiskIdle = @"\LogicalDisk(" + SystemDrive + @")\% Idle Time";
-        private static readonly string PdhDiskLatency = @"\LogicalDisk(" + SystemDrive + @")\Avg. Disk sec/Transfer";
+        private const string PdhDiskIdle = @"\PhysicalDisk(*)\% Idle Time";
+        private const string PdhDiskLatency = @"\PhysicalDisk(*)\Avg. Disk sec/Transfer";
         private bool diskCountersAvailable;
+        // Fixed disks, looked up again once a minute (a disk added or removed); their temperature
+        // is asked every 10 s on mains, every 60 s on battery or energy saver.
+        private List<PhysicalDiskInfo> physicalDisks = new List<PhysicalDiskInfo>();
+        private long lastDiskDiscoveryMs = -1;
+        private readonly Dictionary<int, (int Celsius, long ReadMs)> diskTemperatures = new Dictionary<int, (int, long)>();
+
+        internal sealed class DiskReading
+        {
+            internal string Name = "", Letters = "";
+            internal bool Rotational;
+            internal int Number = -1, StoragePercent, Temperature = -1;
+            internal long ActiveTime = -1;
+            internal double FreeGb, TotalGb, ReadMb = -1, WriteMb = -1, ResponseMs = -1;
+        }
+
+        // Instance "0 C:" -> 0; -1 for _Total or an unnumbered instance.
+        internal static int DiskInstanceNumber(string instance)
+        {
+            int space = instance.IndexOf(' ');
+            return int.TryParse(space < 0 ? instance : instance.Substring(0, space), NumberStyles.None, CultureInfo.InvariantCulture, out int number) ? number : -1;
+        }
+
+        private List<DiskReading> ReadDisks(bool perfSampled, bool saveEnergy)
+        {
+            long now = collectClock.ElapsedMilliseconds;
+            if (lastDiskDiscoveryMs < 0 || now - lastDiskDiscoveryMs >= 60000)
+            {
+                lastDiskDiscoveryMs = now;
+                try { physicalDisks = PhysicalDisks.Discover(SystemDrive); }
+                catch (Exception ex) { Program.LogDebug("Disk discovery error: " + ex.Message); }
+            }
+            Dictionary<int, double> Rows(string path)
+            {
+                var rows = new Dictionary<int, double>();
+                var instances = perf != null && perfSampled && diskCountersAvailable ? perf.Instances(path) : null;
+                if (instances != null) foreach (var row in instances) { int n = DiskInstanceNumber(row.Key); if (n >= 0) rows[n] = row.Value; }
+                return rows;
+            }
+            var read = Rows(PdhDiskRead); var write = Rows(PdhDiskWrite); var idle = Rows(PdhDiskIdle); var latency = Rows(PdhDiskLatency);
+            var readings = new List<DiskReading>(physicalDisks.Count);
+            foreach (var disk in physicalDisks)
+            {
+                var reading = new DiskReading { Number = disk.Number, Name = disk.Name, Rotational = disk.Rotational, Letters = string.Join(" ", disk.Letters) };
+                long total = 0, free = 0;
+                foreach (string letter in disk.Letters)
+                {
+                    try { var drive = new DriveInfo(letter); if (drive.IsReady) { total += drive.TotalSize; free += drive.AvailableFreeSpace; } }
+                    catch (IOException) { }
+                    catch (UnauthorizedAccessException) { }
+                }
+                reading.TotalGb = total / (1024.0 * 1024.0 * 1024.0);
+                reading.FreeGb = free / (1024.0 * 1024.0 * 1024.0);
+                reading.StoragePercent = total > 0 ? (int)Math.Round((1.0 - (double)free / total) * 100) : 0;
+                if (read.TryGetValue(disk.Number, out double r) && write.TryGetValue(disk.Number, out double w))
+                {
+                    reading.ReadMb = Math.Max(0, r) / (1024.0 * 1024.0);
+                    reading.WriteMb = Math.Max(0, w) / (1024.0 * 1024.0);
+                }
+                if (idle.TryGetValue(disk.Number, out double i)) reading.ActiveTime = DiskActiveTime(i);
+                if (latency.TryGetValue(disk.Number, out double l) && double.IsFinite(l)) reading.ResponseMs = Math.Max(0, l) * 1000.0;
+                int interval = saveEnergy ? 60000 : 10000;
+                if (!diskTemperatures.TryGetValue(disk.Number, out var temperature) || now - temperature.ReadMs >= interval)
+                {
+                    temperature = (PhysicalDisks.Temperature(disk.Number), now);
+                    diskTemperatures[disk.Number] = temperature;
+                }
+                reading.Temperature = temperature.Celsius;
+                readings.Add(reading);
+            }
+            return readings;
+        }
+
+        private static void WriteDisk(Utf8JsonWriter json, DiskReading disk)
+        {
+            json.WriteStartObject();
+            json.WriteNumber("freeGb", Math.Round(disk.FreeGb, 1));
+            json.WriteNumber("utilization", disk.ActiveTime);
+            json.WriteNumber("storagePercent", disk.StoragePercent);
+            json.WriteNumber("totalGb", (int)disk.TotalGb);
+            WriteRate(json, "readMb", disk.ReadMb);
+            WriteRate(json, "writeMb", disk.WriteMb);
+            json.WriteNumber("responseTimeMs", disk.ResponseMs >= 0 ? Math.Round(disk.ResponseMs, 1) : -1);
+            json.WriteString("name", disk.Name);
+            json.WriteString("drive", disk.Letters);
+            json.WriteNumber("number", disk.Number);
+            json.WriteBoolean("rotational", disk.Rotational);
+            json.WriteNumber("temp", disk.Temperature);
+            json.WriteEndObject();
+        }
         private bool gpuCountersFresh;
         private DateTime lastNpuDiscovery = DateTime.MinValue;
 
@@ -420,59 +510,6 @@ namespace DesktopHtmlHost
                     }
                 }
 
-                try
-                {
-                    string partitionDeviceId = "";
-                    using (var searcher = new ManagementObjectSearcher("ASSOCIATORS OF {Win32_LogicalDisk.DeviceID='" + SystemDrive + "'} WHERE AssocClass=Win32_LogicalDiskToPartition"))
-                    {
-                        foreach (ManagementObject obj in searcher.Get())
-                        {
-                            object? deviceId = obj["DeviceID"];
-                            if (deviceId != null)
-                            {
-                                partitionDeviceId = (deviceId.ToString() ?? "").Replace("\\", "\\\\").Replace("'", "\\'");
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!string.IsNullOrEmpty(partitionDeviceId))
-                    {
-                        string query = string.Format(CultureInfo.InvariantCulture, "ASSOCIATORS OF {{Win32_DiskPartition.DeviceID='{0}'}} WHERE AssocClass=Win32_DiskDriveToDiskPartition", partitionDeviceId);
-                        using (var searcher = new ManagementObjectSearcher(query))
-                        {
-                            foreach (ManagementObject obj in searcher.Get())
-                            {
-                                object? model = obj["Model"];
-                                if (model != null)
-                                {
-                                    DiskName = (model.ToString() ?? "").Trim();
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    if (string.IsNullOrEmpty(DiskName))
-                    {
-                        using (var searcher = new ManagementObjectSearcher("SELECT Model FROM Win32_DiskDrive"))
-                        {
-                            foreach (ManagementObject obj in searcher.Get())
-                            {
-                                object? model = obj["Model"];
-                                if (model != null)
-                                {
-                                    DiskName = (model.ToString() ?? "").Trim();
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Program.LogDebug("Disk name detection error: " + ex.Message);
-                }
 
                 if (!NpuDetected)
                 {
@@ -1000,7 +1037,8 @@ namespace DesktopHtmlHost
                     }
                     if (cpuRows == null || ramRows == null) return;
                     var pidNames = new Dictionary<int, string>();
-                    ProcessRanking.Rank(cpuRows, ramRows, Environment.ProcessorCount, out var top, out var topRam, pidNames);
+                    ProcessRanking.Rank(cpuRows, ramRows, Environment.ProcessorCount, out var top, out var topRam, pidNames, out long compressedMb);
+                    Interlocked.Exchange(ref cachedCompressedMb, compressedMb);
                     cachedTopProcesses = top;
                     cachedTopRamProcess = topRam;
                     // Also on Windows 10 (no pid in the names): the lookup cache then restarts every 4 s.
@@ -1084,19 +1122,6 @@ namespace DesktopHtmlHost
                 ramAvailPage = memStatus.ullAvailPageFile;
             }
 
-            // Disk Space
-            double diskFreeGb = 0.0;
-            double diskTotalGb = 0.0;
-            int diskStoragePercent = 0;
-            try
-            {
-                var drive = new DriveInfo(SystemDrive);
-                diskFreeGb = drive.AvailableFreeSpace / (1024.0 * 1024.0 * 1024.0);
-                diskTotalGb = drive.TotalSize / (1024.0 * 1024.0 * 1024.0);
-                if (drive.TotalSize > 0)
-                    diskStoragePercent = (int)Math.Round((1.0 - (double)drive.AvailableFreeSpace / drive.TotalSize) * 100);
-            }
-            catch {}
 
             // One PDH sample feeds memory, system, CPU clock, disk, network and GPU/NPU readings.
             long commitUsedBytes = (long)(ramTotalPage - ramAvailPage);
@@ -1106,7 +1131,6 @@ namespace DesktopHtmlHost
             long ramPoolNonPagedBytes = cachedRamPoolNonPagedBytes;
             bool perfSampled = perf != null && perf.Collect();
             int cpuMaxCoreLoad = -1;
-            long ramHardFaults = -1;
 
             network.Update(perf, perfSampled);
             if (perf != null && perfSampled)
@@ -1122,8 +1146,7 @@ namespace DesktopHtmlHost
                     ramCachedBytes = (long)(modified.Value + (perf.Value(PdhStandbyNormal) ?? 0) + (perf.Value(PdhStandbyReserve) ?? 0) + (perf.Value(PdhStandbyCore) ?? 0));
                     cachedRamCachedBytes = ramCachedBytes;
                 }
-                double? poolPaged = perf.Value(PdhPoolPaged), poolNonPaged = perf.Value(PdhPoolNonPaged), hardFaults = perf.Value(PdhHardFaults);
-                if (hardFaults.HasValue) ramHardFaults = (long)Math.Round(Math.Max(0, hardFaults.Value));
+                double? poolPaged = perf.Value(PdhPoolPaged), poolNonPaged = perf.Value(PdhPoolNonPaged);
                 if (poolPaged.HasValue) cachedRamPoolPagedBytes = ramPoolPagedBytes = (long)poolPaged.Value;
                 if (poolNonPaged.HasValue) cachedRamPoolNonPagedBytes = ramPoolNonPagedBytes = (long)poolNonPaged.Value;
             }
@@ -1151,18 +1174,6 @@ namespace DesktopHtmlHost
                 }
             }
 
-            // System drive activity (PDH LogicalDisk, formerly a ~20 ms raw WMI query per tick).
-            double? diskRead = null, diskWrite = null, diskIdle = null, diskLatency = null;
-            if (perf != null && perfSampled && diskCountersAvailable)
-            {
-                diskRead = perf.Value(PdhDiskRead); diskWrite = perf.Value(PdhDiskWrite);
-                diskIdle = perf.Value(PdhDiskIdle); diskLatency = perf.Value(PdhDiskLatency);
-            }
-            bool diskRatesValid = diskRead.HasValue && diskWrite.HasValue;
-            double diskReadMbNum = diskRatesValid ? Math.Max(0, diskRead.GetValueOrDefault()) / (1024.0 * 1024.0) : -1;
-            double diskWriteMbNum = diskRatesValid ? Math.Max(0, diskWrite.GetValueOrDefault()) / (1024.0 * 1024.0) : -1;
-            long diskActiveTime = diskIdle.HasValue ? DiskActiveTime(diskIdle.Value) : -1;
-            double diskResponse = diskLatency.HasValue ? Math.Max(0, diskLatency.Value) : -1;
 
             // GPU stats
             int igpuUtil = cachedIgpuUtil;
@@ -1195,7 +1206,8 @@ namespace DesktopHtmlHost
                 cachedDgpuMemBytes = counters[1].DedicatedBytes;
                 cachedNpuUtil = npuUtil = counters[2].Utilization;
                 cachedNpuTopPid = counters[2].TopPid;
-                cachedIgpuTopPid = counters[0].TopPid; cachedIgpuTopPct = counters[0].TopPct;
+                cachedIgpuTopPid = counters[0].TopPid; cachedIgpuTopPct = counters[0].TopPct; cachedIgpuApps = counters[0].Apps;
+                cachedDgpuApps = counters[1].Apps;
                 cachedDgpuTopPid = counters[1].TopPid; cachedDgpuTopPct = counters[1].TopPct;
                 cachedNpuTopPct = counters[2].TopPct;
                 cachedNpuMemBytes = npuMemBytes = counters[2].SharedBytes;
@@ -1229,6 +1241,7 @@ namespace DesktopHtmlHost
             // would wake it. Its last reading turns stale, then unavailable.
             bool dgpuSuspended = DevicePower.IsSuspended(dgpuInstanceId);
             bool saveEnergy = !acLine || energySaver;
+            var diskReadings = ReadDisks(perfSampled, saveEnergy);
 
             // NVIDIA metrics come from NVML in process (no helper process every 5 s); the reads
             // are throttled and skipped while the GPU is suspended.
@@ -1386,6 +1399,7 @@ namespace DesktopHtmlHost
                 json.WriteString("driver", IgpuDriver ?? "");
                 json.WriteString("driverDate", IgpuDriverDate ?? "");
                 WriteTopProcess(json, igpuDetected, windowsGpuFresh, cachedIgpuTopPid, cachedIgpuTopPct);
+                json.WriteNumber("apps", windowsGpuFresh ? cachedIgpuApps : -1);
                 json.WriteNumber("encodeUtil", igpuEncodeUtil);
                 json.WriteEndObject();
 
@@ -1418,6 +1432,8 @@ namespace DesktopHtmlHost
                 json.WriteString("driverDate", DgpuDriverDate ?? "");
                 json.WriteNumber("fanRpm", gpuFanRpm);
                 WriteTopProcess(json, dgpuDetected, windowsGpuFresh, cachedDgpuTopPid, cachedDgpuTopPct);
+                json.WriteNumber("apps", windowsGpuFresh ? cachedDgpuApps : -1);
+                json.WriteNumber("fanPct", nv != null && nv.FanPercent.HasValue ? Math.Round(nv.FanPercent.Value) : -1);
                 json.WriteEndObject();
 
                 json.WriteStartObject("ram");
@@ -1428,7 +1444,7 @@ namespace DesktopHtmlHost
                 json.WriteString("availableGb", ramTotalPhys > 0 ? Gigabytes((long)ramFreePhys) : "");
                 json.WriteString("commitUsedGb", Gigabytes(commitUsedBytes));
                 json.WriteString("commitLimitGb", Gigabytes(commitLimitBytes));
-                json.WriteNumber("hardFaults", ramHardFaults);
+                json.WriteNumber("compressedMb", Interlocked.Read(ref cachedCompressedMb));
                 json.WriteString("cachedGb", Gigabytes(ramCachedBytes));
                 json.WriteNumber("poolPagedMb", ramPoolPagedBytes / (1024 * 1024));
                 json.WriteNumber("poolNonPagedMb", ramPoolNonPagedBytes / (1024 * 1024));
@@ -1438,17 +1454,12 @@ namespace DesktopHtmlHost
                 json.WriteEndObject();
 
                 // Unavailable disk readings are the number -1, never a placeholder throughput.
-                json.WriteStartObject("disk");
-                json.WriteNumber("freeGb", Math.Round(diskFreeGb, 1));
-                json.WriteNumber("utilization", diskActiveTime);
-                json.WriteNumber("storagePercent", diskStoragePercent);
-                json.WriteNumber("totalGb", (int)diskTotalGb);
-                WriteRate(json, "readMb", diskReadMbNum);
-                WriteRate(json, "writeMb", diskWriteMbNum);
-                json.WriteNumber("responseTimeMs", diskResponse >= 0 && double.IsFinite(diskResponse) ? Math.Round(diskResponse * 1000.0, 1) : -1);
-                json.WriteString("name", DiskName ?? "");
-                json.WriteString("drive", SystemDrive);
-                json.WriteEndObject();
+                // "disk" is the system disk, the first of "disks" (every fixed disk with a drive letter).
+                json.WritePropertyName("disk");
+                WriteDisk(json, diskReadings.Count > 0 ? diskReadings[0] : new DiskReading { Letters = SystemDrive });
+                json.WriteStartArray("disks");
+                foreach (var reading in diskReadings) WriteDisk(json, reading);
+                json.WriteEndArray();
 
                 json.WriteStartObject("network");
                 json.WriteNumber("lan", network.TxKBps);

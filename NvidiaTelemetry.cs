@@ -9,7 +9,7 @@ namespace DesktopHtmlHost
     // Each field is optional: one unsupported sensor must not discard the others.
     internal sealed class NvidiaSample
     {
-        internal double? Utilization, Temperature, CoreClock, MemoryClock, PowerWatts, TotalMiB, UsedMiB;
+        internal double? Utilization, Temperature, CoreClock, MemoryClock, PowerWatts, TotalMiB, UsedMiB, FanPercent;
         internal static double? Number(double? value, double maximum)
         {
             return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value)
@@ -17,12 +17,13 @@ namespace DesktopHtmlHost
         }
         // Validated sample from raw driver readings (null = not supported or failed).
         internal static NvidiaSample? Create(double? utilization, double? temperature, double? coreClock, double? memoryClock,
-            double? powerWatts, double? totalMiB, double? usedMiB)
+            double? powerWatts, double? totalMiB, double? usedMiB, double? fanPercent = null)
         {
             var sample = new NvidiaSample {
                 Utilization = Number(utilization, 100), Temperature = Number(temperature, 200),
                 CoreClock = Number(coreClock, 100000), MemoryClock = Number(memoryClock, 100000),
-                PowerWatts = Number(powerWatts, 10000), TotalMiB = Number(totalMiB, 1048576), UsedMiB = Number(usedMiB, 1048576)
+                PowerWatts = Number(powerWatts, 10000), TotalMiB = Number(totalMiB, 1048576), UsedMiB = Number(usedMiB, 1048576),
+                FanPercent = Number(fanPercent, 100)
             };
             if (sample.TotalMiB.HasValue && sample.UsedMiB > sample.TotalMiB) sample.UsedMiB = null;
             return sample.Utilization.HasValue || sample.Temperature.HasValue || sample.PowerWatts.HasValue
@@ -60,6 +61,9 @@ namespace DesktopHtmlHost
         internal static partial int DeviceGetTemperature(IntPtr device, int sensor, out uint celsius);
         [LibraryImport(Library, EntryPoint = "nvmlDeviceGetClockInfo"), DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         internal static partial int DeviceGetClockInfo(IntPtr device, int clock, out uint mhz);
+        // Speed the driver asks of the first fan, in % of its maximum (0 when the fans are stopped).
+        [LibraryImport(Library, EntryPoint = "nvmlDeviceGetFanSpeed"), DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        internal static partial int DeviceGetFanSpeed(IntPtr device, out uint percent);
         [LibraryImport(Library, EntryPoint = "nvmlDeviceGetPowerUsage"), DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         internal static partial int DeviceGetPowerUsage(IntPtr device, out uint milliwatts);
         [LibraryImport(Library, EntryPoint = "nvmlDeviceGetMemoryInfo_v2"), DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
@@ -177,6 +181,8 @@ namespace DesktopHtmlHost
             double? coreClock = Nvml.DeviceGetClockInfo(handle, Nvml.ClockGraphics, out core) == Nvml.Success ? core : (double?)null;
             double? memoryClock = Nvml.DeviceGetClockInfo(handle, Nvml.ClockMemory, out memory) == Nvml.Success ? memory : (double?)null;
             double? watts = Nvml.DeviceGetPowerUsage(handle, out milliwatts) == Nvml.Success ? milliwatts / 1000.0 : (double?)null;
+            // Passive or fanless cards answer "not supported": the slot then stays unavailable.
+            double? fan = Nvml.DeviceGetFanSpeed(handle, out uint fanPercent) == Nvml.Success ? fanPercent : (double?)null;
             double? totalMiB = null, usedMiB = null;
             if (!memoryV2Unsupported) {
                 var info = new Nvml.MemoryV2 { Version = Nvml.MemoryV2Version };
@@ -190,7 +196,7 @@ namespace DesktopHtmlHost
                 Nvml.Memory info;
                 if (Nvml.DeviceGetMemoryInfo(handle, out info) == Nvml.Success) { totalMiB = info.Total / 1048576.0; usedMiB = Math.Floor(info.Used / 1048576.0); }
             }
-            return NvidiaSample.Create(utilization, celsius, coreClock, memoryClock, watts, totalMiB, usedMiB);
+            return NvidiaSample.Create(utilization, celsius, coreClock, memoryClock, watts, totalMiB, usedMiB, fan);
         }
     }
 }

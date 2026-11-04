@@ -229,6 +229,19 @@ static class HostRegression
         Check(TelemetryCollector.BusiestCore([new("0,0", 12.5), new("0,1", 131), new("0,_Total", 140), new("_Total", 150)]) == 100 &&
               TelemetryCollector.BusiestCore([new("0,0", 7.4), new("0,_Total", 50)]) == 7 && TelemetryCollector.BusiestCore([]) == -1 && TelemetryCollector.BusiestCore(null) == -1,
             "busiest core: per-processor busy time capped at 100, totals ignored");
+        Check(TelemetryCollector.DiskInstanceNumber("0 C:") == 0 && TelemetryCollector.DiskInstanceNumber("12 D: E:") == 12 && TelemetryCollector.DiskInstanceNumber("_Total") == -1,
+            "physical disk counter instances map to disk numbers");
+        var temperature = new byte[64]; temperature[12] = 1; temperature[26] = 48;
+        Check(PhysicalDisks.ParseTemperature(temperature) == 48 && PhysicalDisks.ParseTemperature(new byte[64]) == -1 && PhysicalDisks.ParseTemperature(new byte[8]) == -1,
+            "drive temperature is the first reading of STORAGE_TEMPERATURE_DATA_DESCRIPTOR");
+        var disks = PhysicalDisks.Discover(Environment.GetEnvironmentVariable("SystemDrive") ?? "C:");
+        Check(disks.Count >= 1 && disks[0].HoldsSystem && System.Linq.Enumerable.Count(disks, d => d.HoldsSystem) == 1, "fixed disks found without administrator rights, the system disk first (" + disks.Count + ")");
+        foreach (var physical in disks)
+        {
+            int celsius = PhysicalDisks.Temperature(physical.Number);
+            Console.WriteLine("INFO disk " + physical.Number + " " + physical.Name + " [" + string.Join(" ", physical.Letters) + "] " + (physical.Rotational ? "HDD" : "SSD") + " " + celsius + " °C");
+            Check(celsius == -1 || (celsius > 0 && celsius < 120), "drive temperature is plausible or absent");
+        }
         Check(TelemetryCollector.DiskActiveTime(100) == 0 && TelemetryCollector.DiskActiveTime(37.4) == 63 && TelemetryCollector.DiskActiveTime(-3) == 100,
             "disk activity is 100 - % Idle Time, without a throughput estimate");
         Check(TelemetryCollector.AdapterMemoryBytes(new WindowsGpuSample { SharedBytes = 3 << 20, DedicatedBytes = 1 << 20 }) == 4 << 20 &&

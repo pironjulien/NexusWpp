@@ -60,6 +60,12 @@ try {
             }
         }
     }
+    # Two, three and four fixed disks: one card each, in the right column (landscape) or in the flow (portrait).
+    foreach ($size in @(@(800,450),@(1280,720),@(1920,1080),@(2560,1440),@(3840,2160),@(432,768),@(1080,1920))) {
+        foreach ($disks in @(2,3,4)) {
+            $cases.Add(@{ id="disks$disks-$($size[0])x$($size[1])"; width=$size[0]; height=$size[1]; dpr=1.25; plans=4; hardware='full'; disks=$disks; capture=($disks -eq 4 -and $size[0] -eq 1920) })
+        }
+    }
     # Laptop on battery: the longest battery line (percent, source, power, time left) and an NPU client name.
     foreach ($size in @(@(800,450),@(432,768),@(1280,720),@(1920,1080),@(3840,2160))) {
         foreach ($dpr in @(1, 1.5, 2)) {

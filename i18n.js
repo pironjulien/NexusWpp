@@ -15,7 +15,8 @@ const NexusI18n = (() => {
             "label.clockSpeed": "VITESSE",
             "label.procThreads": "PROCESSUS / THREADS",
             "label.video": "VIDÉO",
-            "label.dedicatedMemory": "MÉMOIRE DÉDIÉE",
+            "label.gpuApps": "APPLIS SUR CE GPU",
+            "label.fans": "VENTILATEURS",
             "label.sharedMemory": "MÉMOIRE PARTAGÉE",
             "label.vram": "MÉMOIRE GPU",
             "label.memoryUsed": "MÉMOIRE UTILISÉE",
@@ -23,7 +24,7 @@ const NexusI18n = (() => {
             "label.totalMemory": "MÉMOIRE TOTALE",
             "label.gpuPower": "CONSOMMATION",
             "label.memoryInUse": "UTILISÉE",
-            "label.hardFaults": "DÉFAUTS MATÉRIELS/S",
+            "label.compressedMemory": "MÉMOIRE COMPRESSÉE",
             "label.diskSpace": "ESPACE UTILISÉ",
             "label.read": "LECTURE",
             "label.write": "ÉCRITURE",
@@ -65,7 +66,7 @@ const NexusI18n = (() => {
             "aria.waiting": "En attente d’une mesure",
             "aria.stale": "{value}, dernière valeur connue (périmée)",
             "aria.map": "Carte interactive de télémétrie matérielle affichant les liens et les flux de données entre composants sous forme de particules animées.",
-            "unit.GB": "Go", "unit.MB": "Mo", "unit.KB": "Ko"
+            "unit.GB": "Go", "unit.MB": "Mo", "unit.KB": "Ko", "unit.rpm": "tr/min"
         },
         en: {
             "label.temperature": "TEMPERATURE",
@@ -76,7 +77,8 @@ const NexusI18n = (() => {
             "label.clockSpeed": "SPEED",
             "label.procThreads": "PROCESSES / THREADS",
             "label.video": "VIDEO",
-            "label.dedicatedMemory": "DEDICATED MEMORY",
+            "label.gpuApps": "APPS ON THIS GPU",
+            "label.fans": "FANS",
             "label.sharedMemory": "SHARED MEMORY",
             "label.vram": "GPU MEMORY",
             "label.memoryUsed": "MEMORY USED",
@@ -84,7 +86,7 @@ const NexusI18n = (() => {
             "label.totalMemory": "TOTAL MEMORY",
             "label.gpuPower": "POWER DRAW",
             "label.memoryInUse": "IN USE",
-            "label.hardFaults": "HARD FAULTS/S",
+            "label.compressedMemory": "COMPRESSED MEMORY",
             "label.diskSpace": "SPACE USED",
             "label.read": "READ",
             "label.write": "WRITE",
@@ -126,7 +128,7 @@ const NexusI18n = (() => {
             "aria.waiting": "Waiting for a reading",
             "aria.stale": "{value}, last known value (stale)",
             "aria.map": "Interactive hardware telemetry map showing links and data flows between components as animated particles.",
-            "unit.GB": "GB", "unit.MB": "MB", "unit.KB": "KB"
+            "unit.GB": "GB", "unit.MB": "MB", "unit.KB": "KB", "unit.rpm": "RPM"
         }
     };
 

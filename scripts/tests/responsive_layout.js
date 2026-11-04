@@ -9,12 +9,12 @@ window.layoutFixture = function (test) {
     const planNames = ['Utilisation normale', 'Économies d’énergie', 'Performances élevées', 'Performances optimales', 'Mode Dev'];
     const stats = {
         cpu: { utilization: 48, temp: 65, maxCoreUtilization: 100, name: 'Intel Core Ultra 9 285K', freqGhz: 5.7, threads: 5462, logical: 24 },
-        igpu: { utilization: 35, detected: igpu, name: 'Intel(R) Graphics', usedMb: 2048, totalMb: 32768, dedicatedUsedMb: 96, dedicatedTotalMb: 128, sharedUsedMb: 1952, sharedTotalMb: 32640, decodeUtil: 24, encodeUtil: 12, topProcess: { name: 'msedgewebview2', pct: 30 } },
+        igpu: { utilization: 35, detected: igpu, apps: 2, name: 'Intel(R) Graphics', usedMb: 2048, totalMb: 32768, dedicatedUsedMb: 96, dedicatedTotalMb: 128, sharedUsedMb: 1952, sharedTotalMb: 32640, decodeUtil: 24, encodeUtil: 12, topProcess: { name: 'msedgewebview2', pct: 30 } },
         npu: { utilization: 68, detected: npu, name: 'Intel AI Boost', usedMb: 2048, totalMb: 32768, topProcess: { name: 'WindowsStudioEffects', pct: 42 } },
-        gpu: { utilization: 73, detected: dgpu, name: 'NVIDIA GeForce RTX 5090', temp: 76, powerW: 575, coreClock: 2875, memoryClock: 15001, topProcess: { name: 'Cyberpunk2077', pct: 71 } },
+        gpu: { utilization: 73, detected: dgpu, apps: 3, fanPct: 64, name: 'NVIDIA GeForce RTX 5090', temp: 76, powerW: 575, coreClock: 2875, memoryClock: 15001, topProcess: { name: 'Cyberpunk2077', pct: 71 } },
         vram: { usedMb: 24576, totalMb: 32768 },
-        ram: { utilization: 72, totalGb: 128, usedGb: '92.1', availableGb: '35.8', hardFaults: 12, speedMts: 6400, type: 'DDR5', modules: 4 },
-        disk: { name: 'Samsung SSD 990 PRO 4TB', utilization: 58, storagePercent: 65, freeGb: 1234.5, totalGb: 3725.9, readMb: 7250.5, writeMb: 6300.4, responseTimeMs: 12.6 },
+        ram: { utilization: 72, totalGb: 128, usedGb: '92.1', availableGb: '35.8', compressedMb: 1536, speedMts: 6400, type: 'DDR5', modules: 4 },
+        disk: { name: 'Samsung SSD 990 PRO 4TB', drive: 'C:', utilization: 58, storagePercent: 65, freeGb: 1234.5, totalGb: 3725.9, readMb: 7250.5, writeMb: 6300.4, responseTimeMs: 12.6, temp: 48, rotational: false },
         network: { name: 'Realtek Gaming 2.5GbE Family Controller', type: 'Ethernet', lan: 32768, wifi: 262144, linkSpeedMbps: 2500 },
         motherboard: 'ASUSTeK ROG MAXIMUS Z890 HERO',
         battery: test.battery || { present: full, percent: 100, ac: true, rateW: null, minutesLeft: -1 },
@@ -24,6 +24,13 @@ window.layoutFixture = function (test) {
         totalProcesses: 456, ping: 124,
         powerPlans: planNames.slice(0, test.plans || 4).map((name, index) => ({ name, guid: 'layout-test-' + index, active: index === 0 }))
     };
+    // One card per fixed disk: the system disk, then simulated extra disks (SSD, hard disk).
+    const extraDisks = [
+        { name: 'WD_BLACK SN850X 2000GB', drive: 'D:', utilization: 12, storagePercent: 48, freeGb: 970.2, totalGb: 1863, readMb: '35.2', writeMb: '4.1', responseTimeMs: 0.4, temp: 41, rotational: false },
+        { name: 'ST4000DM004-2U9104', drive: 'E: F:', utilization: 3, storagePercent: 91, freeGb: 335.1, totalGb: 3726, readMb: '0.0', writeMb: '0.0', responseTimeMs: 8.2, temp: 36, rotational: true },
+        { name: 'Crucial T705 4TB', drive: 'G:', utilization: 0, storagePercent: 7, freeGb: 3466.3, totalGb: 3726, readMb: '0.0', writeMb: '0.0', responseTimeMs: 0, temp: -1, rotational: false }];
+    stats.disks = [stats.disk, ...extraDisks.slice(0, Math.max(0, (test.disks || 1) - 1))];
+    window.layoutExpectedExtraDisks = stats.disks.length - 1;
     // Both forms of the CPU card: with an ACPI thermal zone and without one.
     stats.sources = { cpuTemperature: { status: ['full', 'dual-gpu'].includes(test.hardware) ? 'fresh' : 'unavailable' } };
     if (!['full', 'dual-gpu'].includes(test.hardware)) stats.cpu.temp = -1;
@@ -72,7 +79,10 @@ window.inspectLayout = function () {
     const background = rect(document.querySelector('.cosmos-bg'));
     if (Math.abs(background.left) > 1 || Math.abs(background.top) > 1 || Math.abs(background.right - innerWidth) > 1 || Math.abs(background.bottom - innerHeight) > 1) issues.push('background does not cover every monitor');
     const cards = [...document.querySelectorAll('.gauge-card, .column-center')].filter(visible);
-    if (cards.length !== window.layoutExpectedCards + 1) issues.push('missing hardware cards');
+    // Extra disk cards need a frame of at least 500 x 460 CSS px (style.css).
+    const frame = rect(document.querySelector('.layout-frame'));
+    const extraDisks = frame.width > 500 && frame.height > 460 ? (window.layoutExpectedExtraDisks || 0) : 0;
+    if (cards.length !== window.layoutExpectedCards + 1 + extraDisks) issues.push('missing hardware cards');
     for (const element of cards) {
         if (!inside(rect(element), viewport)) issues.push(name(element) + ': outside viewport');
     }

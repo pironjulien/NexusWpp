@@ -85,12 +85,12 @@ function dimGauges() {
     
     gpuTempSub.textContent = `-- °C`;
     if (gpuVramSub) gpuVramSub.textContent = `-- ${GB}`;
-    gpuCoreSub.textContent = `-- MHz`;
+    gpuCoreSub.textContent = `—`;
     if (gpuTopProcSub) gpuTopProcSub.textContent = `--`;
 
     vramUsedSub.textContent = `0.0 ${GB}`;
     if (igpuTopProcSub) igpuTopProcSub.textContent = `--`;
-    if (igpuTempSub) igpuTempSub.textContent = `—`;
+    if (igpuAppsSub) igpuAppsSub.textContent = `—`;
     if (igpuVideoSub) igpuVideoSub.textContent = `—`;
     if (npuUsedSub) npuUsedSub.textContent = `0.0 ${GB}`;
     if (npuTopProcSub) npuTopProcSub.textContent = `--`;
@@ -99,8 +99,7 @@ function dimGauges() {
     setBarFill(npuUtilBar, 0);
 
     ramUsedSub.textContent = `—`;
-    if (ramFaultsSub) ramFaultsSub.textContent = `—`;
-    if (ramSpeedSub) ramSpeedSub.textContent = `—`;
+    if (ramCompressedSub) ramCompressedSub.textContent = `—`;
     if (ramTopProcSub) ramTopProcSub.textContent = `--`;
     
     ssdFreeSub.textContent = `0 ${GB}`;
@@ -205,6 +204,7 @@ window.addEventListener("resize", () => {
     if (hostLayout) applyHostLayout();
     sendRemoteBounds(true);
 });
+
 // The power panel rectangle is sent when the panel or the cockpit is laid out again (resize
 // observers run after layout, so reading it there costs nothing), not on every telemetry update.
 if (typeof ResizeObserver === "function") {
@@ -214,7 +214,6 @@ if (typeof ResizeObserver === "function") {
         if (element) boundsObserver.observe(element);
     }
 }
-
 
 window.addEventListener("load", () => {
     resizeCanvas();

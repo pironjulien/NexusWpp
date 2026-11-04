@@ -383,6 +383,14 @@ function updateDOM(stats) {
     }
     track(gpuCard, setSensorMetric(gpuCoreSub, t("label.gpuPower"), stats.gpu.powerW, "W", stats, "nvidia", "gpu.powerW"));
     setAdapterTopProcess(gpuTopProcSub, stats.gpu.topProcess);
+    setHeldText(gpuAppsSub, NexusTelemetry.valid(stats.gpu.apps) ? num(stats.gpu.apps) : null);
+    // Fan speed: NVML gives the % of the maximum the driver asks of the fans (0 % when they stop at
+    // idle); the WDDM sensors of other GPUs give revolutions per minute, when the driver reports them.
+    if (NexusTelemetry.valid(stats.gpu.fanRpm) && !NexusTelemetry.valid(stats.gpu.fanPct)) {
+        track(gpuCard, setSensorMetric(gpuFanSub, t("label.fans"), stats.gpu.fanRpm, t("unit.rpm"), stats, "nvidia", "gpu.fanRpm"));
+    } else {
+        track(gpuCard, setSensorMetric(gpuFanSub, t("label.fans"), stats.gpu.fanPct, "%", stats, "nvidia", "gpu.fan"));
+    }
     // Live graphics clock in the card title, read like the CPU speed. NVML reports it; the WDDM
     // sensors of other GPUs do not, and a stale reading is not shown: no clock rather than an old one.
     const gpuCoreClock = NexusTelemetry.sensorState(stats, "nvidia") === "fresh" && NexusTelemetry.valid(stats.gpu.coreClock)
@@ -396,15 +404,15 @@ function updateDOM(stats) {
     // RAM circular gauge
     const ramLoad = track(ramCard, setGauge("ram.util", ramRing, ramVal, ramGaugeContainer, stats.ram.utilization));
 
-    // The card gives the global state, like the GPU memory: in use / usable (Task Manager "In use"),
-    // hard faults per second (Resource Monitor: reads from disk of pages that were not in RAM,
-    // page file and mapped files; lasting high values with a full memory mean RAM runs short) and
-    // the speed the modules run at.
+    // The card gives the global state, like the GPU memory: in use / usable (Task Manager "In use")
+    // and Task Manager's compressed memory (the "Memory Compression" store, left out of the busiest
+    // process, where it was always first without saying anything about the applications).
     const usedRamText = stats.ram.usedGb !== undefined && stats.ram.usedGb !== "" ? num(stats.ram.usedGb, 1) : null;
     const usableRamGb = Number(stats.ram.usedGb) + Number(stats.ram.availableGb);
     setHeldText(ramUsedSub, usedRamText !== null && usableRamGb > 0 ? `${usedRamText} / ${num(usableRamGb, 1)} ${GB}` : null);
-    setHeldText(ramFaultsSub, NexusTelemetry.valid(stats.ram.hardFaults) ? num(stats.ram.hardFaults) : null);
-    setHeldText(ramSpeedSub, stats.ram.speedMts > 0 ? `${stats.ram.speedMts} MT/s` : null);
+    const compressedMb = Number(stats.ram.compressedMb);
+    setHeldText(ramCompressedSub, NexusTelemetry.valid(compressedMb)
+        ? compressedMb >= 1024 ? `${num(compressedMb / 1024, 1)} ${GB}` : `${num(compressedMb)} ${MB}` : null);
     if (ramTopProcSub) {
         const topRam = stats.topRamProcess;
         const ramMb = topRam ? Number(topRam.ramMb) || 0 : 0;
@@ -412,27 +420,10 @@ function updateDOM(stats) {
         setTopProcess(ramTopProcSub, topRam && topRam.name ? topRam : null, ramText);
     }
 
-    // SSD card gauge: disk capacity occupation. The center map node shows live disk activity.
-    track(ssdCard, setGauge("disk.storage", ssdRing, ssdVal, ssdGaugeContainer, stats.disk.storagePercent));
-    // Space used, like the ring (the ring and the text used to read 41 % and "547 / 930 Go" free).
-    const diskTotalGb = Number(stats.disk.totalGb) || 0;
-    const diskUsedGb = Math.max(0, diskTotalGb - (Number(stats.disk.freeGb) || 0));
-    ssdFreeSub.textContent = diskTotalGb > 0 ? `${num(diskUsedGb, 1)} / ${num(diskTotalGb, 0)} ${GB}` : '—';
-    if (ssdReadSub && ssdWriteSub) {
-        // Formatter with dynamic unit support
-        // Throughput text from the host, or the number -1 when the counters could not be read.
-        const formatSpeed = (mbStr) => {
-            const val = parseFloat(mbStr);
-            if (!NexusTelemetry.valid(val)) return null;
-            if (val >= 1000) return `${num(val / 1024, 1)} ${GB}/s`;
-            return `${num(val, 1)} ${MB}/s`;
-        };
-        setHeldText(ssdReadSub, formatSpeed(stats.disk.readMb));
-        setHeldText(ssdWriteSub, formatSpeed(stats.disk.writeMb));
-    }
-    if (ssdResponseSub) {
-        setHeldText(ssdResponseSub, NexusTelemetry.valid(stats.disk.responseTimeMs) ? `${num(stats.disk.responseTimeMs, 1)} ms` : null);
-    }
+    // One card per fixed disk, the system disk first; older payloads only carry "disk".
+    const disks = Array.isArray(stats.disks) && stats.disks.length ? stats.disks : [stats.disk];
+    disks.forEach((disk, index) => updateDiskCard(diskCardView(index), disk, index, track));
+    for (let index = disks.length; index < diskCardViews.length; index++) setDiskCardShown(diskCardViews[index], false);
 
     // Network circular gauge & absolute speed rendering
     // -1: rates unreadable this tick; the gauge then counts nothing and the texts hold the last reading.
@@ -485,21 +476,10 @@ function updateDOM(stats) {
     setHeldText(vramUsedSub, NexusTelemetry.valid(sharedUsed) && sharedTotal > 0
         ? `${num(sharedUsed / 1024, 1)} / ${num(sharedTotal / 1024, 0)} ${GB}` : null);
     setAdapterTopProcess(igpuTopProcSub, stats.igpu.topProcess);
-    // Same slots as the GPU card: the driver's temperature when it reports one (WDDM), otherwise
-    // the dedicated memory; then the busier of the two video engines (decode, encode), measured
-    // like the load ring: 0 % except while a video plays or is recorded.
-    if (igpuTempSub) {
-        if (NexusTelemetry.valid(stats.igpu.temp) || lastValues.has("igpu.temp")) {
-            const temp = track(vramCard, lastValues.take("igpu.temp", stats.igpu.temp));
-            setSubMetric(igpuTempSub, t("label.temperature"), igpuTempSub.textContent);
-            setHeldText(igpuTempSub, temp.stale ? null : `${num(temp.value)} °C`);
-        } else {
-            const dedicatedUsed = Number(stats.igpu.dedicatedUsedMb), dedicatedTotal = Number(stats.igpu.dedicatedTotalMb);
-            setSubMetric(igpuTempSub, t("label.dedicatedMemory"), igpuTempSub.textContent);
-            setHeldText(igpuTempSub, NexusTelemetry.valid(dedicatedUsed) && dedicatedTotal > 0
-                ? `${num(dedicatedUsed)} / ${num(dedicatedTotal)} ${MB}` : null);
-        }
-    }
+    // Same readings as the GPU card where Windows gives them: apps drawing or computing on it, the
+    // memory, then the busier of the two video engines (decode, encode), 0 % except while a video
+    // plays or is recorded. Its temperature, when the driver reports one, goes in the title.
+    setHeldText(igpuAppsSub, NexusTelemetry.valid(stats.igpu.apps) ? num(stats.igpu.apps) : null);
     if (igpuVideoSub) {
         const videoFresh = NexusTelemetry.valid(stats.igpu.decodeUtil) && NexusTelemetry.valid(stats.igpu.encodeUtil);
         if (setHeldText(igpuVideoSub, videoFresh ? `${Math.min(100, Math.max(stats.igpu.decodeUtil, stats.igpu.encodeUtil))} %` : null)) held.add(vramCard);
@@ -539,11 +519,22 @@ function updateDOM(stats) {
         if (specGpuName.dataset.fitText !== fitText) specGpuName.dataset.fitText = fitText;
     }
     if (stats.ram.totalGb && specRamName) {
-        specRamName.textContent = "RAM" + (stats.ram.type ? ` ${stats.ram.type}` : "");
+        // The speed the modules run at never changes: it belongs with the type, in the title.
+        specRamName.textContent = ["RAM" + (stats.ram.type ? ` ${stats.ram.type}` : ""),
+            stats.ram.speedMts ? `${stats.ram.speedMts} MT/s` : ""].filter(Boolean).join(" · ");
     }
     if (stats.network.name && specNetMode) specNetMode.textContent = `${t("label.network")} ${shortModelName(stats.network.name)}`;
-    if (stats.igpu.name && specVramName) specVramName.textContent = titleWithKind("iGPU", stats.igpu.name);
-    if (specSsdName) specSsdName.textContent = stats.disk.name ? titleWithKind("SSD", stats.disk.name) : "SSD";
+    if (stats.igpu.name && specVramName) {
+        // Temperature reported by the iGPU driver (WDDM), in the title like the GPU clock; most
+        // drivers report none.
+        const igpuBase = titleWithKind("iGPU", stats.igpu.name);
+        const igpuTemp = NexusTelemetry.valid(stats.igpu.temp) && stats.igpu.temp > 0 ? Math.round(stats.igpu.temp) : 0;
+        if (igpuTemp) specVramName.dataset.hasTemperature = "1";
+        const igpuTitle = igpuBase + (igpuTemp ? ` · ${igpuTemp} °C` : "");
+        if (specVramName.textContent !== igpuTitle) specVramName.textContent = igpuTitle;
+        const igpuFit = specVramName.dataset.hasTemperature ? `${igpuBase} · 88 °C` : igpuBase;
+        if (specVramName.dataset.fitText !== igpuFit) specVramName.dataset.fitText = igpuFit;
+    }
     if (stats.motherboard && clockMb) {
         clockMb.textContent = `${t("label.motherboard")} ${stats.motherboard}`;
     }
@@ -601,7 +592,8 @@ function updateDOM(stats) {
         // that share only paces the packets, so everyday traffic still shows some.
         const linkKb = getNetworkLinkSpeedKb(stats);
         const linkPct = netRatesValid && linkKb > 0 ? Math.min(100, (totalNetKb / linkKb) * 100) : null;
-        telemetryNodes.net.value = linkPct !== null ? Math.round(linkPct) : null;
+        // One decimal under 1 % ("0,02 %"), a whole number above, as Task Manager rounds.
+        telemetryNodes.net.value = linkPct !== null ? (linkPct < 1 ? Number(linkPct.toFixed(2)) : Math.round(linkPct)) : null;
         telemetryNodes.net.activity = linkPct > 0 ? Math.min(100, Math.max(1, Math.round(Math.sqrt(linkPct / 100) * 100))) : 0;
         pushCardHistory("net-card", telemetryNodes.net.activity);
     }
@@ -611,7 +603,6 @@ function updateDOM(stats) {
     pushCardHistory("npu-card", npuStats.utilization);
     pushCardHistory("gpu-card", stats.gpu.utilization);
     pushCardHistory("ram-card", stats.ram.utilization);
-    pushCardHistory("ssd-card", stats.disk.utilization);
 
     updatePowerPlanButtons(stats);
 
@@ -703,7 +694,6 @@ function updatePowerPlanButtons(stats) {
             let displayName = plan.name;
 
             button.innerHTML = `<div class="icon-wrap">${iconSvg}</div><span class="btn-lbl"></span>`;
-        fitPowerPlanLabels();
             button.querySelector('.btn-lbl').textContent = displayName.toUpperCase();
 
             button.addEventListener("click", () => setPowerPlan(plan.guid));
@@ -713,6 +703,7 @@ function updatePowerPlanButtons(stats) {
             powerPlansContainer.dataset.fitObserved = '1';
             powerPlanFitObserver.observe(powerPlansContainer);
         }
+        fitPowerPlanLabels();
     }
 
     // Update active classes
@@ -765,7 +756,6 @@ function titleWithKind(kind, name) {
 // stylesheet size, reduced just enough for the longest title of the narrowest card to fit on
 // its line. Runs when a title changes or a card is resized.
 let cardTitleKey = "";
-    const titles = all.filter(title => title.getClientRects().length > 0);
 const titleRange = document.createRange();
 function fitCardTitles(force = false) {
     // The key is read without layout (texts and hidden cards); the work runs only when it changes.
@@ -775,6 +765,7 @@ function fitCardTitles(force = false) {
         + "|" + (acceleratorRow ? acceleratorRow.className : "");
     if (!force && key === cardTitleKey) return;
     cardTitleKey = key;
+    const titles = all.filter(title => title.getClientRects().length > 0);
     // Measured with the widest text each title can take (see the GPU clock), on the full width of
     // the heading: a status badge wraps under the title rather than shrinking every title.
     const shown = titles.map(title => title.textContent);
@@ -814,10 +805,7 @@ function fitPowerPlanLabels() {
         const width = label.clientWidth;
         if (!width) return;
         const style = getComputedStyle(label);
-// Refitted when the plans or the panel size change, and on a window resize (the base font
-// follows the viewport through --lvw); not on every telemetry update, which would force a layout.
         const size = parseFloat(style.fontSize);
-window.addEventListener("resize", () => fitPowerPlanLabels());
         labelMeasure.font = `${style.fontWeight} ${size}px ${style.fontFamily}`;
         const spacing = parseFloat(style.letterSpacing) || 0;
         const widest = Math.max(...label.textContent.split(/\s+/).filter(Boolean)
@@ -826,7 +814,10 @@ window.addEventListener("resize", () => fitPowerPlanLabels());
         if (widest > width) label.style.fontSize = Math.max(8, Math.floor(size * width / widest * 0.98 * 10) / 10) + "px";
     });
 }
+// Refitted when the plans or the panel size change, and on a window resize (the base font
+// follows the viewport through --lvw); not on every telemetry update, which would force a layout.
 const powerPlanFitObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => fitPowerPlanLabels()) : null;
+window.addEventListener("resize", () => fitPowerPlanLabels());
 
 // Kind sent by the host (plan GUID / Windows personality / power mode); the name is only a
 // fallback for payloads without it.
@@ -958,12 +949,8 @@ function refreshTelemetryFreshness(force = false) {
 
 // --- 60 s history drawn as a faint area behind each card's content ---
 const HISTORY_LENGTH = 60;
-const cardHistories = [
-    ["cpu-card", "#bf5aff"], ["vram-card", "#30d158"], ["npu-card", "#00c7be"], ["gpu-card", "#ff375f"],
-    ["ram-card", "#0a84ff"], ["ssd-card", "#64d2ff"], ["net-card", "#ff9f0a"]
-].map(([id, color]) => {
-    const card = document.getElementById(id);
-    if (!card) return null;
+function makeCardHistory(card, color) {
+    const id = card.id;
     const ns = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(ns, "svg");
     svg.setAttribute("class", "history-line");
@@ -976,7 +963,78 @@ const cardHistories = [
         `<path class="history-area" fill="url(#${gradientId})"/><path class="history-stroke" stroke="${color}"/>`;
     card.insertBefore(svg, card.firstChild);
     return { id, values: [], area: svg.querySelector(".history-area"), stroke: svg.querySelector(".history-stroke") };
+}
+const cardHistories = [
+    ["cpu-card", "#bf5aff"], ["vram-card", "#30d158"], ["npu-card", "#00c7be"], ["gpu-card", "#ff375f"],
+    ["ram-card", "#0a84ff"], ["ssd-card", "#64d2ff"], ["net-card", "#ff9f0a"]
+].map(([id, color]) => {
+    const card = document.getElementById(id);
+    return card ? makeCardHistory(card, color) : null;
 }).filter(Boolean);
+
+// --- Disk cards ---
+// #ssd-card shows the system disk; every other fixed disk gets a copy of it, placed after the
+// previous disk card (same column, same order in the portrait layout), like the NPU card that
+// only shows on PCs that have one. A disk that goes away hides its card.
+const diskCardViews = [];
+function diskCardView(index) {
+    if (diskCardViews[index]) return diskCardViews[index];
+    let card = ssdCard;
+    if (index > 0) {
+        card = ssdCard.cloneNode(true);
+        const suffix = `-${index + 1}`;
+        const history = card.querySelector(".history-line");
+        if (history) history.remove();
+        card.querySelectorAll("[id]").forEach(element => { element.id += suffix; });
+        card.id = `ssd-card${suffix}`;
+        card.querySelectorAll("[data-seen]").forEach(element => element.removeAttribute("data-seen"));
+        card.querySelectorAll(".sub-metric .val").forEach(element => { element.textContent = "—"; element.classList.remove("sensor-unavailable"); });
+        card.querySelector(".critical-alert").textContent = "";
+        card.querySelector(".ring-fill").setAttribute("stroke", `url(#${card.querySelector("linearGradient").id})`);
+        card.querySelector(".gauge-container").setAttribute("aria-labelledby", card.querySelector(".gauge-label").id);
+        diskCardViews[index - 1].card.after(card);
+        cardHistories.push(makeCardHistory(card, "#64d2ff"));
+        if (cardTitleObserver) cardTitleObserver.observe(card);
+    }
+    const subs = card.querySelectorAll(".sub-metric .val");
+    const view = { card, title: card.querySelector(".gauge-label"), ring: card.querySelector(".ring-fill"),
+        value: card.querySelector(".gauge-value"), container: card.querySelector(".gauge-container"),
+        used: subs[0], read: subs[1], response: subs[2], write: subs[3] };
+    diskCardViews[index] = view;
+    return view;
+}
+
+function setDiskCardShown(view, shown) {
+    view.card.classList.toggle("card-hidden", !shown);
+    view.card.setAttribute("aria-hidden", shown ? "false" : "true");
+}
+
+// Ring: space used. Title: kind, model and the temperature the drive reports (as Task Manager),
+// sized for the widest one. Details: space used / size, read, response time, write.
+function updateDiskCard(view, disk, index, track) {
+    setDiskCardShown(view, true);
+    track(view.card, setGauge(`disk.storage.${index}`, view.ring, view.value, view.container, disk.storagePercent));
+    const totalGb = Number(disk.totalGb) || 0;
+    const usedGb = Math.max(0, totalGb - (Number(disk.freeGb) || 0));
+    if (view.used) view.used.textContent = totalGb > 0 ? `${num(usedGb, 1)} / ${num(totalGb, 0)} ${GB}` : "—";
+    // Throughput text from the host, or the number -1 when the counters could not be read.
+    const rate = (text) => {
+        const value = parseFloat(text);
+        if (!NexusTelemetry.valid(value)) return null;
+        return value >= 1000 ? `${num(value / 1024, 1)} ${GB}/s` : `${num(value, 1)} ${MB}/s`;
+    };
+    setHeldText(view.read, rate(disk.readMb));
+    setHeldText(view.write, rate(disk.writeMb));
+    setHeldText(view.response, NexusTelemetry.valid(disk.responseTimeMs) ? `${num(disk.responseTimeMs, 1)} ms` : null);
+    const base = disk.name ? titleWithKind(disk.rotational ? "HDD" : "SSD", disk.name) : "SSD";
+    const temperature = NexusTelemetry.valid(disk.temp) && disk.temp > 0 ? disk.temp : 0;
+    if (temperature) view.title.dataset.hasTemperature = "1";
+    const title = base + (temperature ? ` · ${temperature} °C` : "");
+    if (view.title.textContent !== title) view.title.textContent = title;
+    const fitText = view.title.dataset.hasTemperature ? `${base} · 88 °C` : base;
+    if (view.title.dataset.fitText !== fitText) view.title.dataset.fitText = fitText;
+    pushCardHistory(view.card.id, disk.utilization);
+}
 
 // Builds the line and filled area from the samples; missing readings break the line instead of faking zero.
 function historyPaths(values) {
@@ -995,6 +1053,9 @@ function historyPaths(values) {
     return { line, area };
 }
 
+// The lines step once per sample. A continuous glide (the line drawn once per sample and slid
+// by a compositor transform) was measured at +23 points of iGPU 3D: seven card-wide layers
+// composed at the display refresh rate. Not worth it for a background line.
 function pushCardHistory(id, value) {
     const history = cardHistories.find(h => h.id === id);
     if (!history) return;
@@ -1023,6 +1084,3 @@ function animateTextValue(element, targetValue, suffix = "") {
         element.innerHTML = `${targetValue}<span>${suffix}</span>`;
     }
 }
-// The lines step once per sample. A continuous glide (the line drawn once per sample and slid
-// by a compositor transform) was measured at +23 points of iGPU 3D: seven card-wide layers
-// composed at the display refresh rate. Not worth it for a background line.

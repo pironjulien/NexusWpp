@@ -5,7 +5,7 @@ using DesktopHtmlHost;
 namespace DesktopHtmlHost { static class Program { internal static void LogDebug(string _) {} } }
 static class FeatureRegression
 {
-    static readonly string[] NpuKinds={"Neural","Compute"}, NeuralKind={"Neural"};
+    static readonly string[] NpuKinds={"Neural","Compute"}, NeuralKind={"Neural"}, GraphicsKinds={"3D","Compute","VideoDecode","VideoEncode"};
     // Throws on failure: the compiler knows what a passed check proves.
     static void Check([DoesNotReturnIf(false)] bool value,string name) {if(!value)throw new InvalidOperationException(name);Console.WriteLine("PASS "+name);}
     static int Main(string[] args) {
@@ -52,6 +52,14 @@ static class FeatureRegression
             Check(topPid==-1 && topPct==0,"idle NPU has no top process");
             WindowsGpuTelemetry.TopProcess(npuClients,"",NeuralKind,out topPid,out topPct);
             Check(topPid==-1,"no NPU adapter, no top process");
+            var gpuClients=new[]{
+                new GpuEngineReading{Name="pid_40_luid_0x0_0xGPU_phys_0_eng_0_engtype_3D",Utilization=12},
+                new GpuEngineReading{Name="pid_41_luid_0x0_0xGPU_phys_0_eng_0_engtype_3D",Utilization=1},
+                new GpuEngineReading{Name="pid_42_luid_0x0_0xGPU_phys_0_eng_0_engtype_3D",Utilization=0},
+                new GpuEngineReading{Name="pid_43_luid_0x0_0xGPU_phys_0_eng_3_engtype_Copy",Utilization=5},
+                new GpuEngineReading{Name="pid_44_luid_0x0_0xIGPU_phys_0_eng_0_engtype_3D",Utilization=30}};
+            WindowsGpuTelemetry.TopProcess(gpuClients,"luid_0x0_0xGPU",GraphicsKinds,out topPid,out topPct,out int apps);
+            Check(apps==2 && topPid==40,"apps on a GPU: processes with an engine at 1 % or more, copy engines and other adapters left out");
 
             // Battery power flow (CallNtPowerInformation SystemBatteryState).
             Check(System.Runtime.InteropServices.Marshal.SizeOf<BatteryState.SYSTEM_BATTERY_STATE>()==32,"SYSTEM_BATTERY_STATE is 32 bytes");
@@ -174,6 +182,9 @@ static class FeatureRegression
             var v2Ram=new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string,double>>{kv("chrome:340",2L<<20),kv("chrome:120",9L<<20),kv("my:app:77",1L<<20)};
             ProcessRanking.Rank(v2Cpu,v2Ram,8,out top,out topRam,pidNames);
             Check(top[0].Name=="chrome" && top[0].CpuPercent==2 && top[0].RamMb==2 && topRam!=null && topRam.RamMb==9 && pidNames[340]=="chrome" && pidNames[77]=="my:app" && !pidNames.ContainsKey(0),"Process V2 instances pair by name:pid, the pid names GPU clients");
+            v2Cpu.Add(kv("Memory Compression:2500",0));v2Ram.Add(kv("Memory Compression:2500",1536L<<20));
+            ProcessRanking.Rank(v2Cpu,v2Ram,8,out top,out topRam,pidNames,out long compressed);
+            Check(compressed==1536 && topRam!=null && topRam.Name=="chrome","the compressed memory store is reported apart, not as the busiest RAM process");
             using(var processQuery=new PdhQuery()) if(processQuery.Add(ProcessRanking.CpuV2)) {
                 processQuery.Collect();System.Threading.Thread.Sleep(200);processQuery.Collect(); // a rate needs two samples
                 var rows=processQuery.Instances(ProcessRanking.CpuV2);

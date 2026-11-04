@@ -2,6 +2,27 @@
 
 ## Non publié
 
+### 24 images par seconde réelles, moins de mises en page
+
+- Sur secteur, la carte centrale dessine vraiment 24 images par seconde (24,3 mesurées), au lieu de 17,5 pour un réglage à 20 : l'attente de chaque image partait de la fin de la précédente, puis s'ajoutait à l'attente de l'image d'écran suivante. Les images sont maintenant calées sur une grille régulière, avec une tolérance d'une demi-image d'écran (durée mesurée une fois au démarrage). Sur batterie et en mode économie d'énergie, la cadence reste à 12.
+- Mesuré hors écran (vraie page, télémétrie réelle, 2560 × 1440 à 125 %, médianes de cinq passages de 25 s) : 20 i/s d'avant 17,4 images, 7,3 % d'un cœur pour WebView2, 3,4 % d'iGPU 3D ; 24 i/s 24,3 images, 6,6 % (écart dans le bruit de mesure) et 4,7 % d'iGPU (+1,2 point).
+- Courbes d'historique des cartes : un défilement continu (tracé une fois par mesure, puis glissé par le compositeur) a été essayé et mesuré à +23 points d'iGPU 3D, car sept calques larges comme les cartes sont recomposés à chaque image d'écran. Il n'est pas gardé : les courbes avancent toujours d'un cran par seconde.
+- Environ 2 calculs de mise en page par seconde au lieu de 9 : l'ajustement des noms de processus mesure le texte sur un canevas, avec la largeur et la police de chaque case gardées en mémoire (rafraîchies quand la case change de taille), au lieu d'essayer chaque longueur dans la page ; les noms des modes d'alimentation sont ajustés quand ils changent ou que le panneau change de taille, plus à chaque mesure ; le rectangle du panneau d'alimentation envoyé à l'hôte est relu quand la page est remise en page ; les titres des cartes ne relisent la disposition que si un titre a changé.
+
+### Cartes RAM, iGPU et GPU
+
+- RAM : la vitesse (6400 MT/s), qui ne change jamais, retourne dans le titre (« RAM DDR5 · 6400 MT/s »). « Memory Compression », le magasin de mémoire compressée de Windows, n'est plus le « Processus en tête » (il était toujours premier sans rien dire des applications) : sa taille s'affiche dans une case « MÉMOIRE COMPRESSÉE », et le processus en tête est la vraie application la plus gourmande. « Défauts matériels/s » disparaît, avec sa lecture.
+- iGPU : « Mémoire dédiée », presque jamais utilisée, disparaît. La température du pilote, quand il en donne une (WDDM), passe dans le titre, comme la fréquence du GPU.
+- iGPU et GPU : nouvelle case « APPLIS SUR CE GPU » (« APPS ON THIS GPU »), le nombre de processus qui utilisent vraiment ce GPU, tiré des compteurs GPU Engine déjà lus : au moins un moteur graphique, de calcul ou vidéo à 1 % ou plus sur l'échantillon (les moteurs de copie, qu'utilise toute fenêtre ouverte, ne comptent pas).
+- GPU : nouvelle case « VENTILATEURS », la vitesse demandée aux ventilateurs par le pilote NVIDIA (NVML `nvmlDeviceGetFanSpeed`, en % du maximum, 0 % quand ils sont arrêtés au repos) ; en tr/min par WDDM pour les autres GPU quand le pilote la donne. Les cases « Ventilateurs » et « Applis » ne s'affichent que dans une carte GPU d'au moins 300 px de haut : une carte plus basse garde ses quatre cases principales.
+- Nœud réseau : une décimale sous 1 % (« 0,02 % »), un entier au-dessus.
+
+### Une carte par disque
+
+- Chaque disque fixe a sa carte, ajoutée automatiquement (comme la carte NPU) : le disque système d'abord, puis les autres par numéro ; ni USB, ni carte SD, ni disque virtuel ou image montée, ni lecteur réseau. Les cartes se partagent la place d'une carte (côte à côte, deux rangées de deux pour quatre disques) ; dans une fenêtre de moins de 500 × 460 px, seul le disque système reste. Les disques sont relus une fois par minute et leurs compteurs viennent de `PhysicalDisk` (instances « 0 C: », « 1 D: »), un disque par carte.
+- Titre : type (« SSD », ou « HDD » pour un disque à plateaux), modèle et température que le disque donne lui-même (« SSD Samsung 990 PRO 1TB · 48 °C »), lue sans droits administrateur (`IOCTL_STORAGE_QUERY_PROPERTY`, `StorageDeviceTemperatureProperty`, la source du Gestionnaire des tâches) toutes les 10 s sur secteur, 60 s sur batterie. Vérifié sur ce PC : 48 °C au repos, 54 °C après 50 s d'écriture continue, 53 °C 30 s plus tard.
+- Test de disposition : 63 cas de plus, deux, trois et quatre disques simulés sur sept tailles d'écran.
+
 ## 2026-11-04 — 1.0.55.0
 
 ### Fréquence du GPU en direct
@@ -33,13 +54,6 @@
 - La page suit la langue d'affichage Windows de l'utilisateur, comme le menu de la zone de notification et la fenêtre de réglages : l'hôte la donne à WebView2 (`CoreWebView2EnvironmentOptions.Language`), et la page passe en français pour le français, en anglais sinon (et non plus en français quand la langue est inconnue).
 - Libellés revus, avec les termes du Gestionnaire des tâches quand il en a : « TOP PROCESSUS » → « PROCESSUS EN TÊTE » (« BUSIEST PROCESS »), « CADENCE » → « VITESSE » (« SPEED »), « PROC / THREADS » → « PROCESSUS / THREADS », « VRAM » → « MÉMOIRE GPU » (« GPU MEMORY »), « PUISSANCE GPU » → « CONSOMMATION » (« POWER DRAW »), « RECEVOIR (DÉBIT) » / « ENVOYER (DÉBIT) » → « RÉCEPTION » / « ENVOI » (« RECEIVE » / « SEND »), « PING RÉSEAU » → « LATENCE » (« LATENCY »), « COMMITTED MEMORY » → « COMMITTED », « Capteurs périmés » → « Capteurs sans réponse » (« Sensors not responding »), « Data expired » → « Data out of date ». Les noms des modes d'alimentation viennent de Windows et ne sont pas traduits par NexusWpp.
 - Test `scripts/tests/i18n.test.js` (lancé par `test_features.ps1`) : il échoue si un texte manque dans une des deux langues, si la page utilise une clé non traduite ou si une clé traduite n'est plus utilisée.
-
-### 24 images par seconde réelles, moins de mises en page
-
-- Sur secteur, la carte centrale dessine vraiment 24 images par seconde (24,3 mesurées), au lieu de 17,5 pour un réglage à 20 : l'attente de chaque image partait de la fin de la précédente, puis s'ajoutait à l'attente de l'image d'écran suivante. Les images sont maintenant calées sur une grille régulière, avec une tolérance d'une demi-image d'écran (durée mesurée une fois au démarrage). Sur batterie et en mode économie d'énergie, la cadence reste à 12.
-- Mesuré hors écran (vraie page, télémétrie réelle, 2560 × 1440 à 125 %, médianes de cinq passages de 25 s) : 20 i/s d'avant 17,4 images, 7,3 % d'un cœur pour WebView2, 3,4 % d'iGPU 3D ; 24 i/s 24,3 images, 6,6 % (écart dans le bruit de mesure) et 4,7 % d'iGPU (+1,2 point).
-- Courbes d'historique des cartes : un défilement continu (tracé une fois par mesure, puis glissé par le compositeur) a été essayé et mesuré à +23 points d'iGPU 3D, car sept calques larges comme les cartes sont recomposés à chaque image d'écran. Il n'est pas gardé : les courbes avancent toujours d'un cran par seconde.
-- Environ 2 calculs de mise en page par seconde au lieu de 9 : l'ajustement des noms de processus mesure le texte sur un canevas, avec la largeur et la police de chaque case gardées en mémoire (rafraîchies quand la case change de taille), au lieu d'essayer chaque longueur dans la page ; les noms des modes d'alimentation sont ajustés quand ils changent ou que le panneau change de taille, plus à chaque mesure ; le rectangle du panneau d'alimentation envoyé à l'hôte est relu quand la page est remise en page ; les titres des cartes ne relisent la disposition que si un titre a changé.
 
 ## 2026-11-04 — 1.0.54.0
 

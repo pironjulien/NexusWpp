@@ -86,10 +86,10 @@
                             </div>
                         </div>
                         <div class="card-sub-metrics">
-                            <!-- Same slots as the GPU card: sensor, memory, third reading, busiest process. -->
+                            <!-- Same readings as the GPU card where Windows gives them: apps, memory, engine, busiest process. -->
                             <div class="sub-metric">
-                                <span class="lbl" data-i18n="label.dedicatedMemory">MÉMOIRE DÉDIÉE</span>
-                                <span class="val highlight-green" id="igpu-temp-sub">—</span>
+                                <span class="lbl" data-i18n="label.gpuApps">APPLIS SUR CE GPU</span>
+                                <span class="val highlight-green" id="igpu-apps-sub">—</span>
                             </div>
                             <div class="sub-metric">
                                 <span class="lbl" data-i18n="label.sharedMemory">MÉMOIRE PARTAGÉE</span>
@@ -182,9 +182,16 @@
                         </div>
                         <div class="sub-metric">
                             <span class="lbl" data-i18n="label.gpuPower">CONSOMMATION</span>
-                            <span class="val" id="gpu-core-sub">-- MHz</span>
+                            <span class="val" id="gpu-core-sub">—</span>
                         </div>
-
+                        <div class="sub-metric when-room">
+                            <span class="lbl" data-i18n="label.fans">VENTILATEURS</span>
+                            <span class="val" id="gpu-fan-sub">—</span>
+                        </div>
+                        <div class="sub-metric when-room">
+                            <span class="lbl" data-i18n="label.gpuApps">APPLIS SUR CE GPU</span>
+                            <span class="val" id="gpu-apps-sub">—</span>
+                        </div>
                         <div class="sub-metric">
                             <span class="lbl" data-i18n="label.topProcess">PROCESSUS EN TÊTE</span>
                             <span class="val fit-one-line" id="gpu-top-proc-sub">--</span>
@@ -249,12 +256,8 @@
                             <span class="val" id="ram-used-sub">—</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl" data-i18n="label.hardFaults">DÉFAUTS MATÉRIELS/S</span>
-                            <span class="val text-blue" id="ram-faults-sub">—</span>
-                        </div>
-                        <div class="sub-metric">
-                            <span class="lbl" data-i18n="label.clockSpeed">VITESSE</span>
-                            <span class="val" id="ram-speed-sub">—</span>
+                            <span class="lbl" data-i18n="label.compressedMemory">MÉMOIRE COMPRESSÉE</span>
+                            <span class="val text-blue" id="ram-compressed-sub">—</span>
                         </div>
                         <div class="sub-metric">
                             <span class="lbl" data-i18n="label.topProcess">PROCESSUS EN TÊTE</span>
@@ -264,7 +267,8 @@
                     <!-- Removed chip-name -->
                 </div>
 
-                <!-- SSD Card -->
+                <!-- Disk cards: the system disk, then every other fixed disk (dashboard.js), side by side. -->
+                <div class="disk-row">
                 <div class="gauge-card glass-panel" id="ssd-card">
                     <div class="card-heading"><h2 class="gauge-label" id="spec-ssd-name">SSD</h2><div class="critical-alert" role="status" aria-live="polite"></div></div>
                     <div class="gauge-slot">
@@ -302,6 +306,7 @@
                         </div>
                     </div>
                     <!-- Removed chip-name -->
+                </div>
                 </div>
 
                 <!-- Network Card -->

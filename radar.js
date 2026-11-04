@@ -626,6 +626,7 @@ function setRuntimeSuspended(suspended) {
     if (suspended) {
         endResumeSnap();
         loadAlerts.forEach(alert => alert.reset());
+        // History lines stop gliding with the rest (they end on their sample).
         pauseRunningTransitions();
         mouse.grabbedNode = null;
         mouse.isDown = false;
@@ -916,7 +917,7 @@ function updatePhysics(timestamp, renderOnly = false) {
         
         // Draw Value text inside node
         if (node !== telemetryNodes.npu) {
-            const valueText = NexusTelemetry.valid(node.value) ? `${node.value}${node.suffix}` : '—';
+            const valueText = NexusTelemetry.valid(node.value) ? `${num(node.value)}${node.suffix}` : '—'; // "0,02%" in French
             ctx.font = nodeValueFont(node, valueText);
             // A held reading keeps its value, in the stale grey of the cards.
             ctx.fillStyle = node.stale ? "#afb7c7" : "#ffffff";
