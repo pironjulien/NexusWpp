@@ -17,7 +17,7 @@ for (const language of ['fr', 'en']) {
 const used = new Set();
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 for (const match of html.matchAll(/data-i18n(?:-aria)?="([^"]+)"/g)) used.add(match[1]);
-const groups = 'label|node|alert|aria|sensor|battery|ping|power|network|adapter|state|unit';
+const groups = 'label|node|alert|aria|sensor|battery|ping|power|network|adapter|state|process|unit';
 for (const file of ['radar.js', 'dashboard.js', 'app.js', 'cockpit-state.js']) {
     const source = fs.readFileSync(path.join(root, file), 'utf8');
     for (const match of source.matchAll(new RegExp(`["'\`]((?:${groups})\\.[A-Za-z0-9]+)["'\`]`, 'g'))) used.add(match[1]);

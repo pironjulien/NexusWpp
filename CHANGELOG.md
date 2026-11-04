@@ -2,6 +2,11 @@
 
 ## Non publié
 
+### Valeurs sur une ligne, noms de processus lisibles
+
+- Aucune valeur de case ne passe à la ligne : « utilisé / taille » d'un disque, de la RAM et de la mémoire des GPU s'écrit en To avec une décimale à partir de 1000 Go (« 0,9 / 1,8 To », « 1.8 TB » en anglais), en Go entiers de 100 à 1000 Go (« 385 / 930 Go »), avec une décimale en dessous (« 23,1 / 31,3 Go »). Le test de disposition échoue si une valeur passe à la ligne, avec un disque simulé de 8 To et 128 Go de RAM.
+- Noms de processus plus lisibles dans les petites cartes, par une table fixe (aucune lecture de fichier ni du registre) : « WebView2 » pour msedgewebview2, « Edge », « Defender » pour MsMpEng, « Studio Effects » pour WindowsStudioEffects, « Appli Windows » (« Windows app ») pour ApplicationFrameHost, qui héberge les applications du Store, etc. Les autres noms restent ceux de l'exécutable, raccourcis seulement si la case est trop étroite.
+
 ### Proportions au nombre d'or
 
 - Libellé d'une case = valeur / φ : jusqu'à 11,1 px (0,618 lvw) pour des valeurs jusqu'à 18 px (1 lvw), au lieu de 12 px (0,7 lvw) ; rapport 1,62 au lieu de 1,5. Minimum de 9 px inchangé.

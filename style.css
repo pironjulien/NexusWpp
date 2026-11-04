@@ -878,7 +878,9 @@ body {
     letter-spacing: 0;
 }
 
+/* A reading never wraps: values are formatted to fit one line (formatUsedTotal, fitProcessName). */
 .sub-metric .val {
+    white-space: nowrap;
     font-family: var(--font-heading);
     font-size: clamp(11px, calc(1 * var(--lvw)), 18px);
     line-height: 1.2;

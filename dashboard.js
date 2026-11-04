@@ -109,8 +109,20 @@ const processFitObserver = typeof ResizeObserver === 'function' ? new ResizeObse
 
 // Busiest process of a card, as "name measure" ("MsMpEng 1 %", "java 3,2 Go").
 // top null: no reading (last value kept); empty name: idle.
+// Readable names for processes whose executable name says little or is too long for a small card
+// (a fixed table: no file or registry lookup).
+const PROCESS_NAMES = { msedgewebview2: "WebView2", msedge: "Edge", msmpeng: "Defender", windowsstudioeffects: "Studio Effects",
+    searchhost: "Search", textinputhost: "Text Input", shellexperiencehost: "Shell", startmenuexperiencehost: "Start",
+    applicationframehost: "process.windowsApp", "memory compression": "process.memoryCompression" };
+function friendlyProcessName(name) {
+    const known = PROCESS_NAMES[String(name).toLowerCase()];
+    if (!known) return name;
+    return known.startsWith("process.") ? t(known) : known;
+}
+
 function setTopProcess(element, top, measure) {
     if (!element) return;
+    if (top && top.name) top = { ...top, name: friendlyProcessName(top.name) };
     if (top && top.name) {
         if (processFitObserver && element.parentElement && !processFitSlots.has(element.parentElement)) {
             processFitSlots.add(element.parentElement);
@@ -231,6 +243,15 @@ function stepRingTweens(now) {
 function finishRingTweens() {
     ringTweens.forEach((tween, ring) => writeRingOffset(ring, tween.to));
     ringTweens.clear();
+}
+
+// "used / size" of a memory or a disk, short enough for one line of the narrowest card: from
+// 1000 Go up in To with one decimal ("0,9 / 1,8 To"), from 100 Go whole numbers ("385 / 930 Go"),
+// below one decimal for the amount used ("23,1 / 31,3 Go", "1,2 / 16 Go"), the size as given.
+function formatUsedTotal(usedGb, totalGb, totalDigits = 0) {
+    if (totalGb >= 1000) return `${num(usedGb / 1024, 1)} / ${num(totalGb / 1024, 1)} ${TB}`;
+    if (totalGb >= 100) return `${num(usedGb, 0)} / ${num(totalGb, 0)} ${GB}`;
+    return `${num(usedGb, 1)} / ${num(totalGb, totalDigits)} ${GB}`;
 }
 
 // Compact rate inside a map node: "16 Ko/s", "2,4 Mo/s", "38 Mo/s", "13 Go/s".
@@ -385,7 +406,7 @@ function updateDOM(stats) {
     if (gpuVramSub) {
         const usedOrNull = NexusTelemetry.valid(stats.vram.usedMb) ? dgpuVramUsedGb : null;
         setHeldText(gpuVramSub, usedOrNull === null ? null
-            : dgpuVramTotalGb ? `${usedOrNull} / ${dgpuVramTotalGb} ${GB}` : `${usedOrNull} ${GB}`);
+            : dgpuVramTotalGb ? formatUsedTotal(dgpuVramUsed.value / 1024, stats.vram.totalMb / 1024) : `${usedOrNull} ${GB}`);
         track(gpuCard, dgpuVramUsed);
     }
     track(gpuCard, setSensorMetric(gpuCoreSub, t("label.gpuPower"), stats.gpu.powerW, "W", stats, "nvidia", "gpu.powerW"));
@@ -417,7 +438,7 @@ function updateDOM(stats) {
     // process, where it was always first without saying anything about the applications).
     const usedRamText = stats.ram.usedGb !== undefined && stats.ram.usedGb !== "" ? num(stats.ram.usedGb, 1) : null;
     const usableRamGb = Number(stats.ram.usedGb) + Number(stats.ram.availableGb);
-    setHeldText(ramUsedSub, usedRamText !== null && usableRamGb > 0 ? `${usedRamText} / ${num(usableRamGb, 1)} ${GB}` : null);
+    setHeldText(ramUsedSub, usedRamText !== null && usableRamGb > 0 ? formatUsedTotal(Number(stats.ram.usedGb), usableRamGb, 1) : null);
     const compressedMb = Number(stats.ram.compressedMb);
     setHeldText(ramCompressedSub, NexusTelemetry.valid(compressedMb)
         ? compressedMb >= 1024 ? `${num(compressedMb / 1024, 1)} ${GB}` : `${num(compressedMb)} ${MB}` : null);
@@ -495,7 +516,7 @@ function updateDOM(stats) {
     // and dedicated (its reserved carve-out). The bar shows both together, like the ring of a GPU.
     const sharedUsed = Number(stats.igpu.sharedUsedMb), sharedTotal = Number(stats.igpu.sharedTotalMb);
     setHeldText(vramUsedSub, NexusTelemetry.valid(sharedUsed) && sharedTotal > 0
-        ? `${num(sharedUsed / 1024, 1)} / ${num(sharedTotal / 1024, 0)} ${GB}` : null);
+        ? formatUsedTotal(sharedUsed / 1024, sharedTotal / 1024) : null);
     setAdapterTopProcess(igpuTopProcSub, stats.igpu.topProcess);
     // Same readings as the GPU card where Windows gives them: apps drawing or computing on it, the
     // memory, then the busier of the two video engines (decode, encode), 0 % except while a video
@@ -1058,8 +1079,7 @@ function updateDiskCard(view, disk, index, track) {
     track(view.card, setGauge(`disk.storage.${index}`, view.ring, view.value, view.container, disk.storagePercent));
     const totalGb = Number(disk.totalGb) || 0;
     const usedGb = Math.max(0, totalGb - (Number(disk.freeGb) || 0));
-    // One decimal under 1000 Go, none above ("385,2 / 930 Go", "2491 / 3726 Go").
-    if (view.used) view.used.textContent = totalGb > 0 ? `${num(usedGb, usedGb >= 1000 ? 0 : 1)} / ${num(totalGb, 0)} ${GB}` : "—";
+    if (view.used) view.used.textContent = totalGb > 0 ? formatUsedTotal(usedGb, totalGb) : "—";
     // Throughput text from the host, or the number -1 when the counters could not be read.
     const rate = (text) => {
         const value = parseFloat(text);

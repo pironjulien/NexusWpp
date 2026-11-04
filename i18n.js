@@ -51,6 +51,8 @@ const NexusI18n = (() => {
             "battery.charging": "EN CHARGE",
             "battery.left": "{time} RESTANTES",
             "adapter.idle": "Aucun",
+            "process.windowsApp": "Appli Windows",
+            "process.memoryCompression": "Compression",
             "battery.ac": "SECTEUR",
             "battery.dc": "SUR BATTERIE",
             "ping.router": "routeur",
@@ -69,7 +71,7 @@ const NexusI18n = (() => {
             "aria.waiting": "En attente d’une mesure",
             "aria.stale": "{value}, dernière valeur connue (périmée)",
             "aria.map": "Carte interactive de télémétrie matérielle affichant les liens et les flux de données entre composants sous forme de particules animées.",
-            "unit.GB": "Go", "unit.MB": "Mo", "unit.KB": "Ko", "unit.rpm": "tr/min"
+            "unit.TB": "To", "unit.GB": "Go", "unit.MB": "Mo", "unit.KB": "Ko", "unit.rpm": "tr/min"
         },
         en: {
             "label.temperature": "TEMPERATURE",
@@ -116,6 +118,8 @@ const NexusI18n = (() => {
             "battery.charging": "CHARGING",
             "battery.left": "{time} LEFT",
             "adapter.idle": "None",
+            "process.windowsApp": "Windows app",
+            "process.memoryCompression": "Compression",
             "battery.ac": "PLUGGED IN",
             "battery.dc": "ON BATTERY",
             "ping.router": "router",
@@ -134,7 +138,7 @@ const NexusI18n = (() => {
             "aria.waiting": "Waiting for a reading",
             "aria.stale": "{value}, last known value (stale)",
             "aria.map": "Interactive hardware telemetry map showing links and data flows between components as animated particles.",
-            "unit.GB": "GB", "unit.MB": "MB", "unit.KB": "KB", "unit.rpm": "RPM"
+            "unit.TB": "TB", "unit.GB": "GB", "unit.MB": "MB", "unit.KB": "KB", "unit.rpm": "RPM"
         }
     };
 

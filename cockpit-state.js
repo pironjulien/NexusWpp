@@ -112,7 +112,7 @@ const MAX_DATA_PACKETS = 72;
 // --- 🕰️ CYBER-CLOCK WIDGET ENGINE ---
 const t = NexusI18n.t;
 const num = NexusI18n.num;
-const GB = NexusI18n.unit("GB"), MB = NexusI18n.unit("MB"), KB = NexusI18n.unit("KB");
+const GB = NexusI18n.unit("GB"), MB = NexusI18n.unit("MB"), KB = NexusI18n.unit("KB"), TB = NexusI18n.unit("TB");
 // Last valid value of every displayed reading (see NexusTelemetry.LastValues).
 const lastValues = new NexusTelemetry.LastValues();
 // Windows "Animation effects" off: hold decorative motion still, like energy saver.

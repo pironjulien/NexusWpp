@@ -28,7 +28,7 @@ window.layoutFixture = function (test) {
     // One card per fixed disk: the system disk, then simulated extra disks (SSD, hard disk).
     const extraDisks = [
         { name: 'WD_BLACK SN850X 2000GB', drive: 'D:', utilization: 12, storagePercent: 48, freeGb: 970.2, totalGb: 1863, readMb: '35.2', writeMb: '4.1', responseTimeMs: 0.4, temp: 41, rotational: false },
-        { name: 'ST4000DM004-2U9104', drive: 'E: F:', utilization: 3, storagePercent: 91, freeGb: 335.1, totalGb: 3726, readMb: '0.0', writeMb: '0.0', responseTimeMs: 8.2, temp: 36, rotational: true },
+        { name: 'ST8000DM004-2U9188', drive: 'E: F:', utilization: 3, storagePercent: 91, freeGb: 670.6, totalGb: 7452, readMb: '0.0', writeMb: '0.0', responseTimeMs: 8.2, temp: 36, rotational: true },
         { name: 'Crucial T705 4TB', drive: 'G:', utilization: 0, storagePercent: 7, freeGb: 3466.3, totalGb: 3726, readMb: '0.0', writeMb: '0.0', responseTimeMs: 0, temp: -1, rotational: false }];
     stats.disks = [stats.disk, ...extraDisks.slice(0, Math.max(0, (test.disks || 1) - 1))];
     window.layoutExpectedExtraDisks = stats.disks.length - 1;
@@ -124,6 +124,12 @@ window.inspectLayout = function () {
         }
         if (element.matches('.gauge-value') && !inside(bounds, rect(element.closest('.gauge-slot')))) issues.push(name(element) + ': outside gauge slot');
         if (element.matches('.sub-metric .val, .gauge-value') && /(^|[\s(\/])-\d/.test(element.textContent)) issues.push(name(element) + ': unavailable reading shown as a negative number');
+        // A reading always stays on one line (long values are simulated: 8 TB disk, 128 GB RAM).
+        if (element.matches('.sub-metric .val')) {
+            const range = document.createRange();
+            range.selectNodeContents(element);
+            if (new Set([...range.getClientRects()].map(line => Math.round(line.top))).size > 1) issues.push(name(element) + ': reading wraps');
+        }
     }
     // Every card title has the same size (the iGPU and NPU titles used to be smaller).
     const titleSizes = new Set([...document.querySelectorAll('.gauge-card .gauge-label')].filter(visible).map(title => getComputedStyle(title).fontSize));
