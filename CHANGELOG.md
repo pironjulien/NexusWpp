@@ -2,6 +2,8 @@
 
 ## Non publié
 
+## 2026-11-04 — 1.0.56.0
+
 ### Valeurs sur une ligne, noms de processus lisibles
 
 - Aucune valeur de case ne passe à la ligne : « utilisé / taille » d'un disque, de la RAM et de la mémoire des GPU s'écrit en To avec une décimale à partir de 1000 Go (« 0,9 / 1,8 To », « 1.8 TB » en anglais), en Go entiers de 100 à 1000 Go (« 385 / 930 Go »), avec une décimale en dessous (« 23,1 / 31,3 Go »). Le test de disposition échoue si une valeur passe à la ligne, avec un disque simulé de 8 To et 128 Go de RAM.
