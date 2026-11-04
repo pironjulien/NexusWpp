@@ -99,10 +99,9 @@ function dimGauges() {
     setBarFill(npuUtilBar, 0);
 
     ramUsedSub.textContent = `—`;
-    if (ramPageFileSub) ramPageFileSub.textContent = `—`;
+    if (ramFaultsSub) ramFaultsSub.textContent = `—`;
+    if (ramSpeedSub) ramSpeedSub.textContent = `—`;
     if (ramTopProcSub) ramTopProcSub.textContent = `--`;
-    ramStatusSub.textContent = `0.0 ${GB} / 0.0 ${GB}`;
-    ramStatusSub.className = "val";
     
     ssdFreeSub.textContent = `0 ${GB}`;
     if (ssdReadSub && ssdWriteSub) {

@@ -47,9 +47,9 @@ const ramVal = document.getElementById("ram-val");
 const ramRing = document.getElementById("ram-ring");
 const ramGaugeContainer = document.getElementById("ram-gauge-container");
 const ramUsedSub = document.getElementById("ram-used-sub");
-const ramPageFileSub = document.getElementById("ram-pagefile-sub");
+const ramFaultsSub = document.getElementById("ram-faults-sub");
+const ramSpeedSub = document.getElementById("ram-speed-sub");
 const ramTopProcSub = document.getElementById("ram-top-proc-sub");
-const ramStatusSub = document.getElementById("ram-status-sub");
 
 const ssdVal = document.getElementById("ssd-val");
 const ssdRing = document.getElementById("ssd-ring");

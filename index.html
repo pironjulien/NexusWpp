@@ -88,11 +88,11 @@
                         <div class="card-sub-metrics">
                             <!-- Same slots as the GPU card: sensor, memory, third reading, busiest process. -->
                             <div class="sub-metric">
-                                <span class="lbl" data-i18n="label.driver">PILOTE</span>
+                                <span class="lbl" data-i18n="label.dedicatedMemory">MÉMOIRE DÉDIÉE</span>
                                 <span class="val highlight-green" id="igpu-temp-sub">—</span>
                             </div>
                             <div class="sub-metric">
-                                <span class="lbl" data-i18n="label.vram">MÉMOIRE GPU</span>
+                                <span class="lbl" data-i18n="label.sharedMemory">MÉMOIRE PARTAGÉE</span>
                                 <span class="val highlight-green" id="vram-used-sub">—</span>
                             </div>
                             <div class="sub-metric">
@@ -249,12 +249,12 @@
                             <span class="val" id="ram-used-sub">—</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl" data-i18n="label.virtualMemory">MÉMOIRE VALIDÉE</span>
-                            <span class="val text-blue" id="ram-status-sub">—</span>
+                            <span class="lbl" data-i18n="label.hardFaults">DÉFAUTS MATÉRIELS/S</span>
+                            <span class="val text-blue" id="ram-faults-sub">—</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl" data-i18n="label.pageFile">FICHIER D'ÉCHANGE</span>
-                            <span class="val" id="ram-pagefile-sub">—</span>
+                            <span class="lbl" data-i18n="label.clockSpeed">VITESSE</span>
+                            <span class="val" id="ram-speed-sub">—</span>
                         </div>
                         <div class="sub-metric">
                             <span class="lbl" data-i18n="label.topProcess">PROCESSUS EN TÊTE</span>
@@ -293,12 +293,12 @@
                             <span class="val text-green" id="ssd-read-sub">0.0 Mo/s</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl" data-i18n="label.write">ÉCRITURE</span>
-                            <span class="val text-green" id="ssd-write-sub">0.0 Mo/s</span>
-                        </div>
-                        <div class="sub-metric">
                             <span class="lbl" data-i18n="label.responseTime">TEMPS DE RÉPONSE</span>
                             <span class="val" id="ssd-response-sub">-- ms</span>
+                        </div>
+                        <div class="sub-metric">
+                            <span class="lbl" data-i18n="label.write">ÉCRITURE</span>
+                            <span class="val text-green" id="ssd-write-sub">0.0 Mo/s</span>
                         </div>
                     </div>
                     <!-- Removed chip-name -->
