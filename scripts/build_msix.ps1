@@ -78,7 +78,7 @@ foreach ($file in $payloadFiles) {
 }
 
 # Logos rendered at their exact size by scripts/export_icons.py from branding/*.svg:
-# the medallion cut round under 44 px, the medallion on its dark square from 44 px.
+# the julienpiron.fr medallion on a transparent background, the same at every size.
 function New-LogoPng {
     param(
         [string]$Path,

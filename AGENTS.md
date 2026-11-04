@@ -13,7 +13,6 @@
 .\compile.ps1
 .\scripts\build_installer.ps1
 .\scripts\build_msix.ps1
-python .\scripts\make_medallion.py   # médaillon 600 px des SVG de branding\ (après une recopie depuis le kit)
 python .\scripts\export_icons.py   # icon.ico et logos MSIX depuis branding\*.svg (cairosvg)
 .\scripts\tag_release.ps1             # avant le push : la version est-elle prête à publier ?
 .\scripts\tag_release.ps1 -Download   # fichiers de la release v<VERSION> dans dist\release, attestation vérifiée

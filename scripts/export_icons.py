@@ -1,9 +1,8 @@
 """Renders the NexusWpp icons from branding/*.svg: icon.ico and the PNGs build_msix.ps1 packs.
 
-The SVGs come from the Nexus icon kit (NexusPublish/communication/icones), with the medallion rebuilt at 600 px by
-scripts/make_medallion.py. Rule of the kit: under 44 px the
-medallion cut round with transparent corners (nexuswpp-round), from 44 px the pictogram in the julienpiron.fr
-medallion on its dark square (nexuswpp-mark). The pictogram alone is never shown.
+The SVGs are the HD ones of the Nexus icon kit (NexusHarness/NexusCommunication/icones/svg/hd, copied here by its
+sync_icons.py): the pictogram in the julienpiron.fr medallion on a transparent background, the same at every size
+(nexuswpp-round is identical to nexuswpp-mark). The pictogram alone is never shown.
 Run again after replacing the SVGs:  python scripts/export_icons.py   (needs cairosvg)
 """
 from pathlib import Path

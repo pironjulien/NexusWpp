@@ -2,6 +2,10 @@
 
 ## Non publié
 
+### Icône sans carré sombre
+
+- L'icône (appli, Store, MSIX, installeur) est le médaillon de julienpiron.fr sur fond transparent à toutes les tailles, comme sur le site : plus de carré sombre autour, et le losange en bas du cerclage reste entier (il était estompé avec les circuits intérieurs). Les SVG de `branding\` viennent du kit d'icônes Nexus (`sync_icons.py`) ; `scripts\make_medallion.py`, devenu inutile, est retiré.
+
 ### 24 images par seconde réelles, moins de mises en page
 
 - Sur secteur, la carte centrale dessine vraiment 24 images par seconde (24,3 mesurées), au lieu de 17,5 pour un réglage à 20 : l'attente de chaque image partait de la fin de la précédente, puis s'ajoutait à l'attente de l'image d'écran suivante. Les images sont maintenant calées sur une grille régulière, avec une tolérance d'une demi-image d'écran (durée mesurée une fois au démarrage). Sur batterie et en mode économie d'énergie, la cadence reste à 12.
