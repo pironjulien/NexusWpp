@@ -126,7 +126,7 @@ function setHeldText(element, text, placeholder = '—') {
     return held;
 }
 
-// Cache size sent by the host as text ("24.0 Mo", or "24,0 Mo" in some cultures).
+// Cache size sent by the host as invariant text ("24.0 Mo"), shown in the interface language ("24,0 Mo" / "24.0 MB").
 function formatCacheSize(text) {
     const value = parseFloat(String(text || '').replace(',', '.'));
     return Number.isFinite(value) ? `${num(value, 1)} ${MB}` : '—';

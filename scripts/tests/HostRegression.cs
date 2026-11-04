@@ -220,8 +220,12 @@ static class HostRegression
               TelemetryCollector.AdapterMemoryBytes(new WindowsGpuSample()) == -1, "iGPU memory counts dedicated and shared usage, like its budget");
         Check(TelemetryCollector.WmiDate("20260903000000.000000-000") == "03/09/2026" && TelemetryCollector.WmiDate("2026") == "" && TelemetryCollector.WmiDate(null) == "",
             "driver dates parsed from CIM datetimes");
+        // A decimal-comma Windows format must not reach the page, which formats for its own language.
+        var culture = System.Globalization.CultureInfo.CurrentCulture;
+        System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("fr-FR");
         using var collector = new TelemetryCollector();
-        collector.Initialize();
+        try { collector.Initialize(); }
+        finally { System.Globalization.CultureInfo.CurrentCulture = culture; }
         collector.CollectStats();
         System.Threading.Thread.Sleep(1100);
         using var json = System.Text.Json.JsonDocument.Parse(collector.CollectStats());
@@ -229,6 +233,9 @@ static class HostRegression
         int cpu = root.GetProperty("cpu").GetProperty("utilization").GetInt32();
         Check(cpu >= 0 && cpu <= 100, "CPU utilization measured (" + cpu + " %)");
         Check(!root.GetProperty("cpu").TryGetProperty("handles", out _), "no placeholder handle count");
+        string l2 = root.GetProperty("cpu").GetProperty("l2Cache").GetString() ?? "", l3 = root.GetProperty("cpu").GetProperty("l3Cache").GetString() ?? "";
+        Check(Array.TrueForAll(new[] { l2, l3 }, size => size.Length == 0 || System.Text.RegularExpressions.Regex.IsMatch(size, @"^\d+\.\d Mo$")),
+            "CPU cache sizes are invariant numbers (" + l2 + ", " + l3 + ") under a French Windows format");
         var ram = root.GetProperty("ram");
         double used = double.Parse(ram.GetProperty("usedGb").GetString() ?? "", System.Globalization.CultureInfo.InvariantCulture);
         double available = double.Parse(ram.GetProperty("availableGb").GetString() ?? "", System.Globalization.CultureInfo.InvariantCulture);

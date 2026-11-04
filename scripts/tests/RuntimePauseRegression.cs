@@ -314,6 +314,8 @@ sealed class RuntimePauseRegression : Form
             await Check("setAdapterTopProcess(gpuTopProcSub, {name: '', pct: 0}) === undefined && gpuTopProcSub.textContent === t('adapter.idle')", "idle adapter shows the idle word without a measure");
             await Check("specGpuName.textContent.endsWith('@ 15001 MHz')", "GPU memory clock is shown in the card title");
             await Check("vramUsedSub.textContent===num(2,1)+' / 32 '+GB && igpuEncodeSub.textContent==='12 %'", "iGPU card shows VRAM used / total and video encode load");
+            await Check("formatCacheSize('24.0 Mo') === (NexusI18n.lang === 'fr' ? '24,0 Mo' : '24.0 MB') && formatCacheSize('2.5 Mo') === (NexusI18n.lang === 'fr' ? '2,5 Mo' : '2.5 MB')",
+                "CPU cache sizes follow the interface language");
             exitCode = 0;
         }
         catch (Exception error) { Console.Error.WriteLine("FAIL " + error); }

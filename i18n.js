@@ -156,7 +156,7 @@ const NexusI18n = (() => {
     }
 
     // Displayed numbers: "35,8" in French, "35.8" in English, never grouped ("1234,5").
-    // Host strings ("35.80", or "24,0 Mo" from a culture-formatted value) are parsed
+    // Host strings ("35.80", "24.0 Mo") are parsed
     // and keep their own number of decimals unless `digits` is given.
     const numberLocale = lang === "fr" ? "fr-FR" : "en-US";
     const numberFormats = new Map();

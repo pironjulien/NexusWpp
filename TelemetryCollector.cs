@@ -336,8 +336,10 @@ namespace DesktopHtmlHost
                         if (cpuNameVal != null) CpuInfo = (cpuNameVal.ToString() ?? "").Trim();
                         uint l2 = Convert.ToUInt32(obj["L2CacheSize"] ?? 0, CultureInfo.InvariantCulture);
                         uint l3 = Convert.ToUInt32(obj["L3CacheSize"] ?? 0, CultureInfo.InvariantCulture);
-                        CpuL2Cache = string.Format(CultureInfo.CurrentCulture, "{0:F1} Mo", l2 / 1024.0);
-                        CpuL3Cache = string.Format(CultureInfo.CurrentCulture, "{0:F1} Mo", l3 / 1024.0);
+                        // Invariant number ("24.0 Mo"): the page shows it in its own interface language
+                        // (formatCacheSize in dashboard.js), whatever the Windows regional format.
+                        CpuL2Cache = string.Format(CultureInfo.InvariantCulture, "{0:F1} Mo", l2 / 1024.0);
+                        CpuL3Cache = string.Format(CultureInfo.InvariantCulture, "{0:F1} Mo", l3 / 1024.0);
                         CpuCores = Convert.ToInt32(obj["NumberOfCores"] ?? CpuCores, CultureInfo.InvariantCulture);
                         CpuLogical = Convert.ToInt32(obj["NumberOfLogicalProcessors"] ?? CpuLogical, CultureInfo.InvariantCulture);
                         uint maxClock = Convert.ToUInt32(obj["MaxClockSpeed"] ?? 0, CultureInfo.InvariantCulture);
