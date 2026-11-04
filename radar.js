@@ -105,7 +105,6 @@ const telemetryNodes = {
         colorEnd: "#0a84ff",
         glow: "#30d158",
         label: "SYSTEM CORE",
-        subLabel: "CORE ACTIVE",
         value: 0,
         suffix: "",
         rotAngle: 0
@@ -119,7 +118,6 @@ const telemetryNodes = {
         colorEnd: "#8a2be2",
         glow: "#bf5aff",
         label: "CPU",
-        subLabel: "-- °C",
         value: 0,
         suffix: "%",
         rotAngle: 0,
@@ -133,7 +131,6 @@ const telemetryNodes = {
         colorEnd: "#1db954",
         glow: "#30d158",
         label: "iGPU",
-        subLabel: `-- ${GB}`,
         value: 0,
         suffix: "%",
         rotAngle: 0,
@@ -147,7 +144,6 @@ const telemetryNodes = {
         colorEnd: "#64d2ff",
         glow: "#00c7be",
         label: "NPU",
-        subLabel: `-- ${GB}`,
         value: 0,
         suffix: "%",
         rotAngle: 0,
@@ -162,11 +158,10 @@ const telemetryNodes = {
         colorEnd: "#00c7be",
         glow: "#0a84ff",
         label: "RAM",
-        subLabel: `-- ${GB}`,
         value: 0,
         suffix: "%",
         rotAngle: 0,
-        desc: t("node.ramActivity")
+        desc: t("node.ramUsed")
     },
     gpu: {
         x: 0, y: 0,
@@ -176,7 +171,6 @@ const telemetryNodes = {
         colorEnd: "#ff2d55",
         glow: "#ff375f",
         label: "GPU",
-        subLabel: "-- °C",
         value: 0,
         suffix: "%",
         rotAngle: 0,
@@ -190,7 +184,6 @@ const telemetryNodes = {
         colorEnd: "#64d2ff",
         glow: "#00c7be",
         label: "SSD C:",
-        subLabel: `-- ${GB}`,
         value: 0,
         suffix: "%",
         rotAngle: 0,
@@ -204,16 +197,37 @@ const telemetryNodes = {
         colorEnd: "#ffd60a",
         glow: "#ff9f0a",
         label: t("label.network"),
-        subLabel: `-- ${KB}/s`,
         value: 0,
         suffix: "",
         rotAngle: 0,
-        desc: t("node.networkActivity")
+        desc: t("node.networkThroughput")
     }
 };
 
 // Pre-allocated array of telemetry node objects to completely eliminate Object.keys() allocations inside loop
 const telemetryNodeList = Object.values(telemetryNodes);
+
+// Load that paces a node's packets and orbit ticks: its percentage, or its own share when the
+// value shown is not a percentage (network throughput).
+function nodeActivity(node) {
+    return (node.activity !== undefined ? node.activity : node.value) || 0;
+}
+
+// Largest value font (13 px, down to 9 px) that keeps the text inside the node body
+// ("16 Ko/s" in the network node); measured once per new text.
+function nodeValueFont(node, text) {
+    if (node.fittedText !== text) {
+        let size = 13;
+        ctx.font = `bold ${size}px Bahnschrift, 'Segoe UI', sans-serif`;
+        while (size > 9 && ctx.measureText(text).width > (node.radius - 3) * 2) {
+            size--;
+            ctx.font = `bold ${size}px Bahnschrift, 'Segoe UI', sans-serif`;
+        }
+        node.fittedText = text;
+        node.fittedFont = ctx.font;
+    }
+    return node.fittedFont;
+}
 
 // SOTA Offscreen Cache for surround nodes to eliminate heavy main canvas draws
 function renderNodeOffscreen(node) {
@@ -476,6 +490,7 @@ let isCanvasLoopRunning = false;
 let needsRender = true;
 let canvasFrameTimer = 0;
 let canvasAnimationFrame = 0;
+let lastMotionStamp = 0; // time of the last advanced frame; 0 after a sleep or a pause
 
 function renderStaticBackground() {
     if (!bgCanvas) {
@@ -490,7 +505,6 @@ function renderStaticBackground() {
     bgCtx.lineWidth = 1;
     
     // Draw concentric radar lines around the same center used by the telemetry nodes.
-let lastMotionStamp = 0; // time of the last advanced frame; 0 after a sleep or a pause
     const { cx, cy, radarStep, maxRadarRadius } = getTelemetryLayout();
     for (let r = radarStep; r <= maxRadarRadius + 0.01; r += radarStep) {
         bgCtx.beginPath();
@@ -512,6 +526,7 @@ function wakeCanvas() {
     needsRender = true;
     if (!isCanvasLoopRunning) {
         isCanvasLoopRunning = true;
+        lastMotionStamp = 0;
         scheduleCanvasFrame(0);
     }
 }
@@ -525,7 +540,6 @@ const logoSpinners = [
     { element: document.querySelector(".vram-scanner-eye"), node: "igpu", periodMs: 15000, reverse: false },
     { element: document.querySelector(".npu-scanner-eye"), node: "npuAccel", periodMs: 12000, reverse: true }
 ].filter(spinner => spinner.element);
-        lastMotionStamp = 0;
 let decorativeMotionMs = 0;
 let lastDecorativeStamp = 0;
 let canvasIdle = false; // the canvas shows its final frame; ticks only move the spinners/rings
@@ -538,6 +552,7 @@ function decorativeMotionHeld() {
 function startMotionClock() {
     if (runtimeSuspended || isCanvasLoopRunning) return;
     isCanvasLoopRunning = true;
+    lastMotionStamp = 0;
     scheduleCanvasFrame(0);
 }
 
@@ -552,7 +567,6 @@ function applySpinner(spinner) {
 
 // Advances the spinners and ring easing; returns true while either still moves.
 function stepDecorativeMotion(timestamp) {
-    lastMotionStamp = 0;
     const easing = stepRingTweens(performance.now());
     const spinning = !decorativeMotionHeld() && logoSpinners.some(spinner => telemetryNodes[spinner.node].visible !== false);
     if (spinning && lastDecorativeStamp) decorativeMotionMs += Math.max(0, timestamp - lastDecorativeStamp);
@@ -681,6 +695,10 @@ function updatePhysics(timestamp, renderOnly = false) {
         return;
     }
     if (!renderOnly) lastPhysicsTime = timestamp - (elapsed % physicsFpsInterval);
+    // Motion per frame was tuned at 12 Hz: scale it by the real time since the previous
+    // frame so speeds stay the same at any cadence (one frame's worth after a wake).
+    const frameScale = renderOnly ? 0 : (lastMotionStamp ? Math.min(timestamp - lastMotionStamp, physicsFpsInterval * 2) : physicsFpsInterval) / PHYSICS_REFERENCE_MS;
+    if (!renderOnly) lastMotionStamp = timestamp;
 
     const decorativeMotion = !renderOnly && stepDecorativeMotion(timestamp);
     if (!renderOnly && canvasIdle && !needsRender) {
@@ -695,10 +713,6 @@ function updatePhysics(timestamp, renderOnly = false) {
     }
     
     ctx.clearRect(0, 0, width, height);
-    // Motion per frame was tuned at 12 Hz: scale it by the real time since the previous
-    // frame so speeds stay the same at any cadence (one frame's worth after a wake).
-    const frameScale = renderOnly ? 0 : (lastMotionStamp ? Math.min(timestamp - lastMotionStamp, physicsFpsInterval * 2) : physicsFpsInterval) / PHYSICS_REFERENCE_MS;
-    if (!renderOnly) lastMotionStamp = timestamp;
     
     // 1. Draw sci-fi background target radar/circles (Offscreen Pre-rendered!)
     if (!bgCanvas || bgCanvas.width !== canvas.width || bgCanvas.height !== canvas.height) {
@@ -719,7 +733,7 @@ function updatePhysics(timestamp, renderOnly = false) {
         
         // Orbit ring rotation angle increment
         const baseRotSpeed = 0.008;
-        const loadFactor = (node.value || 0) / 100;
+        const loadFactor = nodeActivity(node) / 100;
         if (!renderOnly) node.rotAngle += (baseRotSpeed + (loadFactor * 0.06)) * frameScale;
     }
     
@@ -880,10 +894,11 @@ function updatePhysics(timestamp, renderOnly = false) {
         
         // Draw Value text inside node
         if (node !== telemetryNodes.npu) {
-            ctx.font = "bold 13px Bahnschrift, 'Segoe UI', sans-serif";
+            const valueText = !NexusTelemetry.valid(node.value) ? '—' : node.text !== undefined ? node.text : `${node.value}${node.suffix}`;
+            ctx.font = nodeValueFont(node, valueText);
             // A held reading keeps its value, in the stale grey of the cards.
             ctx.fillStyle = node.stale ? "#afb7c7" : "#ffffff";
-            ctx.fillText(NexusTelemetry.valid(node.value) ? `${node.value}${node.suffix}` : '—', node.x, node.y - 3);
+            ctx.fillText(valueText, node.x, node.y - 3);
             
             // Draw Label below node
             ctx.font = "900 11px Bahnschrift, 'Segoe UI', sans-serif";

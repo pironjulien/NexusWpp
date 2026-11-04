@@ -8,10 +8,10 @@ window.layoutFixture = function (test) {
     window.layoutExpectedCards = 4 + Number(igpu) + Number(npu) + Number(dgpu);
     const planNames = ['Utilisation normale', 'Économies d’énergie', 'Performances élevées', 'Performances optimales', 'Mode Dev'];
     const stats = {
-        cpu: { utilization: 48, temp: 65, name: 'Intel Core Ultra 9 285K', freqGhz: 5.7, threads: 5462, logical: 24 },
+        cpu: { utilization: 48, temp: 65, maxCoreUtilization: 100, name: 'Intel Core Ultra 9 285K', freqGhz: 5.7, threads: 5462, logical: 24 },
         igpu: { utilization: 35, detected: igpu, name: 'Intel Graphics', usedMb: 2048, totalMb: 32768, decodeUtil: 24, encodeUtil: 12, topProcess: { name: 'msedgewebview2', pct: 30 } },
         npu: { utilization: 68, detected: npu, name: 'Intel AI Boost', usedMb: 2048, totalMb: 32768, topProcess: { name: 'WindowsStudioEffects', pct: 42 } },
-        gpu: { utilization: 73, detected: dgpu, name: 'NVIDIA GeForce RTX 5090', temp: 76, powerW: 575, coreClock: 2875, memoryClock: 15001, topProcess: { name: 'Cyberpunk2077', pct: 71 } },
+        gpu: { utilization: 73, detected: dgpu, name: 'NVIDIA GeForce RTX 5090', temp: 76, powerW: 575, coreClock: 2875, memoryClock: 15001, memoryClockMax: 14001, topProcess: { name: 'Cyberpunk2077', pct: 71 } },
         vram: { usedMb: 24576, totalMb: 32768 },
         ram: { utilization: 72, totalGb: 128, speedMts: 6400, type: 'DDR5', modules: 4, cachedGb: 32.4, commitUsedGb: 100.5, commitLimitGb: 192.8 },
         disk: { name: 'Samsung SSD 990 PRO 4TB', utilization: 58, storagePercent: 65, freeGb: 1234.5, totalGb: 3725.9, readMb: 7250.5, writeMb: 6300.4, responseTimeMs: 12.6 },
@@ -24,10 +24,12 @@ window.layoutFixture = function (test) {
         totalProcesses: 456, ping: 124,
         powerPlans: planNames.slice(0, test.plans || 4).map((name, index) => ({ name, guid: 'layout-test-' + index, active: index === 0 }))
     };
+    // Both forms of the CPU slot: an ACPI zone seen moving (laptops) and the busiest core (fixed zone).
+    stats.sources = { cpuTemperature: { status: 'fresh', varies: ['full', 'dual-gpu'].includes(test.hardware) } };
     if (test.state === 'high') {
         for (const key of ['cpu','igpu','npu','gpu','ram']) stats[key].utilization = 96;
     } else if (test.state === 'stale') {
-        stats.sources = { nvidia: { status: 'stale' }, windowsGpu: { status: 'stale' } };
+        Object.assign(stats.sources, { nvidia: { status: 'stale' }, windowsGpu: { status: 'stale' } });
         stats.gpu.temp = stats.gpu.powerW = stats.gpu.memoryClock = -1;
         // Host readings unreadable this tick are the number -1: the page holds the last value, never shows -1.
         stats.disk.readMb = stats.disk.writeMb = stats.disk.responseTimeMs = -1;

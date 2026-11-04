@@ -83,7 +83,6 @@ namespace DesktopHtmlHost
         private long cachedRamCachedBytes;
         private long cachedRamPoolPagedBytes;
         private long cachedRamPoolNonPagedBytes;
-        private long cachedRamActivityVal;
         private DateTime lastGpuPerfTime = DateTime.MinValue;
         private int cachedIgpuUtil;
         private long cachedIgpuMemBytes;
@@ -160,12 +159,14 @@ namespace DesktopHtmlHost
         private const string PdhModifiedPages = @"\Memory\Modified Page List Bytes";
         // Task Manager CPU utilization: work done relative to the base frequency (above 100 % in turbo, capped).
         private const string PdhCpuUtility = @"\Processor Information(_Total)\% Processor Utility";
+        // Busy time of each logical processor. Not "% Processor Utility": scaled by the turbo clock,
+        // it reads 100 % for a core that is only 65 % busy at 5.2 GHz on a 3.4 GHz base.
+        private const string PdhCoreBusyTime = @"\Processor Information(*)\% Processor Time";
         private const string PdhStandbyNormal = @"\Memory\Standby Cache Normal Priority Bytes";
         private const string PdhStandbyReserve = @"\Memory\Standby Cache Reserve Bytes";
         private const string PdhStandbyCore = @"\Memory\Standby Cache Core Bytes";
         private const string PdhPoolPaged = @"\Memory\Pool Paged Bytes";
         private const string PdhPoolNonPaged = @"\Memory\Pool Nonpaged Bytes";
-        private const string PdhPageFaults = @"\Memory\Page Faults/sec";
         private const string PdhThreads = @"\System\Threads";
         private const string PdhProcesses = @"\System\Processes";
         private const string PdhCpuPerformance = @"\Processor Information(_Total)\% Processor Performance";
@@ -178,12 +179,13 @@ namespace DesktopHtmlHost
         {
             perf = new PdhQuery();
             foreach (string path in new[] { PdhModifiedPages, PdhStandbyNormal, PdhStandbyReserve, PdhStandbyCore, PdhPoolPaged,
-                PdhPoolNonPaged, PdhPageFaults, PdhThreads, PdhProcesses, PdhCpuPerformance, PdhCpuFrequency, PdhCpuUtility })
+                PdhPoolNonPaged, PdhThreads, PdhProcesses, PdhCpuPerformance, PdhCpuFrequency, PdhCpuUtility })
             {
                 perf.Add(path);
             }
             // System drive activity: same semantics as the former raw WMI LogicalDisk differencing.
             if (!perf.Add(PdhThermalZones)) cpuThermalPerfUnavailable = true;
+            coreBusyTimeAvailable = perf.Add(PdhCoreBusyTime);
             diskCountersAvailable = perf.Add(PdhDiskRead) & perf.Add(PdhDiskWrite) & perf.Add(PdhDiskIdle) & perf.Add(PdhDiskLatency);
             network.AddCounters(perf);
             WindowsGpuTelemetry.AddCounters(perf);
@@ -235,6 +237,11 @@ namespace DesktopHtmlHost
         private DateTime lastCpuTempTime = DateTime.MinValue;
         private int cachedCpuTempC = -1;
         private string cpuTemperatureStatus = "unavailable";
+        private bool coreBusyTimeAvailable;
+        // Many desktop boards expose one ACPI zone that never moves (a fixed 301 K here): it is
+        // shown only once it has changed by at least 1 degree, i.e. once it is a real sensor.
+        private int firstCpuTempC = -1;
+        private bool cpuTemperatureVaries;
         private DateTime lastAdapterDiscovery = DateTime.MinValue;
 
         // GPU names, LUIDs and memory sizes from the DirectX adapter registry (one source for all three),
@@ -672,6 +679,11 @@ namespace DesktopHtmlHost
             bool previouslyAvailable = cachedCpuTempC >= 0 || cpuTemperatureStatus == "stale";
             cachedCpuTempC = (maxCelsius > 5.0 && maxCelsius < 120.0) ? (int)Math.Round(maxCelsius) : -1;
             cpuTemperatureStatus = cachedCpuTempC >= 0 ? "fresh" : previouslyAvailable ? "stale" : "unavailable";
+            if (cachedCpuTempC >= 0)
+            {
+                if (firstCpuTempC < 0) firstCpuTempC = cachedCpuTempC;
+                else if (cachedCpuTempC != firstCpuTempC) cpuTemperatureVaries = true;
+            }
             return cachedCpuTempC;
         }
 
@@ -1083,8 +1095,8 @@ namespace DesktopHtmlHost
             long ramCachedBytes = cachedRamCachedBytes;
             long ramPoolPagedBytes = cachedRamPoolPagedBytes;
             long ramPoolNonPagedBytes = cachedRamPoolNonPagedBytes;
-            long ramActivityVal = cachedRamActivityVal;
             bool perfSampled = perf != null && perf.Collect();
+            int cpuMaxCoreLoad = -1;
 
             network.Update(perf, perfSampled);
             if (perf != null && perfSampled)
@@ -1092,6 +1104,7 @@ namespace DesktopHtmlHost
                 // Task Manager CPU utilization when the counter exists; GetSystemTimes (busy time) otherwise.
                 double? utility = perf.Value(PdhCpuUtility);
                 if (utility.HasValue) cpuLoad = (int)Math.Round(Math.Max(0, Math.Min(100, utility.Value)));
+                cpuMaxCoreLoad = BusiestCore(coreBusyTimeAvailable ? perf.Instances(PdhCoreBusyTime) : null);
 
                 double? modified = perf.Value(PdhModifiedPages);
                 if (modified.HasValue)
@@ -1099,10 +1112,9 @@ namespace DesktopHtmlHost
                     ramCachedBytes = (long)(modified.Value + (perf.Value(PdhStandbyNormal) ?? 0) + (perf.Value(PdhStandbyReserve) ?? 0) + (perf.Value(PdhStandbyCore) ?? 0));
                     cachedRamCachedBytes = ramCachedBytes;
                 }
-                double? poolPaged = perf.Value(PdhPoolPaged), poolNonPaged = perf.Value(PdhPoolNonPaged), faults = perf.Value(PdhPageFaults);
+                double? poolPaged = perf.Value(PdhPoolPaged), poolNonPaged = perf.Value(PdhPoolNonPaged);
                 if (poolPaged.HasValue) cachedRamPoolPagedBytes = ramPoolPagedBytes = (long)poolPaged.Value;
                 if (poolNonPaged.HasValue) cachedRamPoolNonPagedBytes = ramPoolNonPagedBytes = (long)poolNonPaged.Value;
-                if (faults.HasValue) cachedRamActivityVal = ramActivityVal = (long)Math.Round(faults.Value);
             }
 
             // -1 when the counters cannot be read: the page shows its unavailable state.
@@ -1214,6 +1226,7 @@ namespace DesktopHtmlHost
             double gpuTemp = nv != null ? nv.Temperature ?? -1 : -1;
             double gpuCoreClock = nv != null ? nv.CoreClock ?? -1 : -1;
             double gpuMemClock = nv != null ? nv.MemoryClock ?? -1 : -1;
+            double gpuMemClockMax = nvidiaTelemetry.MaxMemoryClockMhz;
             double gpuPowerW = nv != null && nv.PowerWatts.HasValue ? Math.Round(nv.PowerWatts.Value, 1) : -1;
             int gpuFanRpm = -1;
             string gpuSensorStatus = nvidiaTelemetry.Status;
@@ -1240,6 +1253,7 @@ namespace DesktopHtmlHost
                 {
                     gpuTemp = wddmSample.TemperatureC ?? -1;
                     gpuMemClock = wddmSample.MemoryClockMhz ?? -1;
+                    gpuMemClockMax = wddmSample.MaxMemoryClockMhz ?? -1;
                     gpuFanRpm = wddmSample.FanRpm ?? -1;
                 }
             }
@@ -1317,12 +1331,14 @@ namespace DesktopHtmlHost
                 json.WriteStartObject("cpuTemperature");
                 json.WriteString("status", cpuTemperatureStatus);
                 json.WriteString("label", "Zone thermique Windows");
+                json.WriteBoolean("varies", cpuTemperatureVaries);
                 json.WriteEndObject();
                 json.WriteEndObject();
 
                 json.WriteStartObject("cpu");
                 json.WriteNumber("utilization", cpuLoad);
                 json.WriteNumber("temp", cpuTemp);
+                json.WriteNumber("maxCoreUtilization", cpuMaxCoreLoad);
                 json.WriteString("name", CpuInfo ?? "");
                 json.WriteString("freqGhz", cpuFreqGhzStr);
                 json.WriteString("baseSpeedGhz", CpuBaseSpeed ?? "");
@@ -1370,6 +1386,7 @@ namespace DesktopHtmlHost
                 json.WriteNumber("temp", Finite(gpuTemp));
                 json.WriteNumber("coreClock", Finite(gpuCoreClock));
                 json.WriteNumber("memoryClock", Finite(gpuMemClock));
+                json.WriteNumber("memoryClockMax", Finite(gpuMemClockMax));
                 json.WriteNumber("powerW", Finite(gpuPowerW));
                 json.WriteString("name", GpuName ?? "");
                 json.WriteString("driver", DgpuDriver ?? "");
@@ -1390,7 +1407,6 @@ namespace DesktopHtmlHost
                 json.WriteNumber("poolPagedMb", ramPoolPagedBytes / (1024 * 1024));
                 json.WriteNumber("poolNonPagedMb", ramPoolNonPagedBytes / (1024 * 1024));
                 json.WriteNumber("speedMts", RamSpeedMts);
-                json.WriteNumber("activity", ramActivityVal);
                 json.WriteString("type", RamType ?? "");
                 json.WriteNumber("modules", RamModules);
                 json.WriteEndObject();
@@ -1470,6 +1486,21 @@ namespace DesktopHtmlHost
         // A non-finite double would make the whole message invalid JSON: report it as unavailable.
         private static double Finite(double value) { return double.IsFinite(value) ? value : -1; }
         // Task Manager "Active time": the share of the interval the disk was not idle.
+        // Busiest logical processor, 0-100; -1 without a per-core reading.
+        // One saturated thread shows here even when the average load stays low.
+        internal static int BusiestCore(List<KeyValuePair<string, double>>? cores)
+        {
+            double busiest = -1;
+            if (cores != null)
+            {
+                foreach (var core in cores)
+                {
+                    if (!core.Key.Contains("_Total", StringComparison.Ordinal)) busiest = Math.Max(busiest, core.Value);
+                }
+            }
+            return busiest < 0 ? -1 : (int)Math.Round(Math.Min(100, busiest));
+        }
+
         internal static long DiskActiveTime(double idlePercent) { return (long)Math.Round(100.0 - Math.Max(0.0, Math.Min(100.0, idlePercent))); }
         // Dedicated + shared usage of an adapter; -1 when neither counter was read.
         internal static long AdapterMemoryBytes(WindowsGpuSample sample)

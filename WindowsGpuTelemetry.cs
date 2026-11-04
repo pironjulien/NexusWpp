@@ -151,12 +151,13 @@ namespace DesktopHtmlHost
     // Task Manager: no vendor tool, no administrator rights. Zero means "not reported".
     internal sealed class WddmGpuSample
     {
-        internal double? TemperatureC, MemoryClockMhz, PowerPercent;
+        internal double? TemperatureC, MemoryClockMhz, MaxMemoryClockMhz, PowerPercent;
         internal int? FanRpm;
 
-        internal static WddmGpuSample? Parse(ulong memoryFrequencyHz, uint fanRpm, uint powerTenthsPercent, uint temperatureDeciC, uint maxFanRpm)
+        internal static WddmGpuSample? Parse(ulong memoryFrequencyHz, uint fanRpm, uint powerTenthsPercent, uint temperatureDeciC, uint maxFanRpm, ulong maxMemoryFrequencyHz = 0)
         {
             var sample = new WddmGpuSample();
+            if (maxMemoryFrequencyHz > 0 && maxMemoryFrequencyHz < 100000000000UL) sample.MaxMemoryClockMhz = Math.Round(maxMemoryFrequencyHz / 1000000.0);
             if (temperatureDeciC > 0 && temperatureDeciC < 1500) sample.TemperatureC = Math.Round(temperatureDeciC / 10.0, 1);
             if (memoryFrequencyHz > 0 && memoryFrequencyHz < 100000000000UL) sample.MemoryClockMhz = Math.Round(memoryFrequencyHz / 1000000.0);
             if (powerTenthsPercent > 0 && powerTenthsPercent <= 10000) sample.PowerPercent = powerTenthsPercent / 10.0;
@@ -227,7 +228,7 @@ namespace DesktopHtmlHost
                 var caps = new ADAPTER_PERFDATACAPS();
                 if (!Query(handle, KMTQAITYPE_ADAPTERPERFDATA, ref data)) return null;
                 Query(handle, KMTQAITYPE_ADAPTERPERFDATA_CAPS, ref caps);
-                return WddmGpuSample.Parse(data.MemoryFrequency, data.FanRPM, data.Power, data.Temperature, caps.MaxFanRPM);
+                return WddmGpuSample.Parse(data.MemoryFrequency, data.FanRPM, data.Power, data.Temperature, caps.MaxFanRPM, data.MaxMemoryFrequency);
             }
             finally { Close(handle); }
         }

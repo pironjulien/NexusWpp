@@ -226,6 +226,9 @@ static class HostRegression
     // Telemetry semantics matched to Task Manager, then one real collection of this machine.
     static void Telemetry()
     {
+        Check(TelemetryCollector.BusiestCore([new("0,0", 12.5), new("0,1", 131), new("0,_Total", 140), new("_Total", 150)]) == 100 &&
+              TelemetryCollector.BusiestCore([new("0,0", 7.4), new("0,_Total", 50)]) == 7 && TelemetryCollector.BusiestCore([]) == -1 && TelemetryCollector.BusiestCore(null) == -1,
+            "busiest core: per-processor busy time capped at 100, totals ignored");
         Check(TelemetryCollector.DiskActiveTime(100) == 0 && TelemetryCollector.DiskActiveTime(37.4) == 63 && TelemetryCollector.DiskActiveTime(-3) == 100,
             "disk activity is 100 - % Idle Time, without a throughput estimate");
         Check(TelemetryCollector.AdapterMemoryBytes(new WindowsGpuSample { SharedBytes = 3 << 20, DedicatedBytes = 1 << 20 }) == 4 << 20 &&

@@ -316,7 +316,14 @@ sealed class RuntimePauseRegression : Form
             await Check("topShown(cpuTopProcSub, 'ApplicationFrameHost', '19 %') && topShown(ramTopProcSub, 'ApplicationFrameHost', num(12, 1) + ' ' + GB)", "CPU and RAM cards use the same name + measure form");
             await Check("[cpuTopProcSub, igpuTopProcSub, npuTopProcSub, gpuTopProcSub, ramTopProcSub].every(el => { const slot = el.parentElement, slots = [...slot.parentElement.querySelectorAll(':scope > .sub-metric')]; return slots.length === 4 && slots[3] === slot && slot.querySelector('.lbl').dataset.i18n === 'label.topProcess'; })", "busiest process sits in the same slot under the same label on every card");
             await Check("setAdapterTopProcess(gpuTopProcSub, {name: '', pct: 0}) === undefined && gpuTopProcSub.textContent === t('adapter.idle')", "idle adapter shows the idle word without a measure");
-            await Check("specGpuName.textContent.endsWith('@ 15001 MHz')", "GPU memory clock is shown in the card title");
+            await Check("specGpuName.textContent.endsWith('@ 14001 MHz')", "GPU card title shows the rated memory clock, not the live one");
+            // Cards and map nodes say the same thing.
+            await Check("telemetryNodes.ram.value === 72 && telemetryNodes.ram.desc === t('node.ramUsed')", "RAM node shows the memory in use of the RAM ring");
+            await Check("ssdFreeSub.textContent === num(3725.9 - 1234.5, 1) + ' / ' + num(3725.9, 0) + ' ' + GB && ssdFreeSub.parentElement.querySelector('.lbl').textContent === t('label.diskSpace')", "SSD card text shows the space used, like its ring");
+            await Check("telemetryNodes.net.text === num(288) + ' ' + MB + '/s' && telemetryNodes.net.desc === t('node.networkThroughput') && nodeActivity(telemetryNodes.net) > 0", "network node shows the measured throughput, not a percentage");
+            await Check("cpuTempSub.parentElement.querySelector('.lbl').textContent === t('label.thermalZone') && cpuTempSub.textContent === num(65) + ' °C'", "a moving ACPI zone keeps its own name in the CPU card");
+            await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'integrated',plans:4,dpr:1,state:'normal'});");
+            await Check("cpuTempSub.parentElement.querySelector('.lbl').textContent === t('label.busiestCore') && cpuTempSub.textContent === '100 %'", "a fixed ACPI zone is replaced by the busiest core");
             await Check("vramUsedSub.textContent===num(2,1)+' / 32 '+GB && igpuEncodeSub.textContent==='12 %'", "iGPU card shows VRAM used / total and video encode load");
             await Check("formatCacheSize('24.0 Mo') === (NexusI18n.lang === 'fr' ? '24,0 Mo' : '24.0 MB') && formatCacheSize('2.5 Mo') === (NexusI18n.lang === 'fr' ? '2,5 Mo' : '2.5 MB')",
                 "CPU cache sizes follow the interface language");

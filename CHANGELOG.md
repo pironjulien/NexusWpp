@@ -10,6 +10,17 @@
 - Les barres de mémoire (iGPU, GPU, NPU) s'animent par `transform` sur le compositeur au lieu de `width` : mesuré avec trois barres changeant chaque seconde, 73 → 7 calculs de mise en page par seconde, 24,4 → 16,3 % d'un cœur et 12,8 → 7,5 % d'iGPU.
 - Les anneaux des jauges gardent leur animation de 0,18 s : un glissement sur 1 s coûte +2,3 points d'un cœur (le contour d'un anneau sous son halo est repeint à chaque image, il ne peut pas passer par le compositeur), plus que tout le passage de 12 à 20 i/s.
 
+### Informations exactes à l'écran
+
+- Carte SSD : « ESPACE DISQUE 547,1 Go / 930 Go » donnait l'espace libre à côté d'un anneau qui montre l'espace occupé (41 %). Le texte devient « ESPACE UTILISÉ 378,0 / 930 Go », comme l'anneau.
+- Carte CPU : « ZONE THERMIQUE 28 °C » était la zone ACPI de la carte mère, figée (301 K constants sur ce PC), pas la température du processeur. L'hôte ne la signale plus que lorsqu'elle a bougé d'au moins 1 °C depuis le démarrage, et la page la nomme alors « ZONE THERMIQUE ACPI ». Sinon la case montre le cœur logique le plus occupé (« CŒUR LE PLUS CHARGÉ 35 % », temps d'activité par processeur logique, compteur `% Processor Time` : un fil saturé y apparaît même quand la moyenne reste basse), puis les caches L2 / L3 sur un PC sans ce compteur.
+- Nœud RAM du radar : « ACTIVITÉ RAM 37 % » était un mélange inventé de charge CPU, d'activité disque et de défauts de page, à côté d'une jauge RAM à 61 % (mémoire utilisée). Le nœud montre maintenant la mémoire utilisée, comme la jauge (« MÉMOIRE UTILISÉE »). L'hôte ne lit plus le compteur de défauts de page, qui ne servait qu'à ce calcul.
+- Nœud réseau du radar : « RÉSEAU 2 % » était la racine carrée de la part du débit du lien, sans unité compréhensible. Il montre le débit mesuré, reçu + envoyé, comme la carte (« 16 Ko/s », « 2,4 Mo/s »), en réduisant la police si le texte dépasse le nœud ; la part du lien ne règle plus que le rythme des particules.
+- Carte GPU : le titre « … @ 405 MHz » affichait la fréquence mémoire du moment, lue comme la vitesse du GPU. Il affiche la fréquence mémoire nominale, une caractéristique comme la vitesse de la RAM (« @ 11501 MHz », NVML `nvmlDeviceGetMaxClockInfo`, ou WDDM `MaxMemoryFrequency` pour les autres GPU).
+- Carte RAM : « MÉMOIRE VIRTUELLE » devient « MÉMOIRE VALIDÉE », le terme du Gestionnaire des tâches pour la mémoire engagée sur la limite (RAM + fichier d'échange) ; l'anglais disait déjà « COMMITTED MEMORY ».
+- Les sous-titres des nœuds, calculés à chaque relevé mais jamais dessinés (dont une température CPU), disparaissent.
+- Tests : cœur le plus occupé (totaux ignorés, plafonné à 100), fréquence nominale WDDM, nœuds RAM et réseau alignés sur leurs cartes, texte SSD, les deux formes de la case CPU dans le test de disposition, cadence de 20 Hz sur secteur et de 12 Hz sur batterie et en économie d'énergie.
+
 ### Code C# au niveau de .NET 10
 
 - Les 91 appels natifs de l'hôte et de l'installeur passent de `DllImport` à `LibraryImport`, comme NVML : le marshalling est généré à la compilation au lieu d'un stub construit au premier appel. Points d'entrée Unicode explicites (`GetClassNameW`, `FindWindowW`, `PdhGetFormattedCounterArrayW`…, dont dix qui se résolvaient en `…A`), tampons sur la pile au lieu de `StringBuilder`, structures blittables passées par `ref`, `in` ou `out`, `sizeof` au lieu de `Marshal.SizeOf(typeof(…))`, `SetLastError` gardé seulement là où l'erreur est lue (crochet souris). Aucun appel n'est resté en `DllImport`.

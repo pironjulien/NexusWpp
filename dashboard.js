@@ -213,6 +213,13 @@ function finishRingTweens() {
     ringTweens.clear();
 }
 
+// Compact form inside a map node: "16 Ko/s", "2,4 Mo/s", "38 Mo/s".
+function formatNetSpeedShort(kbVal) {
+    if (kbVal < 1024) return `${num(Math.round(kbVal))} ${KB}/s`;
+    const mb = kbVal / 1024;
+    return `${num(mb, mb < 10 ? 1 : 0)} ${MB}/s`;
+}
+
 function formatNetSpeed(kbVal) {
     if (kbVal === 0) return `${num(0, 1)} ${KB}/s`;
     if (kbVal < 1024) return `${num(kbVal, 1)} ${KB}/s`;
@@ -304,9 +311,16 @@ function updateDOM(stats) {
     const npuLoad = track(npuCard, setGauge("npu.util", npuRing, npuVal, npuGaugeContainer, npuStats.utilization));
     const gpuLoad = track(gpuCard, setGauge("gpu.util", gpuRing, gpuVal, gpuGaugeContainer, stats.gpu.utilization));
 
-    // 2. CPU Sub-metrics (real sensor when present, otherwise another real metric fills the slot)
-    if (NexusTelemetry.sensorState(stats, 'cpuTemperature') === 'stale' || NexusTelemetry.valid(stats.cpu.temp) || lastValues.has('cpu.temp')) {
+    // 2. CPU Sub-metrics. The ACPI thermal zone is a board sensor, not the CPU die: it is shown,
+    // under its own name, only on PCs where the host has seen it move (many desktops expose a
+    // fixed value). Otherwise the slot shows the busiest logical processor, then the caches.
+    const cpuZone = stats.sources && stats.sources.cpuTemperature;
+    if (cpuZone && cpuZone.varies === true) {
         track(cpuCard, setSensorMetric(cpuTempSub, t('label.thermalZone'), stats.cpu.temp, '°C', stats, 'cpuTemperature', 'cpu.temp'));
+    } else if (NexusTelemetry.valid(stats.cpu.maxCoreUtilization) || lastValues.has('cpu.maxCore')) {
+        const busiest = track(cpuCard, lastValues.take('cpu.maxCore', stats.cpu.maxCoreUtilization));
+        setSubMetric(cpuTempSub, t('label.busiestCore'), cpuTempSub.textContent);
+        setHeldText(cpuTempSub, busiest.stale ? null : `${Math.min(100, busiest.value)} %`);
     } else {
         setSubMetric(cpuTempSub, t("label.cacheL2L3"), `${formatCacheSize(stats.cpu.l2Cache)} / ${formatCacheSize(stats.cpu.l3Cache)}`);
         cpuTempSub.classList.remove('sensor-unavailable');
@@ -341,9 +355,10 @@ function updateDOM(stats) {
     }
     track(gpuCard, setSensorMetric(gpuCoreSub, t("label.gpuPower"), stats.gpu.powerW, "W", stats, "nvidia", "gpu.powerW"));
     setAdapterTopProcess(gpuTopProcSub, stats.gpu.topProcess);
-    // Memory clock lives in the card title, like the RAM speed; the last reading is kept when it drops out.
-    if (NexusTelemetry.sensorState(stats, "nvidia") === "fresh" && NexusTelemetry.valid(stats.gpu.memoryClock) && stats.gpu.memoryClock > 0) {
-        lastGpuMemoryClock = Math.round(stats.gpu.memoryClock);
+    // Rated memory clock in the card title, a specification like the RAM speed (the live clock,
+    // 405 MHz at idle, read as the GPU's speed there).
+    if (NexusTelemetry.valid(stats.gpu.memoryClockMax) && stats.gpu.memoryClockMax > 0) {
+        lastGpuMemoryClock = Math.round(stats.gpu.memoryClockMax);
     }
     if (gpuVramBar && dgpuVramUsed.value !== null) {
         const gpuVramPct = stats.vram.totalMb > 0 ? Math.round((dgpuVramUsed.value / stats.vram.totalMb) * 100) : 0;
@@ -357,7 +372,6 @@ function updateDOM(stats) {
     const totalRamGb = stats.ram.totalGb || 0;
     // In use / available from the host (usable memory, as Task Manager); older payloads derive them from the load.
     const hostRamGb = text => text !== undefined && text !== "" ? num(text, 1) : null;
-    const usedRamGb = hostRamGb(stats.ram.usedGb) ?? (ramLoad.value !== null ? num((ramLoad.value / 100) * totalRamGb, 1) : '—');
     setHeldText(ramFreeSub, hostRamGb(stats.ram.availableGb) !== null ? `${hostRamGb(stats.ram.availableGb)} ${GB}`
         : NexusTelemetry.valid(stats.ram.utilization) ? `${num((1 - stats.ram.utilization / 100) * totalRamGb, 1)} ${GB}` : null);
     if (ramCachedSub) {
@@ -374,7 +388,10 @@ function updateDOM(stats) {
 
     // SSD card gauge: disk capacity occupation. The center map node shows live disk activity.
     track(ssdCard, setGauge("disk.storage", ssdRing, ssdVal, ssdGaugeContainer, stats.disk.storagePercent));
-    ssdFreeSub.textContent = `${num(stats.disk.freeGb)} ${GB} / ${num(stats.disk.totalGb)} ${GB}`;
+    // Space used, like the ring (the ring and the text used to read 41 % and "547 / 930 Go" free).
+    const diskTotalGb = Number(stats.disk.totalGb) || 0;
+    const diskUsedGb = Math.max(0, diskTotalGb - (Number(stats.disk.freeGb) || 0));
+    ssdFreeSub.textContent = diskTotalGb > 0 ? `${num(diskUsedGb, 1)} / ${num(diskTotalGb, 0)} ${GB}` : '—';
     if (ssdReadSub && ssdWriteSub) {
         // Formatter with dynamic unit support
         // Throughput text from the host, or the number -1 when the counters could not be read.
@@ -519,6 +536,7 @@ function updateDOM(stats) {
     // Windows energy saver: hold decorative motion still; values keep updating. The canvas
     // keeps its former 12 Hz on battery and under energy saver.
     document.body.classList.toggle("energy-saver", stats.energySaver === true);
+    setMotionEconomy(stats.energySaver === true || (stats.battery && stats.battery.present === true && stats.battery.ac === false));
     startMotionClock();
     // 7. Update Holographic Neural Telemetry Map live parameters
     const diskActivity = lastValues.take("disk.util", stats.disk.utilization);
@@ -526,78 +544,41 @@ function updateDOM(stats) {
         // Held readings stay on the map, drawn as stale; never-seen ones show "—".
         for (const node of telemetryNodeList) node.stale = false;
         telemetryNodes.npu.value = stats.totalProcesses;
-        telemetryNodes.npu.subLabel = stats.totalProcesses ? t("node.processes", { n: stats.totalProcesses }) : "CORE ACTIVE";
 
+        // Each orbit node repeats the main reading of its card, so the map and the cards agree.
         telemetryNodes.cpu.value = cpuLoad.value;
         telemetryNodes.cpu.stale = cpuLoad.stale;
-        telemetryNodes.cpu.subLabel = stats.cpu.temp >= 0 ? `${num(stats.cpu.temp)} °C` : `${num(stats.cpu.freqGhz)} GHz`;
 
         telemetryNodes.igpu.value = igpuLoad.value;
         telemetryNodes.igpu.stale = igpuLoad.stale;
-        telemetryNodes.igpu.subLabel = `${usedVramGb} ${GB}`;
 
-    setMotionEconomy(stats.energySaver === true || (stats.battery && stats.battery.present === true && stats.battery.ac === false));
         telemetryNodes.npuAccel.value = npuLoad.value;
         telemetryNodes.npuAccel.stale = npuLoad.stale;
-        telemetryNodes.npuAccel.subLabel = `${npuUsedGb} ${GB}`;
-        
-        // Rolling minimum baseline for page faults/sec to filter idle background noise on any PC
-        if (!window.ramFaultsHistory) {
-            window.ramFaultsHistory = [];
-        }
-        const faults = stats.ram.activity || 0;
-        window.ramFaultsHistory.push(faults);
-        if (window.ramFaultsHistory.length > 30) {
-            window.ramFaultsHistory.shift();
-        }
-        const ramBaseline = Math.min(...window.ramFaultsHistory);
-        const ramDelta = Math.max(0, faults - ramBaseline);
-        
-        // Dynamic noise gate (minimum of 5000 faults/sec or 15% of baseline)
-        const noiseGate = Math.max(5000, ramBaseline * 0.15);
-        const activeDelta = ramDelta > noiseGate ? (ramDelta - noiseGate) : 0;
-        
-        // Combine soft page faults rate, CPU load, and Disk activity for a hyper-realistic real-time memory bus activity
-        const faultsFactor = Math.min(40, Math.sqrt(activeDelta) * 0.15);
-        const cpuFactor = (cpuLoad.value || 0) * 0.45;
-        const diskFactor = (diskActivity.value || 0) * 0.45;
-        
-        let ramActivityPct = Math.round(cpuFactor + diskFactor + faultsFactor);
-        
-        // Drop completely to 0% when idle to satisfy user request
-        if (ramActivityPct < 4) {
-            ramActivityPct = 0;
-        }
-        ramActivityPct = Math.min(100, ramActivityPct);
-        
-        telemetryNodes.ram.value = ramActivityPct;
-        telemetryNodes.ram.stale = cpuLoad.stale || diskActivity.stale;
-        telemetryNodes.ram.subLabel = `${usedRamGb} / ${num(totalRamGb)} ${GB}`;
+
+        // Memory in use, as the RAM ring (it used to show a mix of CPU load, disk activity and
+        // page faults labelled "RAM activity", 37 % next to a 61 % ring).
+        telemetryNodes.ram.value = ramLoad.value;
+        telemetryNodes.ram.stale = ramLoad.stale;
 
         telemetryNodes.gpu.value = gpuLoad.value;
         telemetryNodes.gpu.stale = gpuLoad.stale;
-        telemetryNodes.gpu.subLabel = stats.gpu.temp >= 0 ? `${num(stats.gpu.temp)} °C` : `${dgpuVramUsedGb} ${GB}`;
 
         if (stats.disk.drive) telemetryNodes.ssd.label = `SSD ${stats.disk.drive}`;
-        telemetryNodes.ssd.value = diskActivity.value; // Dynamic active % inside the center node map!
+        telemetryNodes.ssd.value = diskActivity.value; // disk active time, as Task Manager
         telemetryNodes.ssd.stale = diskActivity.stale;
-        telemetryNodes.ssd.subLabel = t("node.diskFree", { gb: `${num(stats.disk.freeGb)} ${GB}` });
-        
-        const maxSpeedKb = getNetworkLinkSpeedKb(stats);
-        
+
+        // Network: the measured throughput (received + sent), as the card, instead of an
+        // unexplained percentage. The square-root share of the link speed only paces the packets.
         let netActivityPct = 0;
         if (totalNetKb > 0) {
-            const rawPct = (totalNetKb / maxSpeedKb) * 100;
-            // Logarithmic/square root scale to keep it beautifully alive on everyday usage
+            const rawPct = (totalNetKb / getNetworkLinkSpeedKb(stats)) * 100;
             netActivityPct = Math.min(100, Math.max(1, Math.round(Math.sqrt(rawPct / 100) * 100)));
         }
-        
-        telemetryNodes.net.value = netActivityPct;
+        if (netRatesValid) telemetryNodes.net.text = formatNetSpeedShort(totalNetKb);
+        telemetryNodes.net.value = netRatesValid ? totalNetKb : telemetryNodes.net.text ? telemetryNodes.net.value : null;
+        telemetryNodes.net.stale = !netRatesValid && telemetryNodes.net.text !== undefined;
+        telemetryNodes.net.activity = netActivityPct;
         pushCardHistory("net-card", netActivityPct);
-        telemetryNodes.net.suffix = "%";
-        
-        const speedStr = formatNetSpeed(totalNetKb);
-        telemetryNodes.net.subLabel = speedStr;
     }
 
     pushCardHistory("cpu-card", stats.cpu.utilization);
@@ -622,7 +603,7 @@ function updateDOM(stats) {
         const node = telemetryNodes[key];
         if (node.visible === false) return;
         // A held (stale) reading is not live activity: no data packets for it.
-        const pct = node.stale ? 0 : node.value || 0;
+        const pct = node.stale ? 0 : nodeActivity(node);
         const previous = lastTelemetryNodeValues[key];
         lastTelemetryNodeValues[key] = pct;
         if (previous === undefined || Math.abs(pct - previous) >= 1) {
