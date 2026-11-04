@@ -38,6 +38,8 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <CopyDocumentationFileToOutputDirectory>false</CopyDocumentationFileToOutputDirectory>
     <PublishDocumentationFile>false</PublishDocumentationFile>
+    <!-- Nor the IntelliSense files of the packages (Microsoft.Web.WebView2.*.xml): the app never reads them. -->
+    <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
     <DebugType>none</DebugType>
     <Optimize>true</Optimize>
     <Deterministic>true</Deterministic>
