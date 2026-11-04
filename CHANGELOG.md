@@ -2,6 +2,8 @@
 
 ## Non publié
 
+## 2026-11-04 — 1.0.53.0
+
 ### Releases construites par GitHub
 
 - Chaque nouvelle version est construite, testée et publiée par GitHub (`.github/workflows/release.yml`), plus sur le PC : `test.ps1`, paquet Store, installeur, `SHA256SUMS.txt` et attestation de provenance Sigstore, attachés à la release immuable `v<VERSION>` avec sa section du changelog.
