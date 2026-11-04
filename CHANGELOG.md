@@ -7,6 +7,13 @@
 - Le titre de la carte GPU affiche la fréquence actuelle du cœur graphique, lue par NVML à chaque relevé du GPU (toutes les 5 s sur secteur, 15 s sur batterie), comme la vitesse de la carte CPU : « GPU NVIDIA GeForce RTX 4080 SUPER @ 210 MHz » au repos, plus de 2 000 MHz en charge. La fréquence mémoire nominale de la 1.0.54.0 (« @ 11501 MHz ») disparaît, avec sa lecture NVML (`nvmlDeviceGetMaxClockInfo`) et WDDM (`MaxMemoryFrequency`).
 - Une lecture périmée n'est pas affichée, et rien n'est affiché pour les GPU AMD et Intel : leurs capteurs WDDM donnent la fréquence mémoire, pas celle du cœur. La fréquence mémoire du moment n'a pas de case libre sur la carte (température, VRAM, consommation, processus) et n'est pas affichée.
 
+### Cartes = état global, centre = mouvement
+
+- Carte iGPU, mêmes cases que la carte GPU : température quand le pilote la fournit (WDDM, comme pour un GPU AMD ou Intel séparé ; l'UHD 770 n'en donne pas, et un pilote muet n'est plus interrogé après trois lectures vides), sinon la version du pilote ; « MÉMOIRE GPU 1,2 / 16 Go » ; « VIDÉO », la charge du moteur vidéo le plus occupé (décodage ou encodage), au lieu de deux cases « DÉCODAGE VIDÉO 0 % » et « ENCODAGE VIDÉO 0 % » ; le processus en tête.
+- Carte RAM, comme la mémoire des GPU : « UTILISÉE 19,3 / 31,8 Go » (mémoire utilisable, comme le Gestionnaire des tâches), « MÉMOIRE VALIDÉE 25,4 / 55,3 Go », « FICHIER D'ÉCHANGE 2,0 / 24 Go » (fichiers d'échange en service et alloués, lus une fois par minute par `Win32_PageFileUsage`) et le processus en tête ; « DISPONIBLE » et « MISE EN CACHE » disparaissent.
+- Nœud SSD du centre : le débit en direct, lecture + écriture (« 3,1 Mo/s »), comme le nœud réseau (réception + envoi), au lieu du temps d'activité en pourcentage, qui ne règle plus que le rythme des particules. Le nœud RAM garde la mémoire utilisée : Windows ne mesure pas de « mouvement » de la mémoire compréhensible (les défauts de page, retirés en 1.0.54.0, comptent aussi les accès au cache), et cette valeur change en direct avec les programmes.
+- La carte CPU n'est plus marquée « Capteurs sans réponse » par une zone thermique ACPI qu'elle n'affiche pas.
+
 ## 2026-11-04 — 1.0.54.0
 
 ### Animation plus fluide pour presque rien

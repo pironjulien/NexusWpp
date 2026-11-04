@@ -90,16 +90,16 @@ function dimGauges() {
 
     vramUsedSub.textContent = `0.0 ${GB}`;
     if (igpuTopProcSub) igpuTopProcSub.textContent = `--`;
-    if (igpuEncodeSub) igpuEncodeSub.textContent = `-- %`;
-    if (igpuDecodeSub) igpuDecodeSub.textContent = `-- %`;
+    if (igpuTempSub) igpuTempSub.textContent = `—`;
+    if (igpuVideoSub) igpuVideoSub.textContent = `—`;
     if (npuUsedSub) npuUsedSub.textContent = `0.0 ${GB}`;
     if (npuTopProcSub) npuTopProcSub.textContent = `--`;
     if (npuFreeSub) npuFreeSub.textContent = `0.0 ${GB}`;
     if (npuTotalSub) npuTotalSub.textContent = `0 ${GB}`;
     setBarFill(npuUtilBar, 0);
 
-    ramFreeSub.textContent = `0.0 ${GB}`;
-    if (ramCachedSub) ramCachedSub.textContent = `0.0 ${GB}`;
+    ramUsedSub.textContent = `—`;
+    if (ramPageFileSub) ramPageFileSub.textContent = `—`;
     if (ramTopProcSub) ramTopProcSub.textContent = `--`;
     ramStatusSub.textContent = `0.0 ${GB} / 0.0 ${GB}`;
     ramStatusSub.className = "val";

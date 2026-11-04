@@ -86,20 +86,21 @@
                             </div>
                         </div>
                         <div class="card-sub-metrics">
+                            <!-- Same slots as the GPU card: sensor, memory, third reading, busiest process. -->
                             <div class="sub-metric">
-                                <span class="lbl" data-i18n="label.videoDecode">DÉCODAGE VIDÉO</span>
-                                <span class="val highlight-green" id="igpu-decode-sub">-- %</span>
+                                <span class="lbl" data-i18n="label.driver">PILOTE</span>
+                                <span class="val highlight-green" id="igpu-temp-sub">—</span>
                             </div>
                             <div class="sub-metric">
-                                <span class="lbl" data-i18n="label.vram">VRAM</span>
-                                <span class="val highlight-green" id="vram-used-sub">-- Go</span>
+                                <span class="lbl" data-i18n="label.vram">MÉMOIRE GPU</span>
+                                <span class="val highlight-green" id="vram-used-sub">—</span>
                             </div>
                             <div class="sub-metric">
-                                <span class="lbl" data-i18n="label.videoEncode">ENCODAGE VIDÉO</span>
-                                <span class="val highlight-green" id="igpu-encode-sub">-- %</span>
+                                <span class="lbl" data-i18n="label.video">VIDÉO</span>
+                                <span class="val highlight-green" id="igpu-video-sub">—</span>
                             </div>
                             <div class="sub-metric">
-                                <span class="lbl" data-i18n="label.topProcess">TOP PROCESSUS</span>
+                                <span class="lbl" data-i18n="label.topProcess">PROCESSUS EN TÊTE</span>
                                 <span class="val highlight-green fit-one-line" id="igpu-top-proc-sub">--</span>
                             </div>
                             <div class="sub-progress-container">
@@ -244,19 +245,19 @@
                     <!-- Sub-metrics Grid for RAM -->
                     <div class="card-sub-metrics">
                         <div class="sub-metric">
-                            <span class="lbl" data-i18n="label.available">DISPONIBLE</span>
-                            <span class="val" id="ram-free-sub">-- Go</span>
-                        </div>
-                        <div class="sub-metric">
-                            <span class="lbl" data-i18n="label.cached">MISE EN CACHE</span>
-                            <span class="val" id="ram-cached-sub">-- Go</span>
+                            <span class="lbl" data-i18n="label.memoryInUse">UTILISÉE</span>
+                            <span class="val" id="ram-used-sub">—</span>
                         </div>
                         <div class="sub-metric">
                             <span class="lbl" data-i18n="label.virtualMemory">MÉMOIRE VALIDÉE</span>
-                            <span class="val text-blue" id="ram-status-sub">-- Go / -- Go</span>
+                            <span class="val text-blue" id="ram-status-sub">—</span>
                         </div>
                         <div class="sub-metric">
-                            <span class="lbl" data-i18n="label.topProcess">TOP PROCESSUS</span>
+                            <span class="lbl" data-i18n="label.pageFile">FICHIER D'ÉCHANGE</span>
+                            <span class="val" id="ram-pagefile-sub">—</span>
+                        </div>
+                        <div class="sub-metric">
+                            <span class="lbl" data-i18n="label.topProcess">PROCESSUS EN TÊTE</span>
                             <span class="val fit-one-line" id="ram-top-proc-sub">--</span>
                         </div>
                     </div>

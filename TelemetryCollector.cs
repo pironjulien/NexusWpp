@@ -46,6 +46,15 @@ namespace DesktopHtmlHost
         private string npuLuid = "";
         private readonly List<string> directxAdapterLuids = new List<string>();
         private long dgpuLuidValue;
+        private long igpuLuidValue;
+        // iGPU sensors reported by its driver (WDDM), as for a non-NVIDIA discrete GPU. Drivers that
+        // report nothing (Intel UHD here) stop being asked after three empty reads.
+        private WddmGpuSample? igpuWddmSample;
+        private long igpuWddmLastAttemptMs = -1, igpuWddmLastSuccessMs = -1;
+        private int igpuWddmEmptyReads;
+        // Page file in use / allocated (MB), from Win32_PageFileUsage once a minute; -1 unknown.
+        private long pageFileUsedMb = -1, pageFileTotalMb = -1;
+        private long pageFileLastReadMs = -1;
         private string dgpuInstanceId = "";
         // Windows GPU memory budget of the iGPU (dedicated carve-out + shared system memory).
         private long igpuMemoryBudgetBytes;
@@ -288,7 +297,8 @@ namespace DesktopHtmlHost
                 GpuClassifier.Select(adapters, out igpu, out dgpu);
                 if (igpu != null)
                 {
-                    igpuLuid = igpu.Luid; IgpuInfo = igpu.Name;
+                    if (igpu.LuidValue != igpuLuidValue) { igpuWddmEmptyReads = 0; igpuWddmLastSuccessMs = -1; igpuWddmSample = null; }
+                    igpuLuid = igpu.Luid; igpuLuidValue = igpu.LuidValue; IgpuInfo = igpu.Name;
                     igpuMemoryBudgetBytes = igpu.DedicatedBytes + igpu.SharedBytes;
                 }
                 if (dgpu != null)
@@ -1255,6 +1265,19 @@ namespace DesktopHtmlHost
                     gpuFanRpm = wddmSample.FanRpm ?? -1;
                 }
             }
+            double igpuTemp = -1;
+            if (igpuLuidValue != 0)
+            {
+                long nowMs = collectClock.ElapsedMilliseconds;
+                if ((igpuWddmLastSuccessMs >= 0 || igpuWddmEmptyReads < 3) && (igpuWddmLastAttemptMs < 0 || nowMs - igpuWddmLastAttemptMs >= 2000))
+                {
+                    igpuWddmLastAttemptMs = nowMs;
+                    igpuWddmSample = WddmGpuSensors.Read(igpuLuidValue);
+                    if (igpuWddmSample != null) igpuWddmLastSuccessMs = nowMs; else igpuWddmEmptyReads++;
+                }
+                if (igpuWddmSample != null && nowMs - igpuWddmLastSuccessMs <= 6000) igpuTemp = igpuWddmSample.TemperatureC ?? -1;
+            }
+            ReadPageFile();
             ulong vramTotal = nv != null && nv.TotalMiB.HasValue ? (ulong)(nv.TotalMiB.Value * 1048576) : (ulong)Math.Max(0, dgpuVramTotalBytes);
             ulong vramUsed = nv != null && nv.UsedMiB.HasValue ? (ulong)(nv.UsedMiB.Value * 1048576) : (ulong)Math.Max(0, cachedDgpuMemBytes);
             bool windowsGpuFresh = gpuCountersFresh && (DateTime.UtcNow - lastGpuPerfTime).TotalSeconds <= 6;
@@ -1351,6 +1374,7 @@ namespace DesktopHtmlHost
                 json.WriteBoolean("detected", igpuDetected);
                 json.WriteNumber("utilization", igpuUtil);
                 json.WriteNumber("decodeUtil", igpuDecodeUtil);
+                json.WriteNumber("temp", Finite(igpuTemp));
                 json.WriteNumber("usedMb", windowsGpuFresh && igpuMemBytes >= 0 ? igpuMemBytes / (1024 * 1024) : -1);
                 json.WriteNumber("totalMb", igpuTotalMb);
                 json.WriteNumber("totalGb", RoundGb(igpuTotalMb));
@@ -1400,6 +1424,8 @@ namespace DesktopHtmlHost
                 json.WriteString("availableGb", ramTotalPhys > 0 ? Gigabytes((long)ramFreePhys) : "");
                 json.WriteString("commitUsedGb", Gigabytes(commitUsedBytes));
                 json.WriteString("commitLimitGb", Gigabytes(commitLimitBytes));
+                json.WriteNumber("pageFileUsedMb", pageFileUsedMb);
+                json.WriteNumber("pageFileTotalMb", pageFileTotalMb);
                 json.WriteString("cachedGb", Gigabytes(ramCachedBytes));
                 json.WriteNumber("poolPagedMb", ramPoolPagedBytes / (1024 * 1024));
                 json.WriteNumber("poolNonPagedMb", ramPoolNonPagedBytes / (1024 * 1024));
@@ -1483,6 +1509,34 @@ namespace DesktopHtmlHost
         // A non-finite double would make the whole message invalid JSON: report it as unavailable.
         private static double Finite(double value) { return double.IsFinite(value) ? value : -1; }
         // Task Manager "Active time": the share of the interval the disk was not idle.
+        // Page file in use / allocated (all page files). Read once a minute: the value moves slowly,
+        // and the WMI provider stays asleep the rest of the time. 0 / 0 when there is no page file.
+        private void ReadPageFile()
+        {
+            long nowMs = collectClock.ElapsedMilliseconds;
+            if (pageFileLastReadMs >= 0 && nowMs - pageFileLastReadMs < 60000) return;
+            pageFileLastReadMs = nowMs;
+            try
+            {
+                long used = 0, total = 0;
+                using (var searcher = new ManagementObjectSearcher("SELECT AllocatedBaseSize, CurrentUsage FROM Win32_PageFileUsage"))
+                {
+                    foreach (ManagementObject file in searcher.Get())
+                    {
+                        total += Convert.ToInt64(file["AllocatedBaseSize"] ?? 0, CultureInfo.InvariantCulture);
+                        used += Convert.ToInt64(file["CurrentUsage"] ?? 0, CultureInfo.InvariantCulture);
+                    }
+                }
+                pageFileTotalMb = total;
+                pageFileUsedMb = total > 0 ? Math.Min(used, total) : 0;
+            }
+            catch (Exception ex)
+            {
+                pageFileUsedMb = pageFileTotalMb = -1;
+                Program.LogDebug("Page file read error: " + ex.Message);
+            }
+        }
+
         // Busiest logical processor, 0-100; -1 without a per-core reading.
         // One saturated thread shows here even when the average load stays low.
         internal static int BusiestCore(List<KeyValuePair<string, double>>? cores)

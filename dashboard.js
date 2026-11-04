@@ -131,6 +131,11 @@ function formatCacheSize(text) {
     return Number.isFinite(value) ? `${num(value, 1)} ${MB}` : '—';
 }
 
+// The ACPI zone is shown only once the host has seen it move (see the CPU card below).
+function cpuZoneShown(stats) {
+    return !!(stats.sources && stats.sources.cpuTemperature && stats.sources.cpuTemperature.varies === true);
+}
+
 // Swaps a sub-metric slot (label + value) so a missing sensor can be replaced by another real metric.
 function setSubMetric(valEl, label, value) {
     if (!valEl) return;
@@ -212,11 +217,13 @@ function finishRingTweens() {
     ringTweens.clear();
 }
 
-// Compact form inside a map node: "16 Ko/s", "2,4 Mo/s", "38 Mo/s".
-function formatNetSpeedShort(kbVal) {
+// Compact rate inside a map node: "16 Ko/s", "2,4 Mo/s", "38 Mo/s", "13 Go/s".
+function formatRateShort(kbVal) {
     if (kbVal < 1024) return `${num(Math.round(kbVal))} ${KB}/s`;
     const mb = kbVal / 1024;
-    return `${num(mb, mb < 10 ? 1 : 0)} ${MB}/s`;
+    if (mb < 1024) return `${num(mb, mb < 10 ? 1 : 0)} ${MB}/s`;
+    const gb = mb / 1024;
+    return `${num(gb, gb < 10 ? 1 : 0)} ${GB}/s`;
 }
 
 function formatNetSpeed(kbVal) {
@@ -313,8 +320,7 @@ function updateDOM(stats) {
     // 2. CPU Sub-metrics. The ACPI thermal zone is a board sensor, not the CPU die: it is shown,
     // under its own name, only on PCs where the host has seen it move (many desktops expose a
     // fixed value). Otherwise the slot shows the busiest logical processor, then the caches.
-    const cpuZone = stats.sources && stats.sources.cpuTemperature;
-    if (cpuZone && cpuZone.varies === true) {
+    if (cpuZoneShown(stats)) {
         track(cpuCard, setSensorMetric(cpuTempSub, t('label.thermalZone'), stats.cpu.temp, '°C', stats, 'cpuTemperature', 'cpu.temp'));
     } else if (NexusTelemetry.valid(stats.cpu.maxCoreUtilization) || lastValues.has('cpu.maxCore')) {
         const busiest = track(cpuCard, lastValues.take('cpu.maxCore', stats.cpu.maxCoreUtilization));
@@ -367,13 +373,15 @@ function updateDOM(stats) {
     // RAM circular gauge
     const ramLoad = track(ramCard, setGauge("ram.util", ramRing, ramVal, ramGaugeContainer, stats.ram.utilization));
 
-    const totalRamGb = stats.ram.totalGb || 0;
-    // In use / available from the host (usable memory, as Task Manager); older payloads derive them from the load.
-    const hostRamGb = text => text !== undefined && text !== "" ? num(text, 1) : null;
-    setHeldText(ramFreeSub, hostRamGb(stats.ram.availableGb) !== null ? `${hostRamGb(stats.ram.availableGb)} ${GB}`
-        : NexusTelemetry.valid(stats.ram.utilization) ? `${num((1 - stats.ram.utilization / 100) * totalRamGb, 1)} ${GB}` : null);
-    if (ramCachedSub) {
-        ramCachedSub.textContent = `${num(stats.ram.cachedGb)} ${GB}`;
+    // The card gives the global state, like the VRAM of the GPU cards: in use / usable memory
+    // (Task Manager "In use", from the host), committed memory and the page file.
+    const usedRamText = stats.ram.usedGb !== undefined && stats.ram.usedGb !== "" ? num(stats.ram.usedGb, 1) : null;
+    const usableRamGb = Number(stats.ram.usedGb) + Number(stats.ram.availableGb);
+    setHeldText(ramUsedSub, usedRamText !== null && usableRamGb > 0 ? `${usedRamText} / ${num(usableRamGb, 1)} ${GB}` : null);
+    if (ramPageFileSub) {
+        const pageTotal = Number(stats.ram.pageFileTotalMb), pageUsed = Number(stats.ram.pageFileUsedMb);
+        setHeldText(ramPageFileSub, !NexusTelemetry.valid(pageTotal) || !NexusTelemetry.valid(pageUsed) ? null
+            : pageTotal === 0 ? t("adapter.idle") : `${num(pageUsed / 1024, 1)} / ${num(pageTotal / 1024, 0)} ${GB}`);
     }
     if (ramTopProcSub) {
         const topRam = stats.topRamProcess;
@@ -381,7 +389,7 @@ function updateDOM(stats) {
         const ramText = ramMb >= 1024 ? `${num(ramMb / 1024, 1)} ${GB}` : `${ramMb} ${MB}`;
         setTopProcess(ramTopProcSub, topRam && topRam.name ? topRam : null, ramText);
     }
-    ramStatusSub.textContent = `${num(stats.ram.commitUsedGb)} ${GB} / ${num(stats.ram.commitLimitGb)} ${GB}`;
+    ramStatusSub.textContent = `${num(stats.ram.commitUsedGb)} / ${num(stats.ram.commitLimitGb)} ${GB}`;
     ramStatusSub.className = "val text-blue";
 
     // SSD card gauge: disk capacity occupation. The center map node shows live disk activity.
@@ -457,13 +465,21 @@ function updateDOM(stats) {
     // Same form as the GPU card: used / total.
     setHeldText(vramUsedSub, igpuUsedFresh ? `${usedVramGb} / ${totalVramGb} ${GB}` : null);
     setAdapterTopProcess(igpuTopProcSub, stats.igpu.topProcess);
-    if (igpuDecodeSub) {
-        const decodeFresh = NexusTelemetry.valid(stats.igpu.decodeUtil);
-        if (setHeldText(igpuDecodeSub, decodeFresh ? `${Math.min(100, stats.igpu.decodeUtil)} %` : null)) held.add(vramCard);
+    // Same slots as the GPU card: the driver's temperature when it reports one (WDDM), otherwise
+    // the driver version; then the busier of the two video engines (decode, encode), measured
+    // like the load ring: 0 % except while a video plays or is recorded.
+    if (igpuTempSub) {
+        if (NexusTelemetry.valid(stats.igpu.temp) || lastValues.has("igpu.temp")) {
+            const temp = track(vramCard, lastValues.take("igpu.temp", stats.igpu.temp));
+            setSubMetric(igpuTempSub, t("label.temperature"), igpuTempSub.textContent);
+            setHeldText(igpuTempSub, temp.stale ? null : `${num(temp.value)} °C`);
+        } else {
+            setSubMetric(igpuTempSub, t("label.driver"), stats.igpu.driver || "—");
+        }
     }
-    if (igpuEncodeSub) {
-        const encodeFresh = NexusTelemetry.valid(stats.igpu.encodeUtil);
-        if (setHeldText(igpuEncodeSub, encodeFresh ? `${Math.min(100, stats.igpu.encodeUtil)} %` : null)) held.add(vramCard);
+    if (igpuVideoSub) {
+        const videoFresh = NexusTelemetry.valid(stats.igpu.decodeUtil) && NexusTelemetry.valid(stats.igpu.encodeUtil);
+        if (setHeldText(igpuVideoSub, videoFresh ? `${Math.min(100, Math.max(stats.igpu.decodeUtil, stats.igpu.encodeUtil))} %` : null)) held.add(vramCard);
     }
     if (igpuVramBar && igpuUsed.value !== null) {
         const igpuVramPct = Math.round((igpuUsed.value / stats.igpu.totalMb) * 100) || 0;
@@ -551,6 +567,8 @@ function updateDOM(stats) {
         telemetryNodes.igpu.stale = igpuLoad.stale;
 
         telemetryNodes.npuAccel.value = npuLoad.value;
+        // SSD: the live throughput, read + write, like the network node (the card gives the space
+        // used). The disk active time only paces the packets.
         telemetryNodes.npuAccel.stale = npuLoad.stale;
 
         // Memory in use, as the RAM ring (it used to show a mix of CPU load, disk activity and
@@ -562,8 +580,12 @@ function updateDOM(stats) {
         telemetryNodes.gpu.stale = gpuLoad.stale;
 
         if (stats.disk.drive) telemetryNodes.ssd.label = `SSD ${stats.disk.drive}`;
-        telemetryNodes.ssd.value = diskActivity.value; // disk active time, as Task Manager
-        telemetryNodes.ssd.stale = diskActivity.stale;
+        const diskRead = parseFloat(stats.disk.readMb), diskWrite = parseFloat(stats.disk.writeMb);
+        const diskRatesValid = NexusTelemetry.valid(diskRead) && NexusTelemetry.valid(diskWrite);
+        if (diskRatesValid) telemetryNodes.ssd.text = formatRateShort((diskRead + diskWrite) * 1024);
+        telemetryNodes.ssd.value = diskRatesValid ? diskRead + diskWrite : telemetryNodes.ssd.text ? telemetryNodes.ssd.value : null;
+        telemetryNodes.ssd.stale = !diskRatesValid && telemetryNodes.ssd.text !== undefined;
+        telemetryNodes.ssd.activity = diskActivity.value || 0;
 
         // Network: the measured throughput (received + sent), as the card, instead of an
         // unexplained percentage. The square-root share of the link speed only paces the packets.
@@ -572,7 +594,7 @@ function updateDOM(stats) {
             const rawPct = (totalNetKb / getNetworkLinkSpeedKb(stats)) * 100;
             netActivityPct = Math.min(100, Math.max(1, Math.round(Math.sqrt(rawPct / 100) * 100)));
         }
-        if (netRatesValid) telemetryNodes.net.text = formatNetSpeedShort(totalNetKb);
+        if (netRatesValid) telemetryNodes.net.text = formatRateShort(totalNetKb);
         telemetryNodes.net.value = netRatesValid ? totalNetKb : telemetryNodes.net.text ? telemetryNodes.net.value : null;
         telemetryNodes.net.stale = !netRatesValid && telemetryNodes.net.text !== undefined;
         telemetryNodes.net.activity = netActivityPct;
@@ -831,7 +853,7 @@ function refreshTelemetryFreshness(force = false) {
         const isGpu = card === gpuCard;
         const status = isGpu ? NexusTelemetry.sensorState(lastTelemetry, 'nvidia')
             : card === vramCard || card === npuCard ? NexusTelemetry.sensorState(lastTelemetry, 'windowsGpu')
-            : card === cpuCard ? NexusTelemetry.sensorState(lastTelemetry, 'cpuTemperature') : 'fresh';
+            : card === cpuCard && cpuZoneShown(lastTelemetry) ? NexusTelemetry.sensorState(lastTelemetry, 'cpuTemperature') : 'fresh';
         const stale = expired || status === 'stale' || heldReadingCards.has(card);
         card.classList.toggle('sensor-stale', stale);
         if (stale) {

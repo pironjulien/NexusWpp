@@ -187,7 +187,7 @@ const telemetryNodes = {
         value: 0,
         suffix: "%",
         rotAngle: 0,
-        desc: t("node.diskActivity")
+        desc: t("node.diskThroughput")
     },
     net: {
         x: 0, y: 0,

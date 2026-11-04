@@ -28,8 +28,8 @@ const acceleratorRow = document.querySelector(".accelerator-row");
 const ramCard = document.getElementById("ram-card");
 const ssdCard = document.getElementById("ssd-card");
 const vramCard = document.getElementById("vram-card");
-const igpuEncodeSub = document.getElementById("igpu-encode-sub");
-const igpuDecodeSub = document.getElementById("igpu-decode-sub");
+const igpuTempSub = document.getElementById("igpu-temp-sub");
+const igpuVideoSub = document.getElementById("igpu-video-sub");
 
 // Sub-metrics DOM bindings
 const cpuTempSub = document.getElementById("cpu-temp-sub");
@@ -46,8 +46,8 @@ const gpuTopProcSub = document.getElementById("gpu-top-proc-sub");
 const ramVal = document.getElementById("ram-val");
 const ramRing = document.getElementById("ram-ring");
 const ramGaugeContainer = document.getElementById("ram-gauge-container");
-const ramFreeSub = document.getElementById("ram-free-sub");
-const ramCachedSub = document.getElementById("ram-cached-sub");
+const ramUsedSub = document.getElementById("ram-used-sub");
+const ramPageFileSub = document.getElementById("ram-pagefile-sub");
 const ramTopProcSub = document.getElementById("ram-top-proc-sub");
 const ramStatusSub = document.getElementById("ram-status-sub");
 

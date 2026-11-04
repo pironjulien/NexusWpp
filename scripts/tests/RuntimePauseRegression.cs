@@ -327,7 +327,11 @@ sealed class RuntimePauseRegression : Form
             await Check("cpuTempSub.parentElement.querySelector('.lbl').textContent === t('label.thermalZone') && cpuTempSub.textContent === num(65) + ' °C'", "a moving ACPI zone keeps its own name in the CPU card");
             await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'integrated',plans:4,dpr:1,state:'normal'});");
             await Check("cpuTempSub.parentElement.querySelector('.lbl').textContent === t('label.busiestCore') && cpuTempSub.textContent === '100 %'", "a fixed ACPI zone is replaced by the busiest core");
-            await Check("vramUsedSub.textContent===num(2,1)+' / 32 '+GB && igpuEncodeSub.textContent==='12 %'", "iGPU card shows VRAM used / total and video encode load");
+            await Check("vramUsedSub.textContent===num(2,1)+' / 32 '+GB && igpuVideoSub.textContent==='24 %' && igpuTempSub.parentElement.querySelector('.lbl').textContent===t('label.driver') && igpuTempSub.textContent==='32.0.101.7092'", "iGPU card has the GPU card's slots: driver (no sensor), memory used / total, busier video engine");
+            await Check("ramUsedSub.textContent===num(92.1,1)+' / '+num(127.9,1)+' '+GB && ramPageFileSub.textContent===num(2,1)+' / 16 '+GB", "RAM card shows memory in use / usable and the page file, like the GPU memory");
+            await Check("telemetryNodes.ssd.text===num(13)+' '+GB+'/s' && telemetryNodes.ssd.desc===t('node.diskThroughput') && nodeActivity(telemetryNodes.ssd)===58", "SSD node shows read + write throughput, paced by the active time");
+            await Check("specCpuName.textContent==='CPU Core Ultra 9 285K' && specGpuName.textContent==='GPU RTX 5090 · 2875 MHz' && specVramName.textContent==='iGPU Intel' && specRamName.textContent==='RAM DDR5 · 6400 MT/s'", "card titles are short: kind, model, live clock");
+            await Check("new Set([...document.querySelectorAll('.gauge-card .gauge-label')].filter(e=>e.getClientRects().length).map(e=>getComputedStyle(e).fontSize)).size===1", "every card title has the same size");
             await Check("formatCacheSize('24.0 Mo') === (NexusI18n.lang === 'fr' ? '24,0 Mo' : '24.0 MB') && formatCacheSize('2.5 Mo') === (NexusI18n.lang === 'fr' ? '2,5 Mo' : '2.5 MB')",
                 "CPU cache sizes follow the interface language");
             exitCode = 0;
