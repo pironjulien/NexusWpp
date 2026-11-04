@@ -2,6 +2,10 @@
 
 ## Non publié
 
+### iGPU et GPU retrouvés après un démarrage précoce
+
+- Les adaptateurs graphiques sont recherchés à nouveau, au plus une fois par minute, tant que l'un d'eux manque dans les 10 minutes qui suivent le démarrage de Windows, ou dès que l'identifiant (LUID) d'un adaptateur connu ne s'ouvre plus (pilote redémarré). Lancé 16 s après le démarrage, avant que le pilote Intel ait inscrit le LUID de la session, NexusWpp laissait la carte iGPU vide (charge, décodage, encodage, VRAM, processus) jusqu'à sa fermeture.
+
 ### Releases
 
 - `SHA256SUMS.txt` est écrit avec des fins de ligne LF : `sha256sum -c SHA256SUMS.txt` le lit tel quel (celui de 1.0.53.0, en CRLF, demande `tr -d '\r'`).

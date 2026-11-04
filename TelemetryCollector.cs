@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 using System.IO;
 using System.Diagnostics;
@@ -201,13 +201,16 @@ namespace DesktopHtmlHost
         private DateTime lastCpuTempTime = DateTime.MinValue;
         private int cachedCpuTempC = -1;
         private string cpuTemperatureStatus = "unavailable";
-        public void Initialize()
-        {
-            try { OpenPerformanceCounters(); }
-            catch (Exception ex) { DesktopHtmlHost.Program.LogDebug("Performance counters unavailable: " + ex.Message); }
+        private DateTime lastAdapterDiscovery = DateTime.MinValue;
 
-            // GPU names, LUIDs and memory sizes from the DirectX adapter registry (one source for
-            // all three), classified by dedicated memory rather than by vendor name.
+        // GPU names, LUIDs and memory sizes from the DirectX adapter registry (one source for all three),
+        // classified by dedicated memory rather than by vendor name. Run at start, then again while an adapter is
+        // missing or gone: right after boot the driver may not have registered this boot's LUID yet, and a driver
+        // restart gives the adapter a new one (Julien, 04/11: iGPU blank after a start 16 s after boot).
+        private void DiscoverDirectXAdapters()
+        {
+            lastAdapterDiscovery = DateTime.UtcNow;
+            directxAdapterLuids.Clear();
             try
             {
                 var adapters = new List<GpuAdapterInfo>();
@@ -255,6 +258,14 @@ namespace DesktopHtmlHost
             {
                 Program.LogDebug("DirectX Registry read error: " + ex.Message);
             }
+        }
+
+        public void Initialize()
+        {
+            try { OpenPerformanceCounters(); }
+            catch (Exception ex) { DesktopHtmlHost.Program.LogDebug("Performance counters unavailable: " + ex.Message); }
+
+            DiscoverDirectXAdapters();
 
             // Query CPU, Motherboard, RAM, GPU from WMI
             try
@@ -1128,6 +1139,16 @@ namespace DesktopHtmlHost
                 {
                     lastNpuDiscovery = DateTime.UtcNow;
                     npuLuid = DiscoverNpuLuid();
+                }
+                // At most once a minute: an adapter still missing in the first 10 minutes after boot (its driver
+                // registers late), or a known one whose LUID no longer opens (driver restart).
+                if ((DateTime.UtcNow - lastAdapterDiscovery).TotalSeconds >= 60)
+                {
+                    bool missing = Environment.TickCount64 < 10 * 60 * 1000 && (string.IsNullOrEmpty(igpuLuid) || string.IsNullOrEmpty(dgpuLuid));
+                    bool gone = (igpuLuidValue != 0 && WddmGpuSensors.AdapterExists(igpuLuidValue) == false) ||
+                                (dgpuLuidValue != 0 && WddmGpuSensors.AdapterExists(dgpuLuidValue) == false);
+                    if (missing || gone) DiscoverDirectXAdapters();
+                    else lastAdapterDiscovery = DateTime.UtcNow;
                 }
                 var counters = WindowsGpuTelemetry.Read(perf, igpuLuid, dgpuLuid, npuLuid);
                 cachedIgpuUtil = igpuUtil = counters[0].Utilization;
