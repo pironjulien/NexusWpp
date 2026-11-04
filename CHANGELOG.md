@@ -2,6 +2,12 @@
 
 ## Non publié
 
+## 2026-11-04 — 1.0.57.0
+
+### Petite icône : le médaillon du site sans son inscription
+
+- À 32 px et moins (barre des tâches, `icon.ico`, logos MSIX en petite taille), l'icône est le même médaillon que la grande, cerclage argent à circuits, losange et drapeau compris, avec seulement l'inscription « JULIENPIRON.FR » effacée. Le cerclage simplifié de la 1.0.56.0 disparaît.
+
 ## 2026-11-04 — 1.0.56.0
 
 ### Valeurs sur une ligne, noms de processus lisibles

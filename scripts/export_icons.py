@@ -2,8 +2,8 @@
 
 The SVGs are the HD ones of the Nexus icon kit (NexusHarness/NexusCommunication/icones/svg/hd, copied here by its
 sync_icons.py): above 32 px the pictogram in the julienpiron.fr medallion on a transparent background
-(nexuswpp-mark), at 32 px and less the small icon, plain silver ring and enlarged pictogram, without the ring's
-unreadable lettering (nexuswpp-round). The pictogram alone is never shown.
+(nexuswpp-mark), at 32 px and less the same medallion with only its unreadable "JULIENPIRON.FR" lettering erased
+(nexuswpp-round). The pictogram alone is never shown.
 Run again after replacing the SVGs:  python scripts/export_icons.py   (needs cairosvg)
 """
 from pathlib import Path
