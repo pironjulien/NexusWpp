@@ -316,7 +316,7 @@ sealed class RuntimePauseRegression : Form
             await Check("topShown(cpuTopProcSub, 'ApplicationFrameHost', '19 %') && topShown(ramTopProcSub, 'ApplicationFrameHost', num(12, 1) + ' ' + GB)", "CPU and RAM cards use the same name + measure form");
             await Check("[cpuTopProcSub, igpuTopProcSub, npuTopProcSub, gpuTopProcSub, ramTopProcSub].every(el => { const slot = el.parentElement, slots = [...slot.parentElement.querySelectorAll(':scope > .sub-metric')]; return slots.length === 4 && slots[3] === slot && slot.querySelector('.lbl').dataset.i18n === 'label.topProcess'; })", "busiest process sits in the same slot under the same label on every card");
             await Check("setAdapterTopProcess(gpuTopProcSub, {name: '', pct: 0}) === undefined && gpuTopProcSub.textContent === t('adapter.idle')", "idle adapter shows the idle word without a measure");
-            await Check("specGpuName.textContent.endsWith('@ 2875 MHz')", "GPU card title shows the live graphics clock");
+            await Check("specGpuName.textContent.endsWith('· 2875 MHz')", "GPU card title shows the live graphics clock");
             await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'full',plans:4,dpr:1,state:'stale'});");
             await Check("!specGpuName.textContent.includes('MHz')", "a stale GPU clock is not shown in the title");
             await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal'});");

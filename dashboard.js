@@ -502,36 +502,26 @@ function updateDOM(stats) {
         setBarFill(npuUtilBar, npuMemPct);
     }
 
-    // 6. Dynamically update specs descriptions in DOM
-    if (stats.cpu.name && specCpuName) {
-        specCpuName.textContent = stats.cpu.name.startsWith("CPU") ? stats.cpu.name : "CPU " + stats.cpu.name;
-    }
-    if (npuStats.name && specNpuName) {
-        specNpuName.textContent = npuStats.name.startsWith("NPU") ? npuStats.name : "NPU " + npuStats.name;
-    }
+    // 6. Card titles: kind + short model name ("GPU RTX 4080 SUPER · 1245 MHz", "RAM DDR5 · 6400 MT/s");
+    // the size and use of each part are in the card itself.
+    if (stats.cpu.name && specCpuName) specCpuName.textContent = titleWithKind("CPU", stats.cpu.name);
+    if (npuStats.name && specNpuName) specNpuName.textContent = titleWithKind("NPU", npuStats.name);
     if (stats.gpu.name && specGpuName) {
-        const gpuTitle = (stats.gpu.name.startsWith("GPU") ? stats.gpu.name : "GPU " + stats.gpu.name)
-            + (gpuCoreClock ? ` @ ${gpuCoreClock} MHz` : "");
+        const gpuBase = titleWithKind("GPU", stats.gpu.name);
+        const gpuTitle = gpuBase + (gpuCoreClock ? ` · ${gpuCoreClock} MHz` : "");
         if (specGpuName.textContent !== gpuTitle) specGpuName.textContent = gpuTitle;
+        // Titles are sized for the widest clock, so the live value never resizes them every 5 s.
+        const nvml = stats.sources && stats.sources.nvidia && stats.sources.nvidia.provider === "nvml";
+        const fitText = gpuCoreClock || nvml ? `${gpuBase} · 8888 MHz` : gpuBase;
+        if (specGpuName.dataset.fitText !== fitText) specGpuName.dataset.fitText = fitText;
     }
     if (stats.ram.totalGb && specRamName) {
-        const speed = stats.ram.speedMts ? ` @ ${stats.ram.speedMts} MT/s` : "";
-        const ramType = stats.ram.type ? ` ${stats.ram.type}` : "";
-        const ramModules = stats.ram.modules > 1 ? ` (${t("ram.modules", { n: stats.ram.modules })})` : "";
-        specRamName.textContent = `RAM ${stats.ram.totalGb} ${GB}${ramType}${ramModules}${speed}`;
+        specRamName.textContent = ["RAM" + (stats.ram.type ? ` ${stats.ram.type}` : ""),
+            stats.ram.speedMts ? `${stats.ram.speedMts} MT/s` : ""].filter(Boolean).join(" · ");
     }
-    if (stats.network.name && specNetMode) {
-        specNetMode.textContent = `${t("label.network")} ${stats.network.name}`;
-    }
-    if (stats.igpu.name && specVramName) {
-        specVramName.textContent = (stats.igpu.name.toLowerCase().startsWith("igpu") || stats.igpu.name.toLowerCase().startsWith("intel")) 
-            ? (stats.igpu.name.toLowerCase().startsWith("igpu") ? stats.igpu.name : "iGPU " + stats.igpu.name) 
-            : "iGPU " + stats.igpu.name;
-    }
-
-    if (specSsdName) {
-        specSsdName.textContent = stats.disk.name ? `SSD ${stats.disk.name}` : "SSD";
-    }
+    if (stats.network.name && specNetMode) specNetMode.textContent = `${t("label.network")} ${shortModelName(stats.network.name)}`;
+    if (stats.igpu.name && specVramName) specVramName.textContent = titleWithKind("iGPU", stats.igpu.name);
+    if (specSsdName) specSsdName.textContent = stats.disk.name ? titleWithKind("SSD", stats.disk.name) : "SSD";
     if (stats.motherboard && clockMb) {
         clockMb.textContent = `${t("label.motherboard")} ${stats.motherboard}`;
     }
@@ -567,8 +557,6 @@ function updateDOM(stats) {
         telemetryNodes.igpu.stale = igpuLoad.stale;
 
         telemetryNodes.npuAccel.value = npuLoad.value;
-        // SSD: the live throughput, read + write, like the network node (the card gives the space
-        // used). The disk active time only paces the packets.
         telemetryNodes.npuAccel.stale = npuLoad.stale;
 
         // Memory in use, as the RAM ring (it used to show a mix of CPU load, disk activity and
@@ -579,6 +567,8 @@ function updateDOM(stats) {
         telemetryNodes.gpu.value = gpuLoad.value;
         telemetryNodes.gpu.stale = gpuLoad.stale;
 
+        // SSD: the live throughput, read + write, like the network node (the card gives the space
+        // used). The disk active time only paces the packets.
         if (stats.disk.drive) telemetryNodes.ssd.label = `SSD ${stats.disk.drive}`;
         const diskRead = parseFloat(stats.disk.readMb), diskWrite = parseFloat(stats.disk.writeMb);
         const diskRatesValid = NexusTelemetry.valid(diskRead) && NexusTelemetry.valid(diskWrite);
@@ -730,6 +720,74 @@ function updatePowerPlanButtons(stats) {
     });
 }
 
+// Width available / width of the text on one line (a range: scrollWidth does not report a
+// single nowrap line spilling over).
+function titleFitRatio(title) {
+    titleRange.selectNodeContents(title);
+    const textWidth = titleRange.getBoundingClientRect().width;
+    return title.clientWidth && textWidth > title.clientWidth ? title.clientWidth / textWidth : 1;
+}
+
+// Model name without what the card already says: trademark marks, the chip makers' names and
+// generic words ("Intel(R) Core(TM) i7-14700K" -> "Core i7-14700K", "NVIDIA GeForce RTX 4080 SUPER"
+// -> "RTX 4080 SUPER", "Intel(R) UHD Graphics 770" -> "UHD 770", "Intel(R) Ethernet Controller I226-V" -> "Ethernet I226-V").
+function shortModelName(name) {
+    return String(name)
+        .replace(/\s*(\((R|TM|C)\)|[®™©])/gi, " ")
+        .replace(/\s+(CPU\s+)?@\s+[\d.]+\s*GHz\b/i, " ")
+        .replace(/\b(Intel|AMD|NVIDIA|GeForce|Corporation|Controller|Family|Adapter|Processor|Graphics|\d+-Core)\b/gi, " ")
+        .replace(/\s+/g, " ").trim();
+}
+
+// "GPU RTX 4080 SUPER": the kind once, never doubled ("SSD Samsung SSD 990 PRO" -> "SSD Samsung 990 PRO").
+// A name made only of the maker and generic words ("Intel(R) Graphics") keeps the maker: "iGPU Intel".
+function titleWithKind(kind, name) {
+    const model = (text) => text.split(" ").filter(word => word && word.toLowerCase() !== kind.toLowerCase());
+    let words = model(shortModelName(name));
+    if (!words.length) words = model(String(name).replace(/\s*(\((R|TM|C)\)|[®™©])/gi, " ").replace(/(^|\s)Graphics(?=\s|$)/gi, " ").replace(/\s+/g, " ").trim());
+    return [kind, ...words].join(" ");
+}
+
+// One size for every card title (the iGPU and NPU titles had a fixed 13 px of their own): the
+// stylesheet size, reduced just enough for the longest title of the narrowest card to fit on
+// its line. Runs when a title changes or a card is resized.
+let cardTitleKey = "";
+const titleRange = document.createRange();
+function fitCardTitles(force = false) {
+    const titles = [...document.querySelectorAll(".gauge-card .gauge-label")].filter(title => title.getClientRects().length > 0);
+    const key = titles.map(title => (title.dataset.fitText || title.textContent) + "/"
+        + title.parentElement.querySelector(".critical-alert").textContent).join("|");
+    if (!force && key === cardTitleKey) return;
+    cardTitleKey = key;
+    // Measured with the widest text each title can take (see the GPU clock), on the full width of
+    // the heading: a status badge wraps under the title rather than shrinking every title.
+    const shown = titles.map(title => title.textContent);
+    const headings = titles.map(title => title.parentElement);
+    headings.forEach(heading => heading.classList.add("fitting-title"));
+    titles.forEach(title => {
+        title.style.fontSize = "";
+        title.classList.remove("title-wraps");
+        if (title.dataset.fitText) title.textContent = title.dataset.fitText;
+    });
+    let size = Infinity;
+    for (const title of titles) size = Math.min(size, parseFloat(getComputedStyle(title).fontSize));
+    if (!Number.isFinite(size)) return;
+    // Letter spacing does not shrink with the font: a few passes converge on the fitting size.
+    for (let pass = 0; pass < 4; pass++) {
+        titles.forEach(title => { title.style.fontSize = `${size}px`; });
+        const ratio = Math.min(1, ...titles.map(titleFitRatio));
+        if (ratio >= 1 || size <= 8) break;
+        size = Math.max(8, Math.floor(size * ratio * 0.98 * 10) / 10);
+    }
+    headings.forEach(heading => heading.classList.remove("fitting-title"));
+    // A title still too long, at 8 px on very small windows or beside the badge of a short card
+    // (whose heading stays on one row), wraps between words instead of being cut.
+    titles.forEach(title => { if (titleFitRatio(title) < 1) title.classList.add("title-wraps"); });
+    titles.forEach((title, index) => { if (title.textContent !== shown[index]) title.textContent = shown[index]; });
+}
+const cardTitleObserver = typeof ResizeObserver === "function" ? new ResizeObserver(() => fitCardTitles(true)) : null;
+if (cardTitleObserver) document.querySelectorAll(".gauge-card").forEach(card => cardTitleObserver.observe(card));
+
 // Shrinks a plan label just enough for its longest word to fit on one line, so a long name wraps
 // between words ("PERFORMANCES / OPTIMALES") instead of inside one ("PERFORMANCE / S OPTIMALES").
 const labelMeasure = document.createElement("canvas").getContext("2d");
@@ -865,6 +923,7 @@ function refreshTelemetryFreshness(force = false) {
             setBadge(card, '', '');
         }
     }
+    fitCardTitles(); // a badge can leave its title less room
     if (expired && !telemetryExpired) {
         telemetryExpired = true;
         loadAlerts.forEach(alert => alert.reset());

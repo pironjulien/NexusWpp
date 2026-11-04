@@ -55,7 +55,9 @@ window.layoutFixture = function (test) {
 
 window.inspectLayout = function () {
     const issues = [];
-    const visible = element => element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden';
+    // A status badge kept only for screen readers (clipped to nothing) is not on screen.
+    const visible = element => element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden'
+        && getComputedStyle(element).clip !== 'rect(0px, 0px, 0px, 0px)';
     const rect = element => element.getBoundingClientRect();
     const name = element => element.id || element.className;
     const inside = (a, b, tolerance = 1.5) => a.left >= b.left - tolerance && a.top >= b.top - tolerance && a.right <= b.right + tolerance && a.bottom <= b.bottom + tolerance;
@@ -83,7 +85,7 @@ window.inspectLayout = function () {
                 break;
             }
         }
-        if (element.matches('.critical-alert, .settings-button, .sub-metric .lbl, .sub-metric .val, .btn-lbl, .clock-date, .clock-mb, .clock-battery')) {
+        if (element.matches('.gauge-label, .critical-alert, .settings-button, .sub-metric .lbl, .sub-metric .val, .btn-lbl, .clock-date, .clock-mb, .clock-battery')) {
             const range = document.createRange();
             range.selectNodeContents(element);
             for (const line of range.getClientRects()) {
@@ -111,6 +113,9 @@ window.inspectLayout = function () {
         if (element.matches('.gauge-value') && !inside(bounds, rect(element.closest('.gauge-slot')))) issues.push(name(element) + ': outside gauge slot');
         if (element.matches('.sub-metric .val, .gauge-value') && /(^|[\s(\/])-\d/.test(element.textContent)) issues.push(name(element) + ': unavailable reading shown as a negative number');
     }
+    // Every card title has the same size (the iGPU and NPU titles used to be smaller).
+    const titleSizes = new Set([...document.querySelectorAll('.gauge-card .gauge-label')].filter(visible).map(title => getComputedStyle(title).fontSize));
+    if (titleSizes.size > 1) issues.push('card titles differ in size: ' + [...titleSizes].join(', '));
     for (const card of cards.filter(card => card.matches('.gauge-card'))) {
         const badge = card.querySelector('.critical-alert');
         if (!badge || !visible(badge)) continue;

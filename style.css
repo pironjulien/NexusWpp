@@ -400,12 +400,6 @@ body {
     padding: clamp(5px, calc(0.8 * var(--lvh)), 16px) clamp(6px, calc(0.6 * var(--lvw)), 18px);
 }
 
-.accelerator-card .gauge-label {
-    font-size: 13px;
-    letter-spacing: 1.2px;
-    margin-bottom: 0;
-}
-
 .accelerator-card .gauge-container {
     --gauge-limit: 136px;
 }
@@ -422,15 +416,6 @@ body {
     gap: clamp(2px, calc(0.5 * var(--lvh)), 7px);
     margin-top: 0;
     padding-top: clamp(2px, calc(0.5 * var(--lvh)), 9px);
-}
-
-.accelerator-card .sub-metric .lbl {
-    font-size: clamp(9px, calc(0.7 * var(--lvw)), 10px);
-    letter-spacing: 0.2px;
-}
-
-.accelerator-card .sub-metric .val {
-    font-size: clamp(11px, calc(1 * var(--lvw)), 15px);
 }
 
 .gauge-label {
@@ -908,8 +893,12 @@ body {
 }
 
 /* Status shares a real header row with the title, including compact cards. */
-.card-heading { display: flex; align-items: center; gap: 6px; min-width: 0; width: 100%; }
-.card-heading .gauge-label { flex: 1; min-width: 0; width: auto; white-space: nowrap; }
+/* The title keeps its whole width (sized by fitCardTitles in dashboard.js); a status badge that
+   does not fit beside it moves under it instead of cutting it. */
+.card-heading { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 2px 6px; min-width: 0; width: 100%; }
+.card-heading.fitting-title .critical-alert { display: none; }
+.card-heading .gauge-label.title-wraps { white-space: normal; overflow-wrap: anywhere; line-height: 1.05; }
+.card-heading .gauge-label { flex: 1 0 auto; min-width: 0; max-width: 100%; width: auto; white-space: nowrap; }
 .critical-alert { display: none; flex: 0 1 auto; max-width: 58%; color: #ffcf78;
     font: 600 10px/1.2 var(--font-body); padding: 2px 4px; border-radius: 4px;
     background: rgba(255, 185, 65, .12); text-align: center; overflow-wrap: anywhere; }
@@ -918,6 +907,11 @@ body {
 .gauge-card.sensor-stale .critical-alert { color: #d2d7e2; background: rgba(190, 200, 215, .12); }
 .sensor-unavailable { color: #afb7c7 !important; }
 @container gauge (max-height: 160px) { .critical-alert { font-size: 8px; padding: 1px 3px; } }
+/* No room for a second row in a short card: the badge stays beside the title, which may wrap instead. */
+@container gauge (max-height: 210px) {
+    .card-heading { flex-wrap: nowrap; }
+    .card-heading .gauge-label { flex: 1 1 auto; }
+}
 
 /* A short card places its dial beside the readings. No metric is removed and
    no scrolling is needed on the desktop's non-interactive telemetry panels. */
@@ -935,6 +929,10 @@ body {
 }
 
 @container gauge (max-height: 160px) and (max-width: 219px) {
+    /* No room for a badge beside or under the title of such a small card: the amber border
+       (high load) or the greyed values (stale) show the state, the badge stays for screen readers. */
+    .critical-alert:not(:empty) { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+        overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
     .card-heading {
         grid-row: 1;
         grid-column: 1;
