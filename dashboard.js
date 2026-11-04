@@ -308,6 +308,8 @@ function setGpuVisibility(hasIgpu, hasDgpu) {
 
 function updateDOM(stats) {
     lastTelemetry = stats;
+    // Cadence first: the history lines of this sample step only on mains.
+    setMotionEconomy(stats.energySaver === true || (stats.battery && stats.battery.present === true && stats.battery.ac === false));
     lastTelemetryReceived = performance.now();
     telemetryExpired = false;
     const npuStats = stats.npu || {
@@ -574,7 +576,6 @@ function updateDOM(stats) {
     // Windows energy saver: hold decorative motion still; values keep updating. The canvas
     // keeps its former 12 Hz on battery and under energy saver.
     document.body.classList.toggle("energy-saver", stats.energySaver === true);
-    setMotionEconomy(stats.energySaver === true || (stats.battery && stats.battery.present === true && stats.battery.ac === false));
     startMotionClock();
     // 7. Update Holographic Neural Telemetry Map live parameters
     const diskActivity = lastValues.take("disk.util", stats.disk.utilization);
@@ -982,7 +983,8 @@ function makeCardHistory(card, color) {
     const ns = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(ns, "svg");
     svg.setAttribute("class", "history-line");
-    svg.setAttribute("viewBox", `0 0 ${HISTORY_LENGTH - 1} 100`);
+    // One sample wider than the card, on the right: room for the newest sample to step in.
+    svg.setAttribute("viewBox", `0 0 ${HISTORY_LENGTH} 100`);
     svg.setAttribute("preserveAspectRatio", "none");
     svg.setAttribute("aria-hidden", "true");
     const gradientId = `${id}-history-fill`;
@@ -990,7 +992,7 @@ function makeCardHistory(card, color) {
         `<stop offset="0%" stop-color="${color}" stop-opacity="0.12"/><stop offset="100%" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>` +
         `<path class="history-area" fill="url(#${gradientId})"/><path class="history-stroke" stroke="${color}"/>`;
     card.insertBefore(svg, card.firstChild);
-    return { id, values: [], area: svg.querySelector(".history-area"), stroke: svg.querySelector(".history-stroke") };
+    return { id, svg, values: [], area: svg.querySelector(".history-area"), stroke: svg.querySelector(".history-stroke"), sampleTime: 0, shift: "" };
 }
 const cardHistories = [
     ["cpu-card", "#bf5aff"], ["vram-card", "#30d158"], ["npu-card", "#00c7be"], ["gpu-card", "#ff375f"],
@@ -1094,9 +1096,32 @@ function historyPaths(values) {
     return { line, area };
 }
 
-// The lines step once per sample. A continuous glide (the line drawn once per sample and slid
-// by a compositor transform) was measured at +23 points of iGPU 3D: seven card-wide layers
-// composed at the display refresh rate. Not worth it for a background line.
+// History lines advance in small steps between two samples: each sample is drawn once, one
+// sample-width to the right of its place, and the line moves back to it by HISTORY_STEPS shifts of
+// a compositor transform over the next second, on ticks of the map clock (radar.js), so no layout
+// and no new drawing. A continuous glide at the display refresh rate cost +23 points of iGPU 3D
+// (seven card-wide layers composed 60 times a second). On battery, under energy saver or with
+// Windows animations off the lines jump once a second.
+const HISTORY_STEPS = 6;
+function historyStepsActive() {
+    return HISTORY_STEPS > 0 && physicsFpsInterval === 1000 / MOTION_FPS && !reducedMotionQuery.matches && !runtimeSuspended;
+}
+function setHistoryShift(history, fraction) {
+    const shift = `translateX(${((1 - fraction) * 100 / HISTORY_LENGTH).toFixed(3)}%)`;
+    if (history.shift !== shift) { history.shift = shift; history.svg.style.transform = shift; }
+}
+// Called on each map tick; returns true while a line still has steps to make.
+function stepHistories(now) {
+    if (!historyStepsActive()) { cardHistories.forEach(history => setHistoryShift(history, 1)); return false; }
+    let moving = false;
+    for (const history of cardHistories) {
+        const progress = Math.min(1, (now - history.sampleTime) / 1000);
+        setHistoryShift(history, Math.floor(progress * HISTORY_STEPS) / HISTORY_STEPS);
+        if (progress < 1) moving = true;
+    }
+    return moving;
+}
+
 function pushCardHistory(id, value) {
     const history = cardHistories.find(h => h.id === id);
     if (!history) return;
@@ -1104,6 +1129,9 @@ function pushCardHistory(id, value) {
     if (history.values.length > HISTORY_LENGTH) history.values.shift();
     const paths = historyPaths(history.values);
     history.stroke.setAttribute("d", paths.line);
+    history.sampleTime = performance.now();
+    setHistoryShift(history, historyStepsActive() ? 0 : 1);
+    if (historyStepsActive()) startMotionClock();
     history.area.setAttribute("d", paths.area);
 }
 

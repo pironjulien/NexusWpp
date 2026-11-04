@@ -382,11 +382,12 @@ body {
 .history-line {
     position: absolute;
     left: 0;
-    right: 0;
     bottom: 0;
-    width: 100%;
+    /* 60 samples wide for 59 shown: the card clips the newest until it has stepped in. */
+    width: calc(100% * 60 / 59);
     height: 100%;
     z-index: -1;
+    will-change: transform;
     pointer-events: none;
 }
 

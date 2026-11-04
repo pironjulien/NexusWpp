@@ -2,6 +2,11 @@
 
 ## Non publié
 
+### Courbes des cartes par petits pas
+
+- Les courbes d'historique en fond des cartes avancent par 6 petits pas par seconde au lieu d'un saut par seconde : chaque mesure est dessinée une fois, un pas à droite de sa place, puis le tracé est déplacé par une transformation du compositeur sur les images de l'horloge du centre (un pas toutes les 4 images à 24 i/s), sans mise en page ni nouveau dessin. Sur batterie, en mode économie ou avec les animations de Windows coupées, elles sautent toujours une fois par seconde.
+- Mesuré hors écran (médianes de trois passages de 25 s, CPU WebView2 / iGPU 3D, images réelles du centre) : sans pas 10,9 % / 4,8 % / 24,4 ; 3 pas/s 8,0 % / 5,1 % / 24,5 ; 4 pas/s 10,3 % / 5,6 % / 24,4 ; 5,7 pas/s (24/φ³) 8,8 % / 4,8 % / 24,4 ; 6 pas/s 7,4 % / 5,3 % / 24,4 ; 6 pas/s avec le centre à 20 i/s 13,6 % / 4,8 % / 20,3. Le CPU reste dans le bruit de mesure ; 6 pas/s, calés sur l'horloge du centre, coûtent environ +0,5 point d'iGPU, et le centre reste à 24 i/s.
+
 ### Quatre cases par carte
 
 - Chaque carte a exactement quatre cases de détail, avec des libellés sur une ligne ; un test le vérifie.

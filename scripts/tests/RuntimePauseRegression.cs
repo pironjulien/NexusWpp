@@ -235,6 +235,7 @@ sealed class RuntimePauseRegression : Form
             await Check("physicsFpsInterval === 1000 / MOTION_FPS && MOTION_FPS === 24", "the shared clock runs at 24 Hz on mains");
             await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal',battery:{present:true,percent:60,ac:false,rateW:-9,minutesLeft:90}});");
             await Check("physicsFpsInterval === 1000 / MOTION_FPS_ECONOMY && MOTION_FPS_ECONOMY === 12", "the shared clock keeps 12 Hz on battery");
+            await Check("HISTORY_STEPS === 6 && cardHistories.filter(h => !document.getElementById(h.id).classList.contains('card-hidden')).every(h => parseFloat(h.svg.style.transform.slice(11)) === 0)", "on battery the history lines jump once a second, without steps");
             await view.CoreWebView2.ExecuteScriptAsync("window.writeRingOffset=writeRing;");
 
             // Windows energy saver holds the logo rings still while visible, and releases them when it ends.

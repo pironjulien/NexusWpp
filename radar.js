@@ -593,11 +593,12 @@ function applySpinner(spinner) {
 // Advances the spinners and ring easing; returns true while either still moves.
 function stepDecorativeMotion(timestamp) {
     const easing = stepRingTweens(performance.now());
+    const histories = typeof stepHistories === "function" && stepHistories(performance.now());
     const spinning = !decorativeMotionHeld() && logoSpinners.some(spinner => telemetryNodes[spinner.node].visible !== false);
     if (spinning && lastDecorativeStamp) decorativeMotionMs += Math.max(0, timestamp - lastDecorativeStamp);
     lastDecorativeStamp = spinning ? timestamp : 0;
     logoSpinners.forEach(applySpinner);
-    return easing || spinning;
+    return easing || spinning || histories;
 }
 logoSpinners.forEach(applySpinner);
 if (reducedMotionQuery.addEventListener) {
