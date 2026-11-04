@@ -14,6 +14,11 @@
 - RAM : « MÉMOIRE VALIDÉE » et « FICHIER D'ÉCHANGE » laissent la place à « DÉFAUTS MATÉRIELS/S » (`\Memory\Page Reads/sec`, les « Hard Faults/sec » du Moniteur de ressources : pages relues sur le disque faute de place en mémoire, 0 la plupart du temps, le signe que la RAM manque vraiment) et à « VITESSE », la vitesse à laquelle les barrettes tournent (`ConfiguredClockSpeed`, plus seulement leur vitesse nominale) ; le titre devient « RAM DDR5 ». La lecture WMI du fichier d'échange une fois par minute disparaît.
 - SSD : lecture et écriture dans la même colonne, temps de réponse sous l'espace utilisé.
 
+### Centre : utilisation en % de la capacité réelle
+
+- Chaque nœud montre une utilisation en temps réel, en %, et son libellé dit laquelle. CPU, iGPU, GPU : la charge. SSD : le temps d'activité du Gestionnaire des tâches (« TEMPS D'ACTIVITÉ »), qui compte aussi un disque saturé de petites lectures ; une part de la bande passante du lien PCIe resterait à quelques % dans ce cas. Réseau : l'utilisation du lien du Gestionnaire des tâches (« UTILISATION DU LIEN »), réception + envoi rapportés à la vitesse du lien donnée par Windows (2,5 Gb/s ici), et « — » quand Windows n'en donne pas : la vitesse supposée de 2 500 ou 500 Mb/s disparaît, de la carte aussi.
+- RAM : aucun compteur de Windows ni du processeur lisible sans pilote ne mesure la bande passante mémoire. Le nœud garde la mémoire occupée, sous le libellé « MÉMOIRE OCCUPÉE ».
+
 ### Titres des cartes de même taille, jamais coupés
 
 - Les titres des cartes iGPU et NPU avaient leur propre taille fixe de 13 px, contre 11 à 18 px selon l'écran pour les autres. Tous les titres ont maintenant la même taille : celle de la feuille de style, réduite juste assez pour que le titre le plus long tienne dans sa carte (`fitCardTitles`, mesuré sur le texte lui-même, à chaque changement de titre ou de taille de carte). Le titre GPU est mesuré avec la fréquence la plus longue (« · 8888 MHz ») : la valeur en direct ne fait pas changer la taille des titres toutes les 5 s.

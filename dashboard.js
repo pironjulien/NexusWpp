@@ -235,9 +235,8 @@ function formatNetSpeed(kbVal) {
 
 // Link speed reported by Windows, in KiB/s; 0 when unknown (no guessed speed).
 function getNetworkLinkSpeedKb(stats) {
-    const fallbackMbps = ((stats.network.type || "").toLowerCase().includes("ether")) ? 2500 : 500;
-    const linkSpeedMbps = Number(stats.network.linkSpeedMbps) || fallbackMbps;
-    return Math.max(1024, Math.round((linkSpeedMbps * 1000000) / 8 / 1024));
+    const linkSpeedMbps = Number(stats.network.linkSpeedMbps);
+    return linkSpeedMbps > 0 ? Math.round((linkSpeedMbps * 1000000) / 8 / 1024) : 0;
 }
 
 function setNpuVisibility(hasNpu) {
@@ -437,7 +436,7 @@ function updateDOM(stats) {
 
     // Scale the card ring against the real link speed (2.5 Gb/s Ethernet is about 305000 KiB/s).
     const linkSpeedKb = getNetworkLinkSpeedKb(stats);
-    const netPercent = totalNetKb > 0 ? Math.min(100, Math.max(1, Math.round((totalNetKb / linkSpeedKb) * 100))) : 0;
+    const netPercent = totalNetKb > 0 && linkSpeedKb > 0 ? Math.min(100, Math.max(1, Math.round((totalNetKb / linkSpeedKb) * 100))) : 0;
     setCircularProgress(netRing, netPercent);
     setGaugeAria(netGaugeContainer, { value: netPercent, stale: false });
 
@@ -578,25 +577,17 @@ function updateDOM(stats) {
         // (share of the time the disk is busy; a share of the PCIe link bandwidth would read a few %
         // for a disk saturated by small random reads).
         if (stats.disk.drive) telemetryNodes.ssd.label = `SSD ${stats.disk.drive}`;
-        const diskRead = parseFloat(stats.disk.readMb), diskWrite = parseFloat(stats.disk.writeMb);
-        const diskRatesValid = NexusTelemetry.valid(diskRead) && NexusTelemetry.valid(diskWrite);
-        if (diskRatesValid) telemetryNodes.ssd.text = formatRateShort((diskRead + diskWrite) * 1024);
-        telemetryNodes.ssd.value = diskRatesValid ? diskRead + diskWrite : telemetryNodes.ssd.text ? telemetryNodes.ssd.value : null;
-        telemetryNodes.ssd.stale = !diskRatesValid && telemetryNodes.ssd.text !== undefined;
-        telemetryNodes.ssd.activity = diskActivity.value || 0;
+        telemetryNodes.ssd.value = diskActivity.value;
+        telemetryNodes.ssd.stale = diskActivity.stale;
 
-        // Network: the measured throughput (received + sent), as the card, instead of an
-        // unexplained percentage. The square-root share of the link speed only paces the packets.
-        let netActivityPct = 0;
-        if (totalNetKb > 0) {
-            const rawPct = (totalNetKb / getNetworkLinkSpeedKb(stats)) * 100;
-            netActivityPct = Math.min(100, Math.max(1, Math.round(Math.sqrt(rawPct / 100) * 100)));
-        }
-        if (netRatesValid) telemetryNodes.net.text = formatRateShort(totalNetKb);
-        telemetryNodes.net.value = netRatesValid ? totalNetKb : telemetryNodes.net.text ? telemetryNodes.net.value : null;
-        telemetryNodes.net.stale = !netRatesValid && telemetryNodes.net.text !== undefined;
-        telemetryNodes.net.activity = netActivityPct;
-        pushCardHistory("net-card", netActivityPct);
+        // Network: Task Manager's link utilization, received + sent over the speed Windows reports
+        // for the link (2.5 Gb/s here); "—" when Windows gives no link speed. The square root of
+        // that share only paces the packets, so everyday traffic still shows some.
+        const linkKb = getNetworkLinkSpeedKb(stats);
+        const linkPct = netRatesValid && linkKb > 0 ? Math.min(100, (totalNetKb / linkKb) * 100) : null;
+        telemetryNodes.net.value = linkPct !== null ? Math.round(linkPct) : null;
+        telemetryNodes.net.activity = linkPct > 0 ? Math.min(100, Math.max(1, Math.round(Math.sqrt(linkPct / 100) * 100))) : 0;
+        pushCardHistory("net-card", telemetryNodes.net.activity);
     }
 
     pushCardHistory("cpu-card", stats.cpu.utilization);

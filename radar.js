@@ -187,7 +187,7 @@ const telemetryNodes = {
         value: 0,
         suffix: "%",
         rotAngle: 0,
-        desc: t("node.diskThroughput")
+        desc: t("node.diskActiveTime")
     },
     net: {
         x: 0, y: 0,
@@ -198,9 +198,9 @@ const telemetryNodes = {
         glow: "#ff9f0a",
         label: t("label.network"),
         value: 0,
-        suffix: "",
+        suffix: "%",
         rotAngle: 0,
-        desc: t("node.networkThroughput")
+        desc: t("node.linkUsage")
     }
 };
 
@@ -894,7 +894,7 @@ function updatePhysics(timestamp, renderOnly = false) {
         
         // Draw Value text inside node
         if (node !== telemetryNodes.npu) {
-            const valueText = !NexusTelemetry.valid(node.value) ? '—' : node.text !== undefined ? node.text : `${node.value}${node.suffix}`;
+            const valueText = NexusTelemetry.valid(node.value) ? `${node.value}${node.suffix}` : '—';
             ctx.font = nodeValueFont(node, valueText);
             // A held reading keeps its value, in the stale grey of the cards.
             ctx.fillStyle = node.stale ? "#afb7c7" : "#ffffff";

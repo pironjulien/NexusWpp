@@ -177,7 +177,7 @@ sealed class RuntimePauseRegression : Form
             await view.CoreWebView2.ExecuteScriptAsync(@"
                 layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal'});
                 const missing=JSON.parse(JSON.stringify(fixtureStats));
-                missing.cpu.utilization=-1;missing.gpu.utilization=null;missing.igpu.usedMb=-1;missing.ping=-1;
+                missing.cpu.utilization=-1;missing.gpu.utilization=null;missing.igpu.usedMb=-1;missing.igpu.sharedUsedMb=-1;missing.ping=-1;
                 window.ringBefore=cpuRing.style.strokeDashoffset;updateDOM(missing);
                 window.drawnLabels=[];const heldText=ctx.fillText;
                 ctx.fillText=function(text,...args){drawnLabels.push(String(text)+'@'+this.fillStyle);heldText.call(this,text,...args);};
@@ -185,7 +185,7 @@ sealed class RuntimePauseRegression : Form
             await Check("cpuVal.textContent==='48%' && gpuVal.textContent==='73%' && cpuRing.style.strokeDashoffset===ringBefore", "a missing reading keeps the last gauge value and ring");
             await Check("cpuGaugeContainer.getAttribute('aria-valuenow')==='48' && cpuGaugeContainer.getAttribute('aria-valuetext')===t('aria.stale',{value:'48 %'}) && cpuCard.classList.contains('sensor-stale') && cpuCard.querySelector('.critical-alert').textContent===t('alert.sensorsStale')", "a held gauge is badged and announced as stale");
             await Check("drawnLabels.includes('48%@#afb7c7') && drawnLabels.includes('73%@#afb7c7') && !drawnLabels.some(text=>/^(-1|null|—)%?@/.test(text))", "radar keeps held readings in the stale grey instead of negative, fabricated or blank values");
-            await Check("vramUsedSub.textContent===num(2,1)+' / 32 '+GB && vramUsedSub.classList.contains('sensor-unavailable') && netPingSub.textContent==='124 ms' && netPingSub.classList.contains('sensor-unavailable')", "sub-metrics keep their last text, greyed");
+            await Check("vramUsedSub.textContent===num(1.9,1)+' / 32 '+GB && vramUsedSub.classList.contains('sensor-unavailable') && netPingSub.textContent==='124 ms' && netPingSub.classList.contains('sensor-unavailable')", "sub-metrics keep their last text, greyed");
             await Check("cardHistories.find(h=>h.id==='cpu-card').values.slice(-1)[0]===null && cardHistories.find(h=>h.id==='gpu-card').values.slice(-1)[0]===null", "history records the missing sample as a gap");
 
             await view.CoreWebView2.ExecuteScriptAsync(@"
@@ -323,14 +323,14 @@ sealed class RuntimePauseRegression : Form
             // Cards and map nodes say the same thing.
             await Check("telemetryNodes.ram.value === 72 && telemetryNodes.ram.desc === t('node.ramUsed')", "RAM node shows the memory in use of the RAM ring");
             await Check("ssdFreeSub.textContent === num(3725.9 - 1234.5, 1) + ' / ' + num(3725.9, 0) + ' ' + GB && ssdFreeSub.parentElement.querySelector('.lbl').textContent === t('label.diskSpace')", "SSD card text shows the space used, like its ring");
-            await Check("telemetryNodes.net.text === num(288) + ' ' + MB + '/s' && telemetryNodes.net.desc === t('node.networkThroughput') && nodeActivity(telemetryNodes.net) > 0", "network node shows the measured throughput, not a percentage");
-            await Check("cpuTempSub.parentElement.querySelector('.lbl').textContent === t('label.thermalZone') && cpuTempSub.textContent === num(65) + ' °C'", "a moving ACPI zone keeps its own name in the CPU card");
+            await Check("telemetryNodes.net.value === 97 && telemetryNodes.net.suffix === '%' && telemetryNodes.net.desc === t('node.linkUsage') && telemetryNodes.ram.desc === t('node.ramUsed')", "network node shows the link utilization (received + sent over the link speed reported by Windows)");
+            await Check("cpuTempSub.parentElement.querySelector('.lbl').textContent === t('label.busiestCore') && cpuTempSub.textContent === '100 %' && cpuFreqSub.parentElement.querySelector('.lbl').textContent === t('label.thermalZone') && cpuFreqSub.textContent === num(65) + ' °C' && cpuProcThreadsSub.textContent === num(5.7) + ' GHz'", "ACPI temperature beside the busiest core, the clock below"); 
             await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'integrated',plans:4,dpr:1,state:'normal'});");
-            await Check("cpuTempSub.parentElement.querySelector('.lbl').textContent === t('label.busiestCore') && cpuTempSub.textContent === '100 %'", "a fixed ACPI zone is replaced by the busiest core");
-            await Check("vramUsedSub.textContent===num(2,1)+' / 32 '+GB && igpuVideoSub.textContent==='24 %' && igpuTempSub.parentElement.querySelector('.lbl').textContent===t('label.driver') && igpuTempSub.textContent==='32.0.101.7092'", "iGPU card has the GPU card's slots: driver (no sensor), memory used / total, busier video engine");
-            await Check("ramUsedSub.textContent===num(92.1,1)+' / '+num(127.9,1)+' '+GB && ramPageFileSub.textContent===num(2,1)+' / 16 '+GB", "RAM card shows memory in use / usable and the page file, like the GPU memory");
-            await Check("telemetryNodes.ssd.text===num(13)+' '+GB+'/s' && telemetryNodes.ssd.desc===t('node.diskThroughput') && nodeActivity(telemetryNodes.ssd)===58", "SSD node shows read + write throughput, paced by the active time");
-            await Check("specCpuName.textContent==='CPU Core Ultra 9 285K' && specGpuName.textContent==='GPU RTX 5090 · 2875 MHz' && specVramName.textContent==='iGPU Intel' && specRamName.textContent==='RAM DDR5 · 6400 MT/s'", "card titles are short: kind, model, live clock");
+            await Check("cpuFreqSub.parentElement.querySelector('.lbl').textContent === t('label.clockSpeed') && cpuProcThreadsSub.parentElement.querySelector('.lbl').textContent === t('label.procThreads')", "without an ACPI zone the CPU card keeps clock and processes / threads");
+            await Check("vramUsedSub.textContent===num(1.9,1)+' / 32 '+GB && igpuVideoSub.textContent==='24 %' && igpuTempSub.parentElement.querySelector('.lbl').textContent===t('label.dedicatedMemory') && igpuTempSub.textContent===num(96)+' / '+num(128)+' '+MB", "iGPU card: dedicated and shared memory (Task Manager), busier video engine");
+            await Check("ramUsedSub.textContent===num(92.1,1)+' / '+num(127.9,1)+' '+GB && ramFaultsSub.textContent===num(12) && ramSpeedSub.textContent==='6400 MT/s'", "RAM card shows memory in use / usable, hard faults per second and the real speed");
+            await Check("telemetryNodes.ssd.value===58 && telemetryNodes.ssd.suffix==='%' && telemetryNodes.ssd.desc===t('node.diskActiveTime')", "SSD node shows the active time, as Task Manager");
+            await Check("specCpuName.textContent==='CPU Core Ultra 9 285K' && specGpuName.textContent==='GPU RTX 5090 · 2875 MHz' && specVramName.textContent==='iGPU Intel' && specRamName.textContent==='RAM DDR5'", "card titles are short: kind, model, live clock");
             await Check("new Set([...document.querySelectorAll('.gauge-card .gauge-label')].filter(e=>e.getClientRects().length).map(e=>getComputedStyle(e).fontSize)).size===1", "every card title has the same size");
             await Check("formatCacheSize('24.0 Mo') === (NexusI18n.lang === 'fr' ? '24,0 Mo' : '24.0 MB') && formatCacheSize('2.5 Mo') === (NexusI18n.lang === 'fr' ? '2,5 Mo' : '2.5 MB')",
                 "CPU cache sizes follow the interface language");
