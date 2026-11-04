@@ -205,6 +205,16 @@ window.addEventListener("resize", () => {
     if (hostLayout) applyHostLayout();
     sendRemoteBounds(true);
 });
+// The power panel rectangle is sent when the panel or the cockpit is laid out again (resize
+// observers run after layout, so reading it there costs nothing), not on every telemetry update.
+if (typeof ResizeObserver === "function") {
+    const boundsObserver = new ResizeObserver(() => sendRemoteBounds(false));
+    for (const selector of [".remote-sub-panel", ".dashboard", ".column-center"]) {
+        const element = document.querySelector(selector);
+        if (element) boundsObserver.observe(element);
+    }
+}
+
 
 window.addEventListener("load", () => {
     resizeCanvas();

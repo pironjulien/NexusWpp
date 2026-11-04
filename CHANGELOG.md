@@ -34,6 +34,13 @@
 - Libellés revus, avec les termes du Gestionnaire des tâches quand il en a : « TOP PROCESSUS » → « PROCESSUS EN TÊTE » (« BUSIEST PROCESS »), « CADENCE » → « VITESSE » (« SPEED »), « PROC / THREADS » → « PROCESSUS / THREADS », « VRAM » → « MÉMOIRE GPU » (« GPU MEMORY »), « PUISSANCE GPU » → « CONSOMMATION » (« POWER DRAW »), « RECEVOIR (DÉBIT) » / « ENVOYER (DÉBIT) » → « RÉCEPTION » / « ENVOI » (« RECEIVE » / « SEND »), « PING RÉSEAU » → « LATENCE » (« LATENCY »), « COMMITTED MEMORY » → « COMMITTED », « Capteurs périmés » → « Capteurs sans réponse » (« Sensors not responding »), « Data expired » → « Data out of date ». Les noms des modes d'alimentation viennent de Windows et ne sont pas traduits par NexusWpp.
 - Test `scripts/tests/i18n.test.js` (lancé par `test_features.ps1`) : il échoue si un texte manque dans une des deux langues, si la page utilise une clé non traduite ou si une clé traduite n'est plus utilisée.
 
+### 24 images par seconde réelles, moins de mises en page
+
+- Sur secteur, la carte centrale dessine vraiment 24 images par seconde (24,3 mesurées), au lieu de 17,5 pour un réglage à 20 : l'attente de chaque image partait de la fin de la précédente, puis s'ajoutait à l'attente de l'image d'écran suivante. Les images sont maintenant calées sur une grille régulière, avec une tolérance d'une demi-image d'écran (durée mesurée une fois au démarrage). Sur batterie et en mode économie d'énergie, la cadence reste à 12.
+- Mesuré hors écran (vraie page, télémétrie réelle, 2560 × 1440 à 125 %, médianes de cinq passages de 25 s) : 20 i/s d'avant 17,4 images, 7,3 % d'un cœur pour WebView2, 3,4 % d'iGPU 3D ; 24 i/s 24,3 images, 6,6 % (écart dans le bruit de mesure) et 4,7 % d'iGPU (+1,2 point).
+- Courbes d'historique des cartes : un défilement continu (tracé une fois par mesure, puis glissé par le compositeur) a été essayé et mesuré à +23 points d'iGPU 3D, car sept calques larges comme les cartes sont recomposés à chaque image d'écran. Il n'est pas gardé : les courbes avancent toujours d'un cran par seconde.
+- Environ 2 calculs de mise en page par seconde au lieu de 9 : l'ajustement des noms de processus mesure le texte sur un canevas, avec la largeur et la police de chaque case gardées en mémoire (rafraîchies quand la case change de taille), au lieu d'essayer chaque longueur dans la page ; les noms des modes d'alimentation sont ajustés quand ils changent ou que le panneau change de taille, plus à chaque mesure ; le rectangle du panneau d'alimentation envoyé à l'hôte est relu quand la page est remise en page ; les titres des cartes ne relisent la disposition que si un titre a changé.
+
 ## 2026-11-04 — 1.0.54.0
 
 ### Animation plus fluide pour presque rien

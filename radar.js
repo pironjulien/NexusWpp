@@ -589,15 +589,34 @@ function redrawCanvas() {
     else wakeCanvas();
 }
 
-function scheduleCanvasFrame(delay = physicsFpsInterval) {
+// Duration of one display frame, measured once on a few animation frames (16.7 ms until then).
+let displayFrameMs = 1000 / 60;
+(function measureDisplayFrame() {
+    let last = 0;
+    const deltas = [];
+    const step = timestamp => {
+        if (last) deltas.push(timestamp - last);
+        last = timestamp;
+        if (deltas.length < 9) { requestAnimationFrame(step); return; }
+        deltas.sort((a, b) => a - b);
+        displayFrameMs = Math.max(4, Math.min(50, deltas[4]));
+    };
+    requestAnimationFrame(step);
+})();
+
+// Next tick on the cadence grid. The timer wakes half a display frame early so the animation
+// frame that follows lands on the due time: waiting a full interval after the end of a tick, then
+// for the next display frame, added up to 2.5 ms per tick (17.5 frames/s for 20 Hz).
+function scheduleCanvasFrame(delay) {
     if (runtimeSuspended || !isCanvasLoopRunning || canvasFrameTimer || canvasAnimationFrame) return;
+    if (delay === undefined) delay = lastPhysicsTime + physicsFpsInterval - performance.now();
     canvasFrameTimer = setTimeout(() => {
         canvasFrameTimer = 0;
         canvasAnimationFrame = requestAnimationFrame(timestamp => {
             canvasAnimationFrame = 0;
             updatePhysics(timestamp);
         });
-    }, delay);
+    }, Math.max(0, delay - displayFrameMs / 2));
 }
 
 function setRuntimeSuspended(suspended) {
@@ -673,11 +692,10 @@ document.addEventListener("transitionrun", () => {
 
 // Main update physics and rendering loop
 let lastPhysicsTime = 0;
-// Active cadence; the clock sleeps fully when idle, covered or paused. Measured off screen with
-// real telemetry (i7-14700K, UHD 770, 2560x1440 at 125 %): 12 -> 20 Hz is 11.2 -> 17.5 frames/s
-// for +0.4 point of one core and +0.9 point of iGPU 3D; 24 Hz costs +2.1 and +1.6, 60 Hz +7.5
-// and +4.6. On battery or under Windows energy saver the former 12 Hz stays.
-const MOTION_FPS = 20;
+// Active cadence; the clock sleeps fully when idle, covered or paused. 24 frames/s really drawn on
+// mains (measured off screen with real telemetry, see CHANGELOG); on battery or under Windows
+// energy saver 12.
+const MOTION_FPS = 24;
 const MOTION_FPS_ECONOMY = 12;
 let physicsFpsInterval = 1000 / MOTION_FPS;
 const PHYSICS_REFERENCE_MS = 1000 / 12; // cadence the per-frame motion constants were tuned at
@@ -690,11 +708,15 @@ function updatePhysics(timestamp, renderOnly = false) {
     
     if (!timestamp) timestamp = performance.now();
     const elapsed = timestamp - lastPhysicsTime;
-    if (!renderOnly && elapsed < physicsFpsInterval) {
+    // Half a display frame of tolerance: a frame due between two display frames is drawn on the
+    // nearest one instead of waiting a whole frame more.
+    if (!renderOnly && elapsed < physicsFpsInterval - displayFrameMs / 2) {
         scheduleCanvasFrame(physicsFpsInterval - elapsed);
         return;
     }
-    if (!renderOnly) lastPhysicsTime = timestamp - (elapsed % physicsFpsInterval);
+    // The grid advances by whole intervals (late frames do not push the next ones back); after a
+    // sleep or a long stall it restarts from now.
+    if (!renderOnly) lastPhysicsTime = elapsed > physicsFpsInterval * 2 ? timestamp : lastPhysicsTime + physicsFpsInterval;
     // Motion per frame was tuned at 12 Hz: scale it by the real time since the previous
     // frame so speeds stay the same at any cadence (one frame's worth after a wake).
     const frameScale = renderOnly ? 0 : (lastMotionStamp ? Math.min(timestamp - lastMotionStamp, physicsFpsInterval * 2) : physicsFpsInterval) / PHYSICS_REFERENCE_MS;

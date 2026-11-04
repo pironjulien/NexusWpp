@@ -47,19 +47,33 @@ function shortProcessName(name, max) {
 }
 
 // Longest form of a process name, followed by its measure, that fits on one line of its slot
-// (narrow cards on small screens), measured on the element itself (the slot does not wrap, see .fit-one-line).
+// (narrow cards on small screens; the slot does not wrap, see .fit-one-line). The slot width and
+// font are kept in memory and refreshed when the slot is resized; the text is measured on a
+// canvas, so a new reading every second forces no layout of the page.
+const processTextMeasure = document.createElement("canvas").getContext("2d");
+const processSlotMetrics = new WeakMap();
+function processSlotMetric(element) {
+    let metric = processSlotMetrics.get(element);
+    if (!metric) {
+        const style = getComputedStyle(element);
+        metric = { width: element.parentElement ? element.parentElement.clientWidth : 0,
+            font: `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`, spacing: parseFloat(style.letterSpacing) || 0 };
+        processSlotMetrics.set(element, metric);
+    }
+    return metric;
+}
 function fitProcessName(element, name, measure = '') {
     const suffix = measure ? ` ${measure}` : '';
-    const width = element.parentElement ? element.parentElement.clientWidth : 0;
+    const metric = processSlotMetric(element);
     let candidate = shortProcessName(name, 16) + suffix;
-    if (!width) return candidate;
-    const previous = element.textContent;
+    if (!metric.width) return candidate;
+    processTextMeasure.font = metric.font;
+    // 1 px for the rounding between canvas and page text.
+    const fits = text => processTextMeasure.measureText(text).width + metric.spacing * text.length <= metric.width - 1;
     for (let max = Math.min(name.length, 16); max >= 4; max--) {
         candidate = shortProcessName(name, max) + suffix;
-        element.textContent = candidate;
-        if (element.scrollWidth <= width) break;
+        if (fits(candidate)) break;
     }
-    element.textContent = previous;
     return candidate;
 }
 
@@ -85,6 +99,7 @@ const processFitSlots = new WeakSet();
 const processFitObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(entries => {
     for (const entry of entries) {
         const element = entry.target.querySelector('.fit-one-line');
+        processSlotMetrics.delete(element);
         const fit = processFits.get(element);
         if (!fit) continue;
         const text = fitProcessName(element, fit.name, fit.measure);
@@ -645,7 +660,6 @@ function updateDOM(stats) {
     } else if (mapValueChanged) {
         wakeCanvas();
     }
-    sendRemoteBounds(false);
 }
 
 function updatePowerPlanButtons(stats) {
@@ -689,6 +703,7 @@ function updatePowerPlanButtons(stats) {
             let displayName = plan.name;
 
             button.innerHTML = `<div class="icon-wrap">${iconSvg}</div><span class="btn-lbl"></span>`;
+        fitPowerPlanLabels();
             button.querySelector('.btn-lbl').textContent = displayName.toUpperCase();
 
             button.addEventListener("click", () => setPowerPlan(plan.guid));
@@ -699,8 +714,6 @@ function updatePowerPlanButtons(stats) {
             powerPlanFitObserver.observe(powerPlansContainer);
         }
     }
-    // Every update: the base font follows the viewport (clamp on --lvw) even when the container keeps its size.
-    fitPowerPlanLabels();
 
     // Update active classes
     currentPowerPlan = "";
@@ -752,11 +765,14 @@ function titleWithKind(kind, name) {
 // stylesheet size, reduced just enough for the longest title of the narrowest card to fit on
 // its line. Runs when a title changes or a card is resized.
 let cardTitleKey = "";
+    const titles = all.filter(title => title.getClientRects().length > 0);
 const titleRange = document.createRange();
 function fitCardTitles(force = false) {
-    const titles = [...document.querySelectorAll(".gauge-card .gauge-label")].filter(title => title.getClientRects().length > 0);
-    const key = titles.map(title => (title.dataset.fitText || title.textContent) + "/"
-        + title.parentElement.querySelector(".critical-alert").textContent).join("|");
+    // The key is read without layout (texts and hidden cards); the work runs only when it changes.
+    const all = [...document.querySelectorAll(".gauge-card .gauge-label")];
+    const key = all.map(title => (title.dataset.fitText || title.textContent) + "/"
+        + title.parentElement.querySelector(".critical-alert").textContent + "/" + title.closest(".gauge-card").className).join("|")
+        + "|" + (acceleratorRow ? acceleratorRow.className : "");
     if (!force && key === cardTitleKey) return;
     cardTitleKey = key;
     // Measured with the widest text each title can take (see the GPU clock), on the full width of
@@ -798,7 +814,10 @@ function fitPowerPlanLabels() {
         const width = label.clientWidth;
         if (!width) return;
         const style = getComputedStyle(label);
+// Refitted when the plans or the panel size change, and on a window resize (the base font
+// follows the viewport through --lvw); not on every telemetry update, which would force a layout.
         const size = parseFloat(style.fontSize);
+window.addEventListener("resize", () => fitPowerPlanLabels());
         labelMeasure.font = `${style.fontWeight} ${size}px ${style.fontFamily}`;
         const spacing = parseFloat(style.letterSpacing) || 0;
         const widest = Math.max(...label.textContent.split(/\s+/).filter(Boolean)
@@ -1004,3 +1023,6 @@ function animateTextValue(element, targetValue, suffix = "") {
         element.innerHTML = `${targetValue}<span>${suffix}</span>`;
     }
 }
+// The lines step once per sample. A continuous glide (the line drawn once per sample and slid
+// by a compositor transform) was measured at +23 points of iGPU 3D: seven card-wide layers
+// composed at the display refresh rate. Not worth it for a background line.
