@@ -2,6 +2,10 @@
 
 ## Non publié
 
+### Un nœud par carte
+
+- Le centre a un nœud par carte affichée : CPU, iGPU, GPU, NPU s'il existe, RAM, réseau et chaque disque (« SSD C: », « SSD D: », « HDD E: »), avec son temps d'activité. Un disque ajouté ou retiré ajoute ou retire son nœud, et l'orbite répartit de 5 à 10 nœuds sans chevauchement. Testé avec et sans NPU, de 1 à 4 disques (test de disposition, 804 cas).
+
 ### Icône sans carré sombre
 
 - L'icône (appli, Store, MSIX, installeur) est le médaillon de julienpiron.fr sur fond transparent à toutes les tailles, comme sur le site : plus de carré sombre autour, et le losange en bas du cerclage reste entier (il était estompé avec les circuits intérieurs). Les SVG de `branding\` viennent du kit d'icônes Nexus (`sync_icons.py`) ; `scripts\make_medallion.py`, devenu inutile, est retiré.

@@ -15,7 +15,11 @@ const TELEMETRY_ORBIT_RING_INDEX = 3;
 const TELEMETRY_RADAR_RING_COUNT = 5;
 // Start at the top with Network, then distribute visible nodes clockwise.
 // Keeping this anchor first preserves vertical symmetry for every node count.
-const TELEMETRY_ORBIT_ORDER = ["net", "ram", "ssd", "gpu", "igpu", "npuAccel", "cpu"];
+// One node per card: the disks after the system disk ("ssd2", "ssd3"...) follow it.
+const diskNodeKeys = [];
+function orbitOrder() {
+    return ["net", "ram", "ssd", ...diskNodeKeys, "gpu", "igpu", "npuAccel", "cpu"];
+}
 const TELEMETRY_ORBIT_START_ANGLE = -90;
 
 // Backing-store pixels per logical canvas pixel. 1 at 100 % display scaling (unchanged);
@@ -207,6 +211,27 @@ const telemetryNodes = {
 // Pre-allocated array of telemetry node objects to completely eliminate Object.keys() allocations inside loop
 const telemetryNodeList = Object.values(telemetryNodes);
 
+// Node of the disk card at `index` (0 = the system disk, "ssd"): created on first use, shown or
+// hidden with its card. Returns true when the set of visible nodes changed (the orbit is laid out again).
+function setDiskNodeShown(index, shown) {
+    if (index === 0) return false;
+    const key = `ssd${index + 1}`;
+    let node = telemetryNodes[key];
+    if (!node) {
+        if (!shown) return false;
+        node = { ...telemetryNodes.ssd, x: 0, y: 0, targetX: 0, targetY: 0, value: null, rotAngle: 0, offscreenCanvas: null,
+            pathBgGrad: null, pathCoreGrad: null, ringGrad: null, fittedText: undefined, label: "SSD", visible: true };
+        telemetryNodes[key] = node;
+        telemetryNodeList.push(node);
+        diskNodeKeys.push(key);
+        renderNodeOffscreen(node);
+        return true;
+    }
+    if ((node.visible !== false) === shown) return false;
+    node.visible = shown;
+    return true;
+}
+
 // Load that paces a node's packets and orbit ticks: its percentage, or its own share when the
 // value shown is not a percentage (network throughput).
 function nodeActivity(node) {
@@ -285,7 +310,7 @@ for (let i = 0; i < telemetryNodeList.length; i++) {
 }
 
 function getTelemetryMinimumSize() {
-    const nodes = TELEMETRY_ORBIT_ORDER.map(key => telemetryNodes[key]);
+    const nodes = orbitOrder().map(key => telemetryNodes[key]).filter(node => node.visible !== false);
     // Measure the longest rendered caption, including its letter spacing.
     ctx.save();
     let extent = 0;
@@ -325,7 +350,7 @@ function updateNodeTargets() {
     telemetryNodes.npu.targetY = layout.cy;
     
     // Surround nodes: one shared radius, visible nodes evenly distributed.
-    const visibleKeys = TELEMETRY_ORBIT_ORDER.filter(key => telemetryNodes[key].visible !== false);
+    const visibleKeys = orbitOrder().filter(key => telemetryNodes[key].visible !== false);
     const step = 360 / Math.max(1, visibleKeys.length);
     visibleKeys.forEach((key, index) => {
         const node = telemetryNodes[key];

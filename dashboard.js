@@ -437,6 +437,12 @@ function updateDOM(stats) {
         setHtmlIfChanged(netVal, `0<span>${KB}/s</span>`);
     } else if (totalNetKb < 1024) {
         setHtmlIfChanged(netVal, `${num(totalNetKb)}<span>${KB}/s</span>`);
+    // One map node per card: every disk has its node, with its active time.
+    let diskNodesChanged = false;
+    for (let index = 1; index < Math.max(disks.length, diskCardViews.length); index++) {
+        diskNodesChanged = setDiskNodeShown(index, index < disks.length) || diskNodesChanged;
+    }
+    if (diskNodesChanged) { syncTelemetryLayoutAfterResize(true); needsRender = true; }
     } else {
         setHtmlIfChanged(netVal, `${num(totalNetKb / 1024, 1)}<span>${MB}/s</span>`);
     }
@@ -583,9 +589,16 @@ function updateDOM(stats) {
         // Every orbit node is a live use of its real capacity, in %. SSD: Task Manager's active time
         // (share of the time the disk is busy; a share of the PCIe link bandwidth would read a few %
         // for a disk saturated by small random reads).
-        if (stats.disk.drive) telemetryNodes.ssd.label = `SSD ${stats.disk.drive}`;
-        telemetryNodes.ssd.value = diskActivity.value;
-        telemetryNodes.ssd.stale = diskActivity.stale;
+        disks.forEach((disk, index) => {
+            const node = telemetryNodes[index === 0 ? "ssd" : `ssd${index + 1}`];
+            if (!node) return;
+            const activity = index === 0 ? diskActivity : lastValues.take(`disk.util.${index}`, disk.utilization);
+            // "SSD C:", "HDD E:": the first letter of the disk.
+            const letter = String(disk.drive || "").split(" ")[0];
+            node.label = `${disk.rotational ? "HDD" : "SSD"}${letter ? " " + letter : ""}`;
+            node.value = activity.value;
+            node.stale = activity.stale;
+        });
 
         // Network: Task Manager's link utilization, received + sent over the speed Windows reports
         // for the link (2.5 Gb/s here); "—" when Windows gives no link speed. The square root of

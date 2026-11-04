@@ -143,7 +143,8 @@ window.inspectLayout = function () {
     const nodes = telemetryNodeList.filter(node => node.visible !== false);
     const center = telemetryNodes.npu;
     const orbitNodes = nodes.filter(node => node !== center);
-    if (orbitNodes.length !== window.layoutExpectedCards) issues.push('radar: missing hardware nodes');
+    // One node per card, every disk included.
+    if (orbitNodes.length !== window.layoutExpectedCards + (window.layoutExpectedExtraDisks || 0)) issues.push('radar: missing hardware nodes');
     const radius = getTelemetryLayout().orbitRadius;
     const near = (a, b) => Math.abs(a - b) < 0.01;
     if (!near(telemetryNodes.net.x, center.x) || !near(telemetryNodes.net.y, center.y - radius)) {
