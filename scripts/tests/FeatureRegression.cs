@@ -156,6 +156,24 @@ class FeatureRegression
                 Check(net.RxKBps>=0 && net.TxKBps>=0,"network throughput from PDH is measured");
             }
 
+            // Process ranking: the legacy "Process" object repeats a name for each instance; "Process V2" adds the pid.
+            var kv=new Func<string,double,System.Collections.Generic.KeyValuePair<string,double>>((k,v)=>new System.Collections.Generic.KeyValuePair<string,double>(k,v));
+            var v1Cpu=new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string,double>>{kv("chrome",80),kv("chrome",4),kv("Idle",2000),kv("_Total",2400),kv("dwm",40)};
+            var v1Ram=new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string,double>>{kv("chrome",3L<<30),kv("chrome",50L<<20),kv("Idle",0),kv("_Total",8L<<30),kv("dwm",100L<<20)};
+            ProcessRanking.Rank(v1Cpu,v1Ram,8,out var top,out var topRam,new System.Collections.Generic.Dictionary<int,string>());
+            Check(top.Length==3 && top[0].Name=="chrome" && top[0].CpuPercent==10 && top[0].RamMb==3072 && top[2].RamMb==50,"each repeated legacy instance keeps its own private memory");
+            Check(topRam.Name=="chrome" && topRam.RamMb==3072,"largest process found among repeated instance names");
+            var pidNames=new System.Collections.Generic.Dictionary<int,string>();
+            var v2Cpu=new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string,double>>{kv("chrome:120",8),kv("chrome:340",16),kv("Idle:0",700),kv("_Total",800),kv("my:app:77",8)};
+            var v2Ram=new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string,double>>{kv("chrome:340",2L<<20),kv("chrome:120",9L<<20),kv("my:app:77",1L<<20)};
+            ProcessRanking.Rank(v2Cpu,v2Ram,8,out top,out topRam,pidNames);
+            Check(top[0].Name=="chrome" && top[0].CpuPercent==2 && top[0].RamMb==2 && topRam.RamMb==9 && pidNames[340]=="chrome" && pidNames[77]=="my:app" && !pidNames.ContainsKey(0),"Process V2 instances pair by name:pid, the pid names GPU clients");
+            using(var processQuery=new PdhQuery()) if(processQuery.Add(ProcessRanking.CpuV2)) {
+                processQuery.Collect();System.Threading.Thread.Sleep(200);processQuery.Collect(); // a rate needs two samples
+                var rows=processQuery.Instances(ProcessRanking.CpuV2);
+                Check(rows!=null && rows.Count>10 && System.Linq.Enumerable.Count(System.Linq.Enumerable.Distinct(System.Linq.Enumerable.Select(rows,r=>r.Key)))==rows.Count,"live Process V2 instance names are unique ("+rows.Count+")");
+            } else Console.WriteLine("INFO Process V2 counters unavailable (Windows 10): legacy Process object used");
+
             // Power panel: kinds from GUIDs and personality, overlays for single-plan PCs.
             Check(PowerSchemes.KindFromGuid("A1841308-3541-4fab-bc81-f71556f20b4a")=="eco" && PowerSchemes.KindFromGuid("e9a42b02-d5df-448d-aa00-03f14749eb61")=="performance" && PowerSchemes.KindFromGuid(PowerSchemes.OverlayBalanced)=="balanced" && PowerSchemes.KindFromGuid("db1209e5-2442-4354-9127-ce97b5e306cd")==null,"known plan and mode GUIDs");
             Check(PowerSchemes.KindFromPersonality(0)=="performance" && PowerSchemes.KindFromPersonality(1)=="eco" && PowerSchemes.KindFromPersonality(2)=="balanced","plan personality");

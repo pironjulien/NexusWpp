@@ -2,9 +2,23 @@
 
 ## Non publié
 
+### Mesures alignées sur le Gestionnaire des tâches
+
+Audit sur un i7-14700K, UHD 770 et RTX 4080 SUPER : chaque champ de la télémétrie comparé au même moment aux compteurs Windows (CIM), à `nvidia-smi`, `Get-NetAdapter`, `Get-Volume` et WMI.
+
+- Top processus : sous Windows, plusieurs processus du même nom (13 `ChatGPT`, 7 `Antigravity`…) portaient tous la mémoire du dernier d'entre eux, car le compteur `Process` répète le nom sans suffixe ; le plus gros consommateur de RAM pouvait ainsi être manqué. Le classement lit désormais `Process V2` (Windows 11, instances `nom:pid`) et, sous Windows 10, apparie chaque instance à la sienne. Le même relevé donne le nom des processus clients du GPU, de l'iGPU et du NPU, sans cache qui garde le nom d'un pid réattribué.
+- Charge CPU : `% Processor Utility`, la valeur du Gestionnaire des tâches (travail rapporté à la fréquence de base, plafonné à 100 %), au lieu du seul temps occupé ; sur ce PC en turbo, l'ancienne valeur était environ moitié moindre (10 % contre 20 %).
+- RAM « mise en cache » : listes en attente plus pages modifiées, comme le Gestionnaire des tâches, au lieu d'y ajouter le cache système (environ 1 Go de trop ici). « Disponible » et la RAM utilisée de la carte centrale viennent de Windows (11,1 Go) au lieu d'un pourcentage entier appliqué à la mémoire installée (11,5 Go).
+- Activité du SSD : temps d'activité du Gestionnaire des tâches (`100 − % Idle Time`), au lieu du maximum entre `% Disk Time` et une estimation par le débit rapportée à 2 500 Mo/s.
+- VRAM de l'iGPU : mémoire dédiée plus partagée, comme son total.
+- Les adaptateurs graphiques sont relus chaque minute (environ 0,1 ms), et non plus seulement dans les 10 minutes qui suivent le démarrage : un GPU activé, branché ou dont le pilote est mis à jour plus tard est retrouvé, avec la version et la date de son pilote. NVML rouvre sa session quand le GPU n'y figure plus (mise à jour ou redémarrage du pilote).
+- Page : une mesure illisible pour un tick (`-1` envoyé par l'hôte) n'est plus affichée telle quelle (« -1 / -1 » en processus/threads, « -1,0 Mo/s », « -1,0 ms », « -2 Ko/s ») : la dernière valeur reste, grisée, ou « — » si aucune n'a été reçue. Même règle pour la cadence CPU.
+- Le champ `cpu.handles`, toujours 0, disparaît ; les champs `totalGb` des GPU sont arrondis (16 Go) au lieu d'être tronqués (15 Go).
+- Tests : classement des processus aux noms répétés, instances `Process V2` uniques, temps d'activité disque, mémoire iGPU, dates de pilote, une collecte réelle (charge CPU, RAM, disque), et aucune valeur négative affichée par la page.
+
 ### iGPU et GPU retrouvés après un démarrage précoce
 
-- Les adaptateurs graphiques sont recherchés à nouveau, au plus une fois par minute, tant que l'un d'eux manque dans les 10 minutes qui suivent le démarrage de Windows, ou dès que l'identifiant (LUID) d'un adaptateur connu ne s'ouvre plus (pilote redémarré). Lancé 16 s après le démarrage, avant que le pilote Intel ait inscrit le LUID de la session, NexusWpp laissait la carte iGPU vide (charge, décodage, encodage, VRAM, processus) jusqu'à sa fermeture.
+- Les adaptateurs graphiques sont recherchés à nouveau au plus une fois par minute ; un adaptateur dont l'identifiant (LUID) ne s'ouvre plus (pilote redémarré) est remplacé. Lancé 16 s après le démarrage, avant que le pilote Intel ait inscrit le LUID de la session, NexusWpp laissait la carte iGPU vide (charge, décodage, encodage, VRAM, processus) jusqu'à sa fermeture.
 
 ### Releases
 

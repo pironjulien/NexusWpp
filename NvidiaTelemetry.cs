@@ -46,6 +46,8 @@ namespace DesktopHtmlHost
 
         [LibraryImport(Library, EntryPoint = "nvmlInit_v2"), DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         internal static partial int Init();
+        [LibraryImport(Library, EntryPoint = "nvmlShutdown"), DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        internal static partial int Shutdown();
         [LibraryImport(Library, EntryPoint = "nvmlDeviceGetCount_v2"), DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         internal static partial int DeviceGetCount(out uint count);
         [LibraryImport(Library, EntryPoint = "nvmlDeviceGetHandleByIndex_v2"), DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
@@ -132,8 +134,9 @@ namespace DesktopHtmlHost
                     initialized = true;
                 }
                 if (device == IntPtr.Zero) device = FindDevice(adapterName);
-                // Do not attach another GPU's sensors to this adapter on multi-GPU PCs.
-                if (device == IntPtr.Zero) return null;
+                // Do not attach another GPU's sensors to this adapter on multi-GPU PCs. A session opened
+                // before a driver update or restart no longer lists the GPU: the next attempt opens a new one.
+                if (device == IntPtr.Zero) { Nvml.Shutdown(); initialized = false; return null; }
                 var next = ReadDevice(device);
                 // A lost or replaced GPU (driver update, TDR) is looked up again next time.
                 if (next == null) device = IntPtr.Zero;

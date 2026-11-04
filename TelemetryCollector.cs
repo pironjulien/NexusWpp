@@ -69,8 +69,7 @@ namespace DesktopHtmlHost
         private volatile bool isPingPending = false;
         private DateTime pingStartedAt = DateTime.MinValue;
 
-        // Process lists and cached top processes
-        private sealed record ProcessUsage(string Name, int CpuPercent, long RamMb);
+        // Process lists and cached top processes (ProcessRanking.cs)
         // Replaced as a whole by the ranking worker; read once per collection.
         private volatile ProcessUsage[] cachedTopProcesses = Array.Empty<ProcessUsage>();
         private volatile ProcessUsage cachedTopRamProcess;
@@ -113,16 +112,22 @@ namespace DesktopHtmlHost
             json.WriteNumber("pct", name.Length > 0 ? pct : 0);
             json.WriteEndObject();
         }
-        private readonly Dictionary<int, string> processNames = new Dictionary<int, string>();
+        // pid -> name from the last ranking ("Process V2" instances), replaced as a whole every 4 s.
+        private volatile Dictionary<int, string> rankedPidNames = new Dictionary<int, string>();
+        private Dictionary<int, string> processNames = new Dictionary<int, string>();
+        private Dictionary<int, string> processNamesSource;
 
-        // Process names for pids seen in GPU counters (pids are reused only after exit; the cache is pruned).
+        // Process names for pids seen in GPU counters. Pids are reused after exit, so names the ranking
+        // did not cover are only kept until the next ranking.
         private string ProcessName(int pid)
         {
-            string name;
+            var ranked = rankedPidNames;
+            if (ranked.TryGetValue(pid, out string name)) return name;
+            if (!ReferenceEquals(processNamesSource, ranked)) { processNames = new Dictionary<int, string>(); processNamesSource = ranked; }
             if (processNames.TryGetValue(pid, out name)) return name;
             try { using (var process = Process.GetProcessById(pid)) name = process.ProcessName; }
-            catch { name = ""; }
-            if (processNames.Count > 256) processNames.Clear();
+            catch (ArgumentException) { name = ""; } // the process has exited
+            catch (InvalidOperationException) { name = ""; }
             processNames[pid] = name;
             return name;
         }
@@ -130,9 +135,11 @@ namespace DesktopHtmlHost
         // One persistent PDH query sampled once per collection (memory, system, CPU clock, GPU/NPU).
         private PdhQuery perf;
         private PdhQuery processPerf;
-        private const string PdhProcessCpu = @"\Process(*)\% Processor Time";
-        private const string PdhProcessPrivateBytes = @"\Process(*)\Working Set - Private";
-        private const string PdhCacheBytes = @"\Memory\Cache Bytes";
+        private string pdhProcessCpu = ProcessRanking.CpuV2, pdhProcessPrivateBytes = ProcessRanking.RamV2;
+        // Task Manager "Cached": the three standby lists plus the modified page list.
+        private const string PdhModifiedPages = @"\Memory\Modified Page List Bytes";
+        // Task Manager CPU utilization: work done relative to the base frequency (above 100 % in turbo, capped).
+        private const string PdhCpuUtility = @"\Processor Information(_Total)\% Processor Utility";
         private const string PdhStandbyNormal = @"\Memory\Standby Cache Normal Priority Bytes";
         private const string PdhStandbyReserve = @"\Memory\Standby Cache Reserve Bytes";
         private const string PdhStandbyCore = @"\Memory\Standby Cache Core Bytes";
@@ -150,23 +157,30 @@ namespace DesktopHtmlHost
         private void OpenPerformanceCounters()
         {
             perf = new PdhQuery();
-            foreach (string path in new[] { PdhCacheBytes, PdhStandbyNormal, PdhStandbyReserve, PdhStandbyCore, PdhPoolPaged,
-                PdhPoolNonPaged, PdhPageFaults, PdhThreads, PdhProcesses, PdhCpuPerformance, PdhCpuFrequency })
+            foreach (string path in new[] { PdhModifiedPages, PdhStandbyNormal, PdhStandbyReserve, PdhStandbyCore, PdhPoolPaged,
+                PdhPoolNonPaged, PdhPageFaults, PdhThreads, PdhProcesses, PdhCpuPerformance, PdhCpuFrequency, PdhCpuUtility })
             {
                 perf.Add(path);
             }
             // System drive activity: same semantics as the former raw WMI LogicalDisk differencing.
             if (!perf.Add(PdhThermalZones)) cpuThermalPerfUnavailable = true;
-            diskCountersAvailable = perf.Add(PdhDiskRead) & perf.Add(PdhDiskWrite) & perf.Add(PdhDiskTime) & perf.Add(PdhDiskLatency);
+            diskCountersAvailable = perf.Add(PdhDiskRead) & perf.Add(PdhDiskWrite) & perf.Add(PdhDiskIdle) & perf.Add(PdhDiskLatency);
             network.AddCounters(perf);
             WindowsGpuTelemetry.AddCounters(perf);
             perf.Collect(); // baseline for rate counters
 
             // Process ranking has its own query: it is sampled every 4 s, so % Processor Time
             // is the average over that window rather than an instant.
+            // "Process V2" (Windows 11) names instances "name:pid"; Windows 10 only has "Process".
             processPerf = new PdhQuery();
-            processPerf.Add(PdhProcessCpu);
-            processPerf.Add(PdhProcessPrivateBytes);
+            if (!(processPerf.Add(pdhProcessCpu) && processPerf.Add(pdhProcessPrivateBytes)))
+            {
+                processPerf.Dispose();
+                processPerf = new PdhQuery();
+                pdhProcessCpu = ProcessRanking.CpuV1; pdhProcessPrivateBytes = ProcessRanking.RamV1;
+                processPerf.Add(pdhProcessCpu);
+                processPerf.Add(pdhProcessPrivateBytes);
+            }
             processPerf.Collect();
         }
 
@@ -182,7 +196,8 @@ namespace DesktopHtmlHost
         }
         private static readonly string PdhDiskRead = @"\LogicalDisk(" + SystemDrive + @")\Disk Read Bytes/sec";
         private static readonly string PdhDiskWrite = @"\LogicalDisk(" + SystemDrive + @")\Disk Write Bytes/sec";
-        private static readonly string PdhDiskTime = @"\LogicalDisk(" + SystemDrive + @")\% Disk Time";
+        // Task Manager "Active time" is 100 - % Idle Time (% Disk Time is a queue length that exceeds 100).
+        private static readonly string PdhDiskIdle = @"\LogicalDisk(" + SystemDrive + @")\% Idle Time";
         private static readonly string PdhDiskLatency = @"\LogicalDisk(" + SystemDrive + @")\Avg. Disk sec/Transfer";
         private bool diskCountersAvailable;
         private bool gpuCountersFresh;
@@ -204,12 +219,14 @@ namespace DesktopHtmlHost
         private DateTime lastAdapterDiscovery = DateTime.MinValue;
 
         // GPU names, LUIDs and memory sizes from the DirectX adapter registry (one source for all three),
-        // classified by dedicated memory rather than by vendor name. Run at start, then again while an adapter is
-        // missing or gone: right after boot the driver may not have registered this boot's LUID yet, and a driver
-        // restart gives the adapter a new one (Julien, 04/11: iGPU blank after a start 16 s after boot).
-        private void DiscoverDirectXAdapters()
+        // classified by dedicated memory rather than by vendor name. Run at start, then once a minute (about 0.1 ms):
+        // right after boot the driver may not have registered this boot's LUID yet, a driver restart or update gives
+        // the adapter a new one, and a GPU can be enabled or plugged in at any time (Julien, 04/11: iGPU blank after
+        // a start 16 s after boot). Returns true when the iGPU or the discrete GPU changed.
+        private bool DiscoverDirectXAdapters()
         {
             lastAdapterDiscovery = DateTime.UtcNow;
+            string previousIgpu = igpuLuid, previousDgpu = dgpuLuid;
             directxAdapterLuids.Clear();
             try
             {
@@ -258,6 +275,7 @@ namespace DesktopHtmlHost
             {
                 Program.LogDebug("DirectX Registry read error: " + ex.Message);
             }
+            return igpuLuid != previousIgpu || dgpuLuid != previousDgpu;
         }
 
         public void Initialize()
@@ -332,53 +350,7 @@ namespace DesktopHtmlHost
                     RamModules = modules;
                 }
 
-                // GPUs
-                bool registryClassified = !string.IsNullOrEmpty(GpuName) || !string.IsNullOrEmpty(IgpuInfo);
-                using (var searcher = new ManagementObjectSearcher("SELECT Name, DriverVersion, DriverDate, PNPDeviceID FROM Win32_VideoController"))
-                {
-                    foreach (ManagementObject obj in searcher.Get())
-                    {
-                        object nameVal = obj["Name"];
-                        object driverVerVal = obj["DriverVersion"];
-                        object dateRawVal = obj["DriverDate"];
-                        string name = nameVal != null ? nameVal.ToString() : "";
-                        string driverVer = driverVerVal != null ? driverVerVal.ToString() : "";
-                        string dateRaw = dateRawVal != null ? dateRawVal.ToString() : "";
-                        string driverDate = "";
-                        if (dateRaw.Length >= 8)
-                        {
-                            try
-                            {
-                                int y = int.Parse(dateRaw.Substring(0, 4));
-                                int m = int.Parse(dateRaw.Substring(4, 2));
-                                int d = int.Parse(dateRaw.Substring(6, 2));
-                                driverDate = string.Format("{0:D2}/{1:D2}/{2:D4}", d, m, y);
-                            }
-                            catch {}
-                        }
-
-                        string instanceId = Convert.ToString(obj["PNPDeviceID"] ?? "");
-
-                        // Driver details attach to the adapters classified from the registry;
-                        // without the registry, the same classifier works from the name alone.
-                        string kind = registryClassified
-                            ? (name.Equals(GpuName, StringComparison.OrdinalIgnoreCase) ? "dgpu" : name.Equals(IgpuInfo, StringComparison.OrdinalIgnoreCase) ? "igpu" : "")
-                            : GpuClassifier.ClassifyGpu(name, 0);
-                        if (kind == "dgpu" && (registryClassified || string.IsNullOrEmpty(GpuName)))
-                        {
-                            GpuName = name;
-                            DgpuDriver = driverVer;
-                            DgpuDriverDate = driverDate;
-                            dgpuInstanceId = instanceId;
-                        }
-                        else if (kind == "igpu" && (registryClassified || string.IsNullOrEmpty(IgpuInfo)))
-                        {
-                            IgpuInfo = name;
-                            IgpuDriver = driverVer;
-                            IgpuDriverDate = driverDate;
-                        }
-                    }
-                }
+                ReadVideoControllers();
 
                 using (var searcher = new ManagementObjectSearcher("SELECT DeviceName, DriverVersion, DriverDate FROM Win32_PnPSignedDriver WHERE DeviceName LIKE '%AI Boost%' OR DeviceName LIKE '%Neural%' OR DeviceName LIKE '%VPU%' OR DeviceName LIKE '%Inference%'"))
                 {
@@ -396,19 +368,7 @@ namespace DesktopHtmlHost
                         NpuName = name;
                         NpuDetected = true;
                         NpuDriver = driverVerVal != null ? driverVerVal.ToString() : "";
-
-                        string dateRaw = dateRawVal != null ? dateRawVal.ToString() : "";
-                        if (dateRaw.Length >= 8)
-                        {
-                            try
-                            {
-                                int y = int.Parse(dateRaw.Substring(0, 4));
-                                int m = int.Parse(dateRaw.Substring(4, 2));
-                                int d = int.Parse(dateRaw.Substring(6, 2));
-                                NpuDriverDate = string.Format("{0:D2}/{1:D2}/{2:D4}", d, m, y);
-                            }
-                            catch {}
-                        }
+                        NpuDriverDate = WmiDate(dateRawVal);
                         break;
                     }
                 }
@@ -494,6 +454,57 @@ namespace DesktopHtmlHost
 
             // Initialize power plans
             UpdatePowerPlansCache();
+        }
+
+        // Driver version, date and device instance of the iGPU and discrete GPU. Called at start and again when
+        // the adapter discovery finds a new or changed adapter (late registration, driver update).
+        private void ReadVideoControllers()
+        {
+            try
+            {
+                bool registryClassified = !string.IsNullOrEmpty(GpuName) || !string.IsNullOrEmpty(IgpuInfo);
+                using (var searcher = new ManagementObjectSearcher("SELECT Name, DriverVersion, DriverDate, PNPDeviceID FROM Win32_VideoController"))
+                {
+                    foreach (ManagementObject obj in searcher.Get())
+                    {
+                        string name = Convert.ToString(obj["Name"] ?? "");
+                        string driverVer = Convert.ToString(obj["DriverVersion"] ?? "");
+                        string driverDate = WmiDate(obj["DriverDate"]);
+                        string instanceId = Convert.ToString(obj["PNPDeviceID"] ?? "");
+
+                        // Driver details attach to the adapters classified from the registry;
+                        // without the registry, the same classifier works from the name alone.
+                        string kind = registryClassified
+                            ? (name.Equals(GpuName, StringComparison.OrdinalIgnoreCase) ? "dgpu" : name.Equals(IgpuInfo, StringComparison.OrdinalIgnoreCase) ? "igpu" : "")
+                            : GpuClassifier.ClassifyGpu(name, 0);
+                        if (kind == "dgpu" && (registryClassified || string.IsNullOrEmpty(GpuName)))
+                        {
+                            GpuName = name;
+                            DgpuDriver = driverVer;
+                            DgpuDriverDate = driverDate;
+                            dgpuInstanceId = instanceId;
+                        }
+                        else if (kind == "igpu" && (registryClassified || string.IsNullOrEmpty(IgpuInfo)))
+                        {
+                            IgpuInfo = name;
+                            IgpuDriver = driverVer;
+                            IgpuDriverDate = driverDate;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is ManagementException || ex is System.Runtime.InteropServices.COMException || ex is UnauthorizedAccessException)
+            {
+                Program.LogDebug("Video controller query error: " + ex.Message);
+            }
+        }
+
+        // CIM datetime "20260903000000.000000-000" -> "03/09/2026"; empty when absent or malformed.
+        internal static string WmiDate(object value)
+        {
+            string raw = Convert.ToString(value ?? "");
+            return raw.Length >= 8 && DateTime.TryParseExact(raw.Substring(0, 8), "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime date)
+                ? date.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "";
         }
 
         private static string MemoryTypeFromSmbios(int smbiosType)
@@ -930,34 +941,16 @@ namespace DesktopHtmlHost
             {
                 try
                 {
-                    var processes = new List<Tuple<string, int, long>>();
-                    int cpuCount = Environment.ProcessorCount;
-                    if (cpuCount <= 0) cpuCount = 1;
-
                     if (processPerf == null || !processPerf.Collect()) return;
-                    var cpuRows = processPerf.Instances(PdhProcessCpu);
-                    var ramRows = processPerf.Instances(PdhProcessPrivateBytes);
+                    var cpuRows = processPerf.Instances(pdhProcessCpu);
+                    var ramRows = processPerf.Instances(pdhProcessPrivateBytes);
                     if (cpuRows == null || ramRows == null) return;
-                    var ramByInstance = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-                    foreach (var row in ramRows) ramByInstance[row.Key] = row.Value;
-                    foreach (var row in cpuRows)
-                    {
-                        string name = row.Key ?? "";
-                        if (name == "_Total" || name == "Idle") continue;
-                        double ramBytes;
-                        ramByInstance.TryGetValue(name, out ramBytes);
-                        int hashIndex = name.IndexOf('#');
-                        if (hashIndex != -1) name = name.Substring(0, hashIndex);
-
-                        int cpuPercent = (int)Math.Min(99, Math.Round(Math.Max(0, row.Value) / cpuCount));
-                        long ramMb = (long)(Math.Max(0, ramBytes) / (1024 * 1024));
-                        processes.Add(new Tuple<string, int, long>(name, cpuPercent, ramMb));
-                    }
-
-                    var topRam = processes.OrderByDescending(p => p.Item3).FirstOrDefault();
-                    cachedTopProcesses = processes.OrderByDescending(p => p.Item2).Take(4)
-                        .Select(p => new ProcessUsage(p.Item1, p.Item2, p.Item3)).ToArray();
-                    cachedTopRamProcess = topRam != null ? new ProcessUsage(topRam.Item1, topRam.Item2, topRam.Item3) : null;
+                    var pidNames = new Dictionary<int, string>();
+                    ProcessRanking.Rank(cpuRows, ramRows, Environment.ProcessorCount, out var top, out var topRam, pidNames);
+                    cachedTopProcesses = top;
+                    cachedTopRamProcess = topRam;
+                    // Also on Windows 10 (no pid in the names): the lookup cache then restarts every 4 s.
+                    rankedPidNames = pidNames;
                 }
                 catch (Exception ex)
                 {
@@ -1064,10 +1057,14 @@ namespace DesktopHtmlHost
             network.Update(perf, perfSampled);
             if (perfSampled)
             {
-                double? cache = perf.Value(PdhCacheBytes);
-                if (cache.HasValue)
+                // Task Manager CPU utilization when the counter exists; GetSystemTimes (busy time) otherwise.
+                double? utility = perf.Value(PdhCpuUtility);
+                if (utility.HasValue) cpuLoad = (int)Math.Round(Math.Max(0, Math.Min(100, utility.Value)));
+
+                double? modified = perf.Value(PdhModifiedPages);
+                if (modified.HasValue)
                 {
-                    ramCachedBytes = (long)(cache.Value + (perf.Value(PdhStandbyNormal) ?? 0) + (perf.Value(PdhStandbyReserve) ?? 0) + (perf.Value(PdhStandbyCore) ?? 0));
+                    ramCachedBytes = (long)(modified.Value + (perf.Value(PdhStandbyNormal) ?? 0) + (perf.Value(PdhStandbyReserve) ?? 0) + (perf.Value(PdhStandbyCore) ?? 0));
                     cachedRamCachedBytes = ramCachedBytes;
                     lastMemoryPerfTime = DateTime.Now;
                 }
@@ -1101,25 +1098,16 @@ namespace DesktopHtmlHost
             }
 
             // System drive activity (PDH LogicalDisk, formerly a ~20 ms raw WMI query per tick).
-            double? diskRead = null, diskWrite = null, diskBusy = null, diskLatency = null;
+            double? diskRead = null, diskWrite = null, diskIdle = null, diskLatency = null;
             if (perfSampled && diskCountersAvailable)
             {
                 diskRead = perf.Value(PdhDiskRead); diskWrite = perf.Value(PdhDiskWrite);
-                diskBusy = perf.Value(PdhDiskTime); diskLatency = perf.Value(PdhDiskLatency);
+                diskIdle = perf.Value(PdhDiskIdle); diskLatency = perf.Value(PdhDiskLatency);
             }
             bool diskRatesValid = diskRead.HasValue && diskWrite.HasValue;
             double diskReadMbNum = diskRatesValid ? Math.Max(0, diskRead.Value) / (1024.0 * 1024.0) : -1;
             double diskWriteMbNum = diskRatesValid ? Math.Max(0, diskWrite.Value) / (1024.0 * 1024.0) : -1;
-            long diskActiveTime = -1;
-            if (diskRatesValid && diskBusy.HasValue)
-            {
-                double diskThroughputMb = diskReadMbNum + diskWriteMbNum;
-                int diskThroughputActivity = diskThroughputMb < 0.05
-                    ? 0
-                    : (int)Math.Ceiling(Math.Min(100.0, Math.Sqrt(diskThroughputMb / 2500.0) * 100.0));
-                long busyPercent = (long)Math.Round(Math.Max(0.0, Math.Min(100.0, diskBusy.Value)));
-                diskActiveTime = Math.Max(0, Math.Min(100, Math.Max(busyPercent, diskThroughputActivity)));
-            }
+            long diskActiveTime = diskIdle.HasValue ? DiskActiveTime(diskIdle.Value) : -1;
             double diskResponse = diskLatency.HasValue ? Math.Max(0, diskLatency.Value) : -1;
 
             // GPU stats
@@ -1140,21 +1128,15 @@ namespace DesktopHtmlHost
                     lastNpuDiscovery = DateTime.UtcNow;
                     npuLuid = DiscoverNpuLuid();
                 }
-                // At most once a minute: an adapter still missing in the first 10 minutes after boot (its driver
-                // registers late), or a known one whose LUID no longer opens (driver restart).
-                if ((DateTime.UtcNow - lastAdapterDiscovery).TotalSeconds >= 60)
-                {
-                    bool missing = Environment.TickCount64 < 10 * 60 * 1000 && (string.IsNullOrEmpty(igpuLuid) || string.IsNullOrEmpty(dgpuLuid));
-                    bool gone = (igpuLuidValue != 0 && WddmGpuSensors.AdapterExists(igpuLuidValue) == false) ||
-                                (dgpuLuidValue != 0 && WddmGpuSensors.AdapterExists(dgpuLuidValue) == false);
-                    if (missing || gone) DiscoverDirectXAdapters();
-                    else lastAdapterDiscovery = DateTime.UtcNow;
-                }
+                // Once a minute (about 0.1 ms): an adapter registered late, a new LUID after a driver restart or update,
+                // a GPU enabled or plugged in. Driver details follow a changed adapter.
+                if ((DateTime.UtcNow - lastAdapterDiscovery).TotalSeconds >= 60 && DiscoverDirectXAdapters()) ReadVideoControllers();
                 var counters = WindowsGpuTelemetry.Read(perf, igpuLuid, dgpuLuid, npuLuid);
                 cachedIgpuUtil = igpuUtil = counters[0].Utilization;
                 cachedIgpuDecodeUtil = igpuDecodeUtil = counters[0].Decode;
                 cachedIgpuEncodeUtil = igpuEncodeUtil = counters[0].Encode;
-                cachedIgpuMemBytes = igpuMemBytes = counters[0].SharedBytes;
+                // Same scope as the budget (dedicated carve-out + shared), as Task Manager's "GPU memory".
+                cachedIgpuMemBytes = igpuMemBytes = AdapterMemoryBytes(counters[0]);
                 cachedDgpuUtil = dgpuUtil = counters[1].Utilization;
                 cachedDgpuMemBytes = counters[1].DedicatedBytes;
                 cachedNpuUtil = npuUtil = counters[2].Utilization;
@@ -1318,7 +1300,6 @@ namespace DesktopHtmlHost
                 json.WriteNumber("cores", CpuCores);
                 json.WriteNumber("logical", CpuLogical);
                 json.WriteNumber("threads", threadsCount);
-                json.WriteNumber("handles", 0);
                 json.WriteString("l2Cache", CpuL2Cache ?? "");
                 json.WriteString("l3Cache", CpuL3Cache ?? "");
                 json.WriteEndObject();
@@ -1329,7 +1310,7 @@ namespace DesktopHtmlHost
                 json.WriteNumber("decodeUtil", igpuDecodeUtil);
                 json.WriteNumber("usedMb", windowsGpuFresh && igpuMemBytes >= 0 ? igpuMemBytes / (1024 * 1024) : -1);
                 json.WriteNumber("totalMb", igpuTotalMb);
-                json.WriteNumber("totalGb", igpuTotalMb / 1024);
+                json.WriteNumber("totalGb", RoundGb(igpuTotalMb));
                 json.WriteString("name", IgpuInfo ?? "");
                 json.WriteString("driver", IgpuDriver ?? "");
                 json.WriteString("driverDate", IgpuDriverDate ?? "");
@@ -1342,7 +1323,7 @@ namespace DesktopHtmlHost
                 json.WriteNumber("utilization", npuUtil);
                 json.WriteNumber("usedMb", windowsGpuFresh && npuMemBytes >= 0 ? npuMemBytes / (1024 * 1024) : -1);
                 json.WriteNumber("totalMb", npuTotalMb);
-                json.WriteNumber("totalGb", npuTotalMb / 1024);
+                json.WriteNumber("totalGb", RoundGb(npuTotalMb));
                 json.WriteString("name", NpuName ?? "");
                 WriteTopProcess(json, NpuDetected, windowsGpuFresh, cachedNpuTopPid, cachedNpuTopPct);
                 json.WriteEndObject();
@@ -1351,7 +1332,7 @@ namespace DesktopHtmlHost
                 json.WriteNumber("utilization", vramFresh ? vramPct : -1);
                 json.WriteNumber("usedMb", vramFresh ? (long)(vramUsed / (1024 * 1024)) : -1);
                 json.WriteNumber("totalMb", vramTotal / (1024 * 1024));
-                json.WriteNumber("totalGb", vramTotal / 1024 / 1024 / 1024);
+                json.WriteNumber("totalGb", RoundGb((long)(vramTotal / (1024 * 1024))));
                 json.WriteEndObject();
 
                 json.WriteStartObject("gpu");
@@ -1371,6 +1352,9 @@ namespace DesktopHtmlHost
                 json.WriteStartObject("ram");
                 json.WriteNumber("utilization", ramLoad);
                 json.WriteNumber("totalGb", TotalRamGb);
+                // Task Manager "In use" and "Available" (usable memory, not the installed modules).
+                json.WriteString("usedGb", ramTotalPhys > 0 ? Gigabytes((long)(ramTotalPhys - ramFreePhys)) : "");
+                json.WriteString("availableGb", ramTotalPhys > 0 ? Gigabytes((long)ramFreePhys) : "");
                 json.WriteString("commitUsedGb", Gigabytes(commitUsedBytes));
                 json.WriteString("commitLimitGb", Gigabytes(commitLimitBytes));
                 json.WriteString("cachedGb", Gigabytes(ramCachedBytes));
@@ -1456,6 +1440,15 @@ namespace DesktopHtmlHost
 
         // A non-finite double would make the whole message invalid JSON: report it as unavailable.
         private static double Finite(double value) { return double.IsFinite(value) ? value : -1; }
+        // Task Manager "Active time": the share of the interval the disk was not idle.
+        internal static long DiskActiveTime(double idlePercent) { return (long)Math.Round(100.0 - Math.Max(0.0, Math.Min(100.0, idlePercent))); }
+        // Dedicated + shared usage of an adapter; -1 when neither counter was read.
+        internal static long AdapterMemoryBytes(WindowsGpuSample sample)
+        {
+            return sample.SharedBytes < 0 && sample.DedicatedBytes < 0 ? -1 : Math.Max(0, sample.SharedBytes) + Math.Max(0, sample.DedicatedBytes);
+        }
+        // Binary gigabytes rounded like the page does ("16 Go" for 16376 MiB), never truncated.
+        private static long RoundGb(long megabytes) { return (long)Math.Round(megabytes / 1024.0); }
         private static string Gigabytes(long bytes) { return (bytes / (1024.0 * 1024.0 * 1024.0)).ToString("F1", CultureInfo.InvariantCulture); }
         // Throughput as a one-decimal string, or the number -1 when unavailable.
         private static void WriteRate(Utf8JsonWriter json, string name, double megabytes)

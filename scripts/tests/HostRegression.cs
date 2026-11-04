@@ -212,6 +212,32 @@ static class HostRegression
         context.Dispose();
     }
 
+    // Telemetry semantics matched to Task Manager, then one real collection of this machine.
+    static void Telemetry()
+    {
+        Check(TelemetryCollector.DiskActiveTime(100) == 0 && TelemetryCollector.DiskActiveTime(37.4) == 63 && TelemetryCollector.DiskActiveTime(-3) == 100,
+            "disk activity is 100 - % Idle Time, without a throughput estimate");
+        Check(TelemetryCollector.AdapterMemoryBytes(new WindowsGpuSample { SharedBytes = 3 << 20, DedicatedBytes = 1 << 20 }) == 4 << 20 &&
+              TelemetryCollector.AdapterMemoryBytes(new WindowsGpuSample()) == -1, "iGPU memory counts dedicated and shared usage, like its budget");
+        Check(TelemetryCollector.WmiDate("20260903000000.000000-000") == "03/09/2026" && TelemetryCollector.WmiDate("2026") == "" && TelemetryCollector.WmiDate(null) == "",
+            "driver dates parsed from CIM datetimes");
+        var collector = new TelemetryCollector();
+        collector.Initialize();
+        collector.CollectStats();
+        System.Threading.Thread.Sleep(1100);
+        using var json = System.Text.Json.JsonDocument.Parse(collector.CollectStats());
+        var root = json.RootElement;
+        int cpu = root.GetProperty("cpu").GetProperty("utilization").GetInt32();
+        Check(cpu >= 0 && cpu <= 100, "CPU utilization measured (" + cpu + " %)");
+        Check(!root.GetProperty("cpu").TryGetProperty("handles", out _), "no placeholder handle count");
+        var ram = root.GetProperty("ram");
+        double used = double.Parse(ram.GetProperty("usedGb").GetString(), System.Globalization.CultureInfo.InvariantCulture);
+        double available = double.Parse(ram.GetProperty("availableGb").GetString(), System.Globalization.CultureInfo.InvariantCulture);
+        Check(used > 0 && available > 0 && used + available <= ram.GetProperty("totalGb").GetInt32() + 0.2, "RAM in use and available are real and fit the installed memory");
+        long disk = root.GetProperty("disk").GetProperty("utilization").GetInt64();
+        Check(disk >= -1 && disk <= 100, "disk activity is a percentage or unavailable");
+    }
+
     [STAThread]
     static int Main(string[] args)
     {
@@ -229,6 +255,7 @@ static class HostRegression
             ShellEvents();
             Visibility();
             ParentDestroyed();
+            Telemetry();
         }
         catch (Exception error)
         {

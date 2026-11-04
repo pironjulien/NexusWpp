@@ -310,10 +310,13 @@ function updateDOM(stats) {
         cpuTempSub.title = '';
     }
     if (cpuFreqSub) {
-        cpuFreqSub.textContent = `${num(stats.cpu.freqGhz)} GHz`;
+        // Empty when the clock counter could not be read.
+        setHeldText(cpuFreqSub, parseFloat(stats.cpu.freqGhz) > 0 ? `${num(stats.cpu.freqGhz)} GHz` : null);
     }
     if (cpuProcThreadsSub) {
-        cpuProcThreadsSub.textContent = `${stats.totalProcesses} / ${stats.cpu.threads}`;
+        // -1: counters unreadable this tick (the last reading stays, greyed).
+        setHeldText(cpuProcThreadsSub, NexusTelemetry.valid(stats.totalProcesses) && NexusTelemetry.valid(stats.cpu.threads)
+            ? `${stats.totalProcesses} / ${stats.cpu.threads}` : null);
     }
     if (cpuTopProcSub) {
         const top = (stats.topProcesses && stats.topProcesses.length > 0) ? stats.topProcesses[0] : null;
@@ -349,9 +352,11 @@ function updateDOM(stats) {
     const ramLoad = track(ramCard, setGauge("ram.util", ramRing, ramVal, ramGaugeContainer, stats.ram.utilization));
 
     const totalRamGb = stats.ram.totalGb || 0;
-    const usedRamGb = ramLoad.value !== null ? num((ramLoad.value / 100) * totalRamGb, 1) : '—';
-    setHeldText(ramFreeSub, NexusTelemetry.valid(stats.ram.utilization)
-        ? `${num((1 - stats.ram.utilization / 100) * totalRamGb, 1)} ${GB}` : null);
+    // In use / available from the host (usable memory, as Task Manager); older payloads derive them from the load.
+    const hostRamGb = text => text !== undefined && text !== "" ? num(text, 1) : null;
+    const usedRamGb = hostRamGb(stats.ram.usedGb) ?? (ramLoad.value !== null ? num((ramLoad.value / 100) * totalRamGb, 1) : '—');
+    setHeldText(ramFreeSub, hostRamGb(stats.ram.availableGb) !== null ? `${hostRamGb(stats.ram.availableGb)} ${GB}`
+        : NexusTelemetry.valid(stats.ram.utilization) ? `${num((1 - stats.ram.utilization / 100) * totalRamGb, 1)} ${GB}` : null);
     if (ramCachedSub) {
         ramCachedSub.textContent = `${num(stats.ram.cachedGb)} ${GB}`;
     }
@@ -369,23 +374,29 @@ function updateDOM(stats) {
     ssdFreeSub.textContent = `${num(stats.disk.freeGb)} ${GB} / ${num(stats.disk.totalGb)} ${GB}`;
     if (ssdReadSub && ssdWriteSub) {
         // Formatter with dynamic unit support
+        // Throughput text from the host, or the number -1 when the counters could not be read.
         const formatSpeed = (mbStr) => {
             const val = parseFloat(mbStr);
+            if (!NexusTelemetry.valid(val)) return null;
             if (val >= 1000) return `${num(val / 1024, 1)} ${GB}/s`;
             return `${num(val, 1)} ${MB}/s`;
         };
-        ssdReadSub.textContent = formatSpeed(stats.disk.readMb);
-        ssdWriteSub.textContent = formatSpeed(stats.disk.writeMb);
+        setHeldText(ssdReadSub, formatSpeed(stats.disk.readMb));
+        setHeldText(ssdWriteSub, formatSpeed(stats.disk.writeMb));
     }
     if (ssdResponseSub) {
-        ssdResponseSub.textContent = `${num(stats.disk.responseTimeMs, 1)} ms`;
+        setHeldText(ssdResponseSub, NexusTelemetry.valid(stats.disk.responseTimeMs) ? `${num(stats.disk.responseTimeMs, 1)} ms` : null);
     }
 
     // Network circular gauge & absolute speed rendering
-    const totalNetKb = stats.network.lan + stats.network.wifi;
+    // -1: rates unreadable this tick; the gauge then counts nothing and the texts hold the last reading.
+    const netRatesValid = NexusTelemetry.valid(stats.network.lan) && NexusTelemetry.valid(stats.network.wifi);
+    const totalNetKb = netRatesValid ? stats.network.lan + stats.network.wifi : 0;
 
     // Dynamic value display
-    if (totalNetKb === 0) {
+    if (!netRatesValid) {
+        if (!netVal.dataset.seen) setHtmlIfChanged(netVal, `—<span>${KB}/s</span>`);
+    } else if (totalNetKb === 0) {
         setHtmlIfChanged(netVal, `0<span>${KB}/s</span>`);
     } else if (totalNetKb < 1024) {
         setHtmlIfChanged(netVal, `${num(totalNetKb)}<span>${KB}/s</span>`);
@@ -401,8 +412,9 @@ function updateDOM(stats) {
 
     // Dynamic formatting for Send / Receive speeds
 
-    netWifiSub.textContent = formatNetSpeed(stats.network.wifi); // RECEVOIR
-    netLanSub.textContent = formatNetSpeed(stats.network.lan);   // ENVOYER
+    if (netRatesValid) netVal.dataset.seen = '1';
+    setHeldText(netWifiSub, NexusTelemetry.valid(stats.network.wifi) ? formatNetSpeed(stats.network.wifi) : null); // RECEVOIR
+    setHeldText(netLanSub, NexusTelemetry.valid(stats.network.lan) ? formatNetSpeed(stats.network.lan) : null);   // ENVOYER
     if (netTypeSub) {
         const wifiSignal = Number(stats.network.signal);
         if (stats.network.type === "Wi-Fi" && wifiSignal >= 0) {

@@ -29,6 +29,10 @@ window.layoutFixture = function (test) {
     } else if (test.state === 'stale') {
         stats.sources = { nvidia: { status: 'stale' }, windowsGpu: { status: 'stale' } };
         stats.gpu.temp = stats.gpu.powerW = stats.gpu.memoryClock = -1;
+        // Host readings unreadable this tick are the number -1: the page holds the last value, never shows -1.
+        stats.disk.readMb = stats.disk.writeMb = stats.disk.responseTimeMs = -1;
+        stats.network.lan = stats.network.wifi = -1;
+        stats.totalProcesses = stats.cpu.threads = -1;
     }
     updateDOM(stats);
     // Multi-monitor topologies: the host's LAYOUT rectangle (window pixels; the fixture uses CSS pixels).
@@ -103,6 +107,7 @@ window.inspectLayout = function () {
             if (bounds.width < 30 || bounds.height < 30) issues.push(name(element) + ': unreadable gauge');
         }
         if (element.matches('.gauge-value') && !inside(bounds, rect(element.closest('.gauge-slot')))) issues.push(name(element) + ': outside gauge slot');
+        if (element.matches('.sub-metric .val, .gauge-value') && /(^|[\s(\/])-\d/.test(element.textContent)) issues.push(name(element) + ': unavailable reading shown as a negative number');
     }
     for (const card of cards.filter(card => card.matches('.gauge-card'))) {
         const badge = card.querySelector('.critical-alert');
