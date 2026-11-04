@@ -442,11 +442,10 @@ namespace NexusWppInstaller
             string bootstrapper = Path.Combine(downloadDir, "MicrosoftEdgeWebview2Setup.exe");
             try
             {
-                using (var client = new System.Net.Http.HttpClient())
-                using (Stream download = client.GetStreamAsync(WebView2BootstrapperUrl).GetAwaiter().GetResult())
-                using (FileStream file = File.Create(bootstrapper))
+                // The timeout covers the whole download (the bootstrapper is a few MB), not just the headers.
+                using (var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromMinutes(5) })
                 {
-                    download.CopyTo(file);
+                    File.WriteAllBytes(bootstrapper, client.GetByteArrayAsync(WebView2BootstrapperUrl).GetAwaiter().GetResult());
                 }
 
                 string signer;
@@ -498,7 +497,8 @@ namespace NexusWppInstaller
                     {
                         ZipArchiveEntry entry = archive.Entries[i];
                         string targetPath = Path.GetFullPath(Path.Combine(InstallDir, entry.FullName));
-                        if (!targetPath.StartsWith(Path.GetFullPath(InstallDir), StringComparison.OrdinalIgnoreCase))
+                        // The separator keeps a sibling such as C:\nexuswpp-x out of the install folder.
+                        if (!targetPath.StartsWith(Path.GetFullPath(InstallDir) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                         {
                             throw new InvalidOperationException("Unsafe archive entry: " + entry.FullName);
                         }

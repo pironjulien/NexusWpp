@@ -103,7 +103,6 @@ namespace DesktopHtmlHost
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr hwnd, StringBuilder name, int size);
         [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
         [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern IntPtr GetWindowLong64(IntPtr hwnd, int index);
-        [DllImport("user32.dll", EntryPoint = "GetWindowLongW")] private static extern int GetWindowLong32(IntPtr hwnd, int index);
         [DllImport("user32.dll")] private static extern bool GetLayeredWindowAttributes(IntPtr hwnd, out uint color, out byte alpha, out uint flags);
         [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")] private static extern int GetFrameBounds(IntPtr hwnd, int attribute, out Rect rect, int size);
         [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")] private static extern int GetCloaked(IntPtr hwnd, int attribute, out int value, int size);
@@ -201,7 +200,7 @@ namespace DesktopHtmlHost
                     cls == "Shell_SecondaryTrayWnd" || cls == "Button") return true;
                 int cloaked;
                 if (GetCloaked(hwnd, 14, out cloaked, sizeof(int)) == 0 && cloaked != 0) return true;
-                long exStyle = IntPtr.Size == 8 ? GetWindowLong64(hwnd, -20).ToInt64() : GetWindowLong32(hwnd, -20);
+                long exStyle = GetWindowLong64(hwnd, -20).ToInt64(); // x64 only
                 if ((exStyle & 0x20) != 0) return true; // WS_EX_TRANSPARENT
                 if ((exStyle & 0x80000) != 0) // Per-pixel/partly transparent windows do not occlude the desktop.
                 {

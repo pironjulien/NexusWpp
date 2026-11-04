@@ -136,6 +136,9 @@ namespace DesktopHtmlHost
         private const string PdhProcesses = @"\System\Processes";
         private const string PdhCpuPerformance = @"\Processor Information(_Total)\% Processor Performance";
         private const string PdhCpuFrequency = @"\Processor Information(_Total)\Processor Frequency";
+        // Same source as the WMI class Win32_PerfFormattedData_Counters_ThermalZoneInformation, in kelvins,
+        // read from the query sampled every tick instead of waking the WMI provider host.
+        private const string PdhThermalZones = @"\Thermal Zone Information(*)\Temperature";
 
         private void OpenPerformanceCounters()
         {
@@ -146,6 +149,7 @@ namespace DesktopHtmlHost
                 perf.Add(path);
             }
             // System drive activity: same semantics as the former raw WMI LogicalDisk differencing.
+            if (!perf.Add(PdhThermalZones)) cpuThermalPerfUnavailable = true;
             diskCountersAvailable = perf.Add(PdhDiskRead) & perf.Add(PdhDiskWrite) & perf.Add(PdhDiskTime) & perf.Add(PdhDiskLatency);
             network.AddCounters(perf);
             WindowsGpuTelemetry.AddCounters(perf);
@@ -570,11 +574,12 @@ namespace DesktopHtmlHost
             {
                 try
                 {
-                    using (var searcher = new ManagementObjectSearcher("SELECT Temperature FROM Win32_PerfFormattedData_Counters_ThermalZoneInformation"))
+                    var zones = perf != null ? perf.Instances(PdhThermalZones) : null;
+                    if (zones != null)
                     {
-                        foreach (ManagementObject obj in searcher.Get())
+                        foreach (var zone in zones)
                         {
-                            double celsius = Convert.ToDouble(obj["Temperature"] ?? 0.0) - 273.15;
+                            double celsius = zone.Value - 273.15;
                             if (celsius > maxCelsius) maxCelsius = celsius;
                         }
                     }

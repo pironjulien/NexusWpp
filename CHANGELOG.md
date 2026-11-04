@@ -2,6 +2,15 @@
 
 ## Non publié
 
+### Audit .NET 10
+
+- La température CPU est lue par le compteur de performances `\Thermal Zone Information(*)\Temperature`, échantillonné avec les autres, au lieu d'une requête WMI toutes les 5 s qui réveillait le service WMI. Même valeur (zone thermique Windows) ; la lecture ACPI reste en secours.
+- Le code de l'hôte est précompilé (ReadyToRun) pour un premier démarrage plus rapide à l'ouverture de session ; l'installeur passe à 111 Mo.
+- Tout avertissement du compilateur bloque désormais la compilation, pour l'hôte comme pour l'installeur.
+- Retirés : la lecture de version Windows par `RtlGetVersion` (.NET donne la vraie version) et la variante 32 bits de `GetWindowLong` (hôte x64 seulement).
+- Installeur : le contrôle des chemins de l'archive exige le séparateur de dossier (un dossier voisin comme `C:\nexuswpp-x` est refusé) ; le téléchargement de WebView2 a un délai global de 5 minutes.
+- Releases GitHub immuables, comme sur les autres produits Nexus.
+
 ### Installeur en .NET 10
 
 - `NexusWppSetup.exe` est désormais une seule exe .NET 10 autonome et compressée (`installer/NexusWppInstaller.csproj`) au lieu d'un programme .NET Framework 4.8 : tout le produit est en .NET 10. Elle pèse 102 Mo, runtime compris.

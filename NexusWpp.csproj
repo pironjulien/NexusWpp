@@ -27,6 +27,9 @@
     <DebugType>none</DebugType>
     <Optimize>true</Optimize>
     <Deterministic>true</Deterministic>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Precompiled host code: a faster first start at sign-in (the runtime itself is already precompiled). -->
+    <PublishReadyToRun>true</PublishReadyToRun>
     <ReleaseVersionSource>work\obj\ReleaseVersion.cs</ReleaseVersionSource>
   </PropertyGroup>
 

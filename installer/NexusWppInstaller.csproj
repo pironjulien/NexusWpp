@@ -28,6 +28,7 @@
     <DebugType>none</DebugType>
     <Optimize>true</Optimize>
     <Deterministic>true</Deterministic>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <PayloadZip Condition="'$(PayloadZip)' == ''">..\dist\NexusWppPayload.zip</PayloadZip>
   </PropertyGroup>
 
