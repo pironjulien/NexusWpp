@@ -77,7 +77,6 @@ function formatBattery(battery) {
     return text;
 }
 
-let lastGpuMemoryClock = 0;
 
 // Name and measure last fitted in each slot: a slot resized later (monitor layout, DPI, paused
 // rendering) is fitted again to its new width instead of overflowing.
@@ -355,11 +354,10 @@ function updateDOM(stats) {
     }
     track(gpuCard, setSensorMetric(gpuCoreSub, t("label.gpuPower"), stats.gpu.powerW, "W", stats, "nvidia", "gpu.powerW"));
     setAdapterTopProcess(gpuTopProcSub, stats.gpu.topProcess);
-    // Rated memory clock in the card title, a specification like the RAM speed (the live clock,
-    // 405 MHz at idle, read as the GPU's speed there).
-    if (NexusTelemetry.valid(stats.gpu.memoryClockMax) && stats.gpu.memoryClockMax > 0) {
-        lastGpuMemoryClock = Math.round(stats.gpu.memoryClockMax);
-    }
+    // Live graphics clock in the card title, read like the CPU speed. NVML reports it; the WDDM
+    // sensors of other GPUs do not, and a stale reading is not shown: no clock rather than an old one.
+    const gpuCoreClock = NexusTelemetry.sensorState(stats, "nvidia") === "fresh" && NexusTelemetry.valid(stats.gpu.coreClock)
+        && stats.gpu.coreClock > 0 ? Math.round(stats.gpu.coreClock) : 0;
     if (gpuVramBar && dgpuVramUsed.value !== null) {
         const gpuVramPct = stats.vram.totalMb > 0 ? Math.round((dgpuVramUsed.value / stats.vram.totalMb) * 100) : 0;
         setBarFill(gpuVramBar, gpuVramPct);
@@ -497,7 +495,7 @@ function updateDOM(stats) {
     }
     if (stats.gpu.name && specGpuName) {
         const gpuTitle = (stats.gpu.name.startsWith("GPU") ? stats.gpu.name : "GPU " + stats.gpu.name)
-            + (lastGpuMemoryClock ? ` @ ${lastGpuMemoryClock} MHz` : "");
+            + (gpuCoreClock ? ` @ ${gpuCoreClock} MHz` : "");
         if (specGpuName.textContent !== gpuTitle) specGpuName.textContent = gpuTitle;
     }
     if (stats.ram.totalGb && specRamName) {

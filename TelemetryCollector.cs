@@ -1226,7 +1226,6 @@ namespace DesktopHtmlHost
             double gpuTemp = nv != null ? nv.Temperature ?? -1 : -1;
             double gpuCoreClock = nv != null ? nv.CoreClock ?? -1 : -1;
             double gpuMemClock = nv != null ? nv.MemoryClock ?? -1 : -1;
-            double gpuMemClockMax = nvidiaTelemetry.MaxMemoryClockMhz;
             double gpuPowerW = nv != null && nv.PowerWatts.HasValue ? Math.Round(nv.PowerWatts.Value, 1) : -1;
             int gpuFanRpm = -1;
             string gpuSensorStatus = nvidiaTelemetry.Status;
@@ -1253,7 +1252,6 @@ namespace DesktopHtmlHost
                 {
                     gpuTemp = wddmSample.TemperatureC ?? -1;
                     gpuMemClock = wddmSample.MemoryClockMhz ?? -1;
-                    gpuMemClockMax = wddmSample.MaxMemoryClockMhz ?? -1;
                     gpuFanRpm = wddmSample.FanRpm ?? -1;
                 }
             }
@@ -1386,7 +1384,6 @@ namespace DesktopHtmlHost
                 json.WriteNumber("temp", Finite(gpuTemp));
                 json.WriteNumber("coreClock", Finite(gpuCoreClock));
                 json.WriteNumber("memoryClock", Finite(gpuMemClock));
-                json.WriteNumber("memoryClockMax", Finite(gpuMemClockMax));
                 json.WriteNumber("powerW", Finite(gpuPowerW));
                 json.WriteString("name", GpuName ?? "");
                 json.WriteString("driver", DgpuDriver ?? "");

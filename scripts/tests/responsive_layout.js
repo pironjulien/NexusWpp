@@ -11,7 +11,7 @@ window.layoutFixture = function (test) {
         cpu: { utilization: 48, temp: 65, maxCoreUtilization: 100, name: 'Intel Core Ultra 9 285K', freqGhz: 5.7, threads: 5462, logical: 24 },
         igpu: { utilization: 35, detected: igpu, name: 'Intel Graphics', usedMb: 2048, totalMb: 32768, decodeUtil: 24, encodeUtil: 12, topProcess: { name: 'msedgewebview2', pct: 30 } },
         npu: { utilization: 68, detected: npu, name: 'Intel AI Boost', usedMb: 2048, totalMb: 32768, topProcess: { name: 'WindowsStudioEffects', pct: 42 } },
-        gpu: { utilization: 73, detected: dgpu, name: 'NVIDIA GeForce RTX 5090', temp: 76, powerW: 575, coreClock: 2875, memoryClock: 15001, memoryClockMax: 14001, topProcess: { name: 'Cyberpunk2077', pct: 71 } },
+        gpu: { utilization: 73, detected: dgpu, name: 'NVIDIA GeForce RTX 5090', temp: 76, powerW: 575, coreClock: 2875, memoryClock: 15001, topProcess: { name: 'Cyberpunk2077', pct: 71 } },
         vram: { usedMb: 24576, totalMb: 32768 },
         ram: { utilization: 72, totalGb: 128, speedMts: 6400, type: 'DDR5', modules: 4, cachedGb: 32.4, commitUsedGb: 100.5, commitLimitGb: 192.8 },
         disk: { name: 'Samsung SSD 990 PRO 4TB', utilization: 58, storagePercent: 65, freeGb: 1234.5, totalGb: 3725.9, readMb: 7250.5, writeMb: 6300.4, responseTimeMs: 12.6 },

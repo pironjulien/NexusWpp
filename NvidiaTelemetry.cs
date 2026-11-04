@@ -60,8 +60,6 @@ namespace DesktopHtmlHost
         internal static partial int DeviceGetTemperature(IntPtr device, int sensor, out uint celsius);
         [LibraryImport(Library, EntryPoint = "nvmlDeviceGetClockInfo"), DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         internal static partial int DeviceGetClockInfo(IntPtr device, int clock, out uint mhz);
-        [LibraryImport(Library, EntryPoint = "nvmlDeviceGetMaxClockInfo"), DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        internal static partial int DeviceGetMaxClockInfo(IntPtr device, int clock, out uint mhz);
         [LibraryImport(Library, EntryPoint = "nvmlDeviceGetPowerUsage"), DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         internal static partial int DeviceGetPowerUsage(IntPtr device, out uint milliwatts);
         [LibraryImport(Library, EntryPoint = "nvmlDeviceGetMemoryInfo_v2"), DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
@@ -90,8 +88,6 @@ namespace DesktopHtmlHost
         internal long AgeMs { get { return lastSuccess < 0 ? -1 : Math.Max(0, clock.ElapsedMilliseconds - lastSuccess); } }
         internal NvidiaTelemetry() { status = "unavailable"; }
         internal NvidiaSample? Current { get { return Status == "fresh" ? sample : null; } }
-        // Rated memory clock of the GPU (a specification, like the RAM speed); -1 until read.
-        internal double MaxMemoryClockMhz { get; private set; } = -1;
 
         // NVML is installed with the driver and the adapter is an NVIDIA one.
         internal bool IsAvailable(string adapterName)
@@ -137,11 +133,7 @@ namespace DesktopHtmlHost
                     if (init != Nvml.Success) { Program.LogDebug("NVML init failed: " + init); return null; }
                     initialized = true;
                 }
-                if (device == IntPtr.Zero) {
-                    device = FindDevice(adapterName);
-                    if (device != IntPtr.Zero && Nvml.DeviceGetMaxClockInfo(device, Nvml.ClockMemory, out uint maxMemory) == Nvml.Success
-                        && maxMemory > 0 && maxMemory < 100000) MaxMemoryClockMhz = maxMemory;
-                }
+                if (device == IntPtr.Zero) device = FindDevice(adapterName);
                 // Do not attach another GPU's sensors to this adapter on multi-GPU PCs. A session opened
                 // before a driver update or restart no longer lists the GPU: the next attempt opens a new one.
                 if (device == IntPtr.Zero) { _ = Nvml.Shutdown(); initialized = false; return null; }

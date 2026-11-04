@@ -104,7 +104,6 @@ static class FeatureRegression
             Check(WddmGpuSensors.PerfDataSize==64 && WddmGpuSensors.PerfCapsSize==40 && WddmGpuSensors.QueryInfoSize==24,"D3DKMT structures match the x64 layout");
             var wddm=WddmGpuSample.Parse(8001000000UL,0,0,524,0);
             Check(wddm!=null && wddm.TemperatureC==52.4 && wddm.MemoryClockMhz==8001 && wddm.FanRpm==null && wddm.PowerPercent==null,"deci-Celsius and Hz converted, unreported fan and power stay unavailable");
-            Check(WddmGpuSample.Parse(8001000000UL,0,0,524,0,10001000000UL)?.MaxMemoryClockMhz==10001 && wddm!=null && wddm.MaxMemoryClockMhz==null,"rated memory clock is read apart from the live clock");
             Check(WddmGpuSample.Parse(0,0,0,0,0)==null,"driver without sensors reports nothing instead of zeros");
             wddm=WddmGpuSample.Parse(0,0,355,0,3200);
             Check(wddm!=null && wddm.FanRpm==0 && wddm.PowerPercent==35.5,"stopped fan is real only when the driver declares a fan");
