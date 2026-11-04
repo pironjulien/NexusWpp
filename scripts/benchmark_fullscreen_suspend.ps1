@@ -125,9 +125,9 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 
-public class FullscreenProbe {
+static class FullscreenProbe {
     [STAThread]
-    public static void Main() {
+    static void Main() {
         Application.EnableVisualStyles();
         using (var f = new Form()) {
             f.FormBorderStyle = FormBorderStyle.None;

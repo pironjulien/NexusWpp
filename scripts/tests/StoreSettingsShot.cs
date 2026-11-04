@@ -29,7 +29,7 @@ static class StoreSettingsShot
             form.Show();
             for (int i = 0; i < 30; i++) { Application.DoEvents(); Thread.Sleep(30); }
             RECT r;
-            DwmGetWindowAttribute(form.Handle, 9, out r, Marshal.SizeOf(typeof(RECT))); // extended frame bounds, no invisible borders
+            _ = DwmGetWindowAttribute(form.Handle, 9, out r, Marshal.SizeOf<RECT>()); // extended frame bounds, no invisible borders
             var bounds = Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom);
             using (var window = new Bitmap(bounds.Width, bounds.Height))
             {

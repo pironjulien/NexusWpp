@@ -11,6 +11,7 @@ using DesktopHtmlHost;
 static class SettingsRegression
 {
     static int failures;
+    static readonly string[] RequiredControls = { "version", "rate", "startup", "startupNote", "logs", "status" };
 
     static void Check(bool condition, string label)
     {
@@ -91,7 +92,7 @@ static class SettingsRegression
                 g.FillRectangle(Brushes.Red, 0, 0, 200, 200);
                 g.FillRectangle(Brushes.Blue, 200, 0, 200, 200);
             }
-            var orientation = (PropertyItem)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof(PropertyItem));
+            var orientation = (PropertyItem)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(PropertyItem));
             orientation.Id = 0x0112; orientation.Type = 3; orientation.Len = 2; orientation.Value = new byte[] { 6, 0 };
             bitmap.SetPropertyItem(orientation);
             bitmap.Save(rotated, ImageFormat.Jpeg);
@@ -124,7 +125,7 @@ static class SettingsRegression
         Check(SettingsForm.RatingUri(true) == "ms-windows-store://review/?ProductId=9N2VCVDH7QDX" &&
               SettingsForm.RatingUri(false) == "https://apps.microsoft.com/detail/9N2VCVDH7QDX", "rating opens the Store review page or the web listing");
         string message = UserSettings.BuildSettingsMessage(logo);
-        Check(message.StartsWith("{\"control\":\"SETTINGS\",\"logo\":\"data:image/png;base64,") && message.EndsWith("\"}"), "settings message carries the logo as a PNG data URL");
+        Check(message.StartsWith("{\"control\":\"SETTINGS\",\"logo\":\"data:image/png;base64,", StringComparison.Ordinal) && message.EndsWith("\"}", StringComparison.Ordinal), "settings message carries the logo as a PNG data URL");
         Check(UserSettings.BuildSettingsMessage(null) == "{\"control\":\"SETTINGS\",\"logo\":null}", "default logo is sent as null");
 
         // Settings window renders off screen; the image is kept for a visual check.
@@ -142,7 +143,7 @@ static class SettingsRegression
             }
             Check(AllControls(form).Count(c => c is Button || c is Label) >= 7, "settings window builds its controls");
             var named = AllControls(form).ToDictionary(c => c.Name.Length > 0 ? c.Name : Guid.NewGuid().ToString());
-            Check(new[] { "version", "rate", "startup", "startupNote", "logs", "status" }.All(named.ContainsKey), "version, rating, startup and logs controls are present");
+            Check(RequiredControls.All(named.ContainsKey), "version, rating, startup and logs controls are present");
             Check(named["version"].Text.Contains(NexusWpp.ReleaseVersion.Value), "version line shows the release version");
             Check(!named.ContainsKey("welcome"), "welcome message is hidden by default");
             Check(named.ContainsKey("priorityStartup") == PriorityStartup.Available, "priority startup is offered only with the Store alias");
@@ -150,11 +151,11 @@ static class SettingsRegression
             taskXml.LoadXml(PriorityStartup.BuildTaskXml(@"PC\A&B", @"C:\Users\A&B\AppData\Local\Microsoft\WindowsApps\nexuswpp.exe"));
             var ns = new System.Xml.XmlNamespaceManager(taskXml.NameTable);
             ns.AddNamespace("t", "http://schemas.microsoft.com/windows/2004/02/mit/task");
-            Check(taskXml.SelectSingleNode("//t:LogonTrigger/t:UserId", ns).InnerText == @"PC\A&B" &&
-                  taskXml.SelectSingleNode("//t:Exec/t:Command", ns).InnerText.EndsWith(@"A&B\AppData\Local\Microsoft\WindowsApps\nexuswpp.exe") &&
-                  taskXml.SelectSingleNode("//t:Principal/t:RunLevel", ns).InnerText == "LeastPrivilege" &&
-                  taskXml.SelectSingleNode("//t:Settings/t:Priority", ns).InnerText == "4" &&
-                  taskXml.SelectSingleNode("//t:Settings/t:ExecutionTimeLimit", ns).InnerText == "PT0S",
+            Check(taskXml.SelectSingleNode("//t:LogonTrigger/t:UserId", ns)?.InnerText == @"PC\A&B" &&
+                  taskXml.SelectSingleNode("//t:Exec/t:Command", ns)?.InnerText.EndsWith(@"A&B\AppData\Local\Microsoft\WindowsApps\nexuswpp.exe", StringComparison.Ordinal) == true &&
+                  taskXml.SelectSingleNode("//t:Principal/t:RunLevel", ns)?.InnerText == "LeastPrivilege" &&
+                  taskXml.SelectSingleNode("//t:Settings/t:Priority", ns)?.InnerText == "4" &&
+                  taskXml.SelectSingleNode("//t:Settings/t:ExecutionTimeLimit", ns)?.InnerText == "PT0S",
                   "priority startup task: this user's logon, alias, no elevation, normal priority, no time limit");
             Check(AllControls(form).Where(c => c.GetType().Name == "LogoPreview").All(c => !c.CanSelect && !c.TabStop), "logo preview takes no keyboard focus");
             Check(((Label)named["status"]).LiveSetting == System.Windows.Forms.Automation.AutomationLiveSetting.Polite, "status is a polite live region");
@@ -172,7 +173,7 @@ static class SettingsRegression
                 form.StartPosition = FormStartPosition.Manual;
                 form.Location = new Point(-20000, -20000);
                 foreach (var control in new[] { (Control)form }.Concat(AllControls(form)))
-                    if (control.Font.Size > 0 && (control == form || control.Font != control.Parent.Font))
+                    if (control.Font.Size > 0 && (control == form || control.Font != control.Parent?.Font))
                         control.Font = new Font(control.Font.FontFamily, control.Font.Size * scale, control.Font.Style);
                 if (scaleLayout) form.Scale(new SizeF(scale, scale));
                 form.Show();

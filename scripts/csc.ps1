@@ -51,6 +51,9 @@ function Get-PackageVersion([string]$name) {
     $node.Version
 }
 
+# Programs built with the host sources carry its VERSION stamp (work\obj\ReleaseVersion.cs);
+# the others get the SDK's assembly version.
+$generateVersion = if ($sources | Where-Object { [IO.Path]::GetFileName($_) -eq 'ReleaseVersion.cs' }) { 'false' } else { 'true' }
 $name = [IO.Path]::GetFileNameWithoutExtension($out)
 $outDir = Split-Path -Parent $out
 $projectDir = Join-Path $project "work\obj\csc\$name"
@@ -71,18 +74,19 @@ $properties = @(
     '<SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>',
     '<UseWindowsForms>true</UseWindowsForms>',
     '<LangVersion>latest</LangVersion>',
-    # Same analysis as NexusWpp.csproj: nullable references, recommended analyzers and the
-    # code-style rules of .editorconfig (the documentation pass only serves IDE0005).
+    # Same analysis as NexusWpp.csproj, warnings as errors: nullable references, recommended analyzers
+    # and the code-style rules of .editorconfig (the documentation pass only serves IDE0005).
     '<Nullable>enable</Nullable>',
     '<AnalysisLevel>latest-recommended</AnalysisLevel>',
     '<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>',
     '<GenerateDocumentationFile>true</GenerateDocumentationFile>',
     '<CopyDocumentationFileToOutputDirectory>false</CopyDocumentationFileToOutputDirectory>',
+    '<TreatWarningsAsErrors>true</TreatWarningsAsErrors>',
     "<PlatformTarget>$platform</PlatformTarget>",
     "<AllowUnsafeBlocks>$unsafe</AllowUnsafeBlocks>",
     "<AssemblyName>$name</AssemblyName>",
     '<EnableDefaultItems>false</EnableDefaultItems>',
-    '<GenerateAssemblyVersionAttribute>false</GenerateAssemblyVersionAttribute>',
+    "<GenerateAssemblyVersionAttribute>$generateVersion</GenerateAssemblyVersionAttribute>",
     '<GenerateAssemblyFileVersionAttribute>false</GenerateAssemblyFileVersionAttribute>',
     '<GenerateAssemblyInformationalVersionAttribute>false</GenerateAssemblyInformationalVersionAttribute>',
     '<SatelliteResourceLanguages>en</SatelliteResourceLanguages>',

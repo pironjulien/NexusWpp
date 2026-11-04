@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -10,7 +11,7 @@ using System.Windows.Forms;
 internal static class MouseHookRegression
 {
     const BindingFlags PrivateStatic = BindingFlags.NonPublic | BindingFlags.Static;
-    static Type host;
+    static Type? host;
 
     [StructLayout(LayoutKind.Sequential)]
     struct Point { public int X, Y; }
@@ -67,14 +68,17 @@ internal static class MouseHookRegression
         return data;
     }
 
-    static object Invoke(string method, params object[] args)
+    // Private members of the built host, read by reflection; a missing one fails the run.
+    static Type Host { get { return host ?? throw new InvalidOperationException("The host assembly is not loaded."); } }
+    static MethodInfo HostMethod(string name) { return Host.GetMethod(name, PrivateStatic) ?? throw new MissingMethodException(Host.FullName, name); }
+    static FieldInfo HostField(string name) { return Host.GetField(name, PrivateStatic) ?? throw new MissingFieldException(Host.FullName, name); }
+    static object? Invoke(string method, params object?[] args) { return HostMethod(method).Invoke(null, args); }
+    static T Invoke<T>(string method, params object?[] args) { return (T)(Invoke(method, args) ?? throw new InvalidOperationException(method + " returned nothing.")); }
+    static object? Field(string name) { return HostField(name).GetValue(null); }
+    static T Field<T>(string name) { return (T)(Field(name) ?? throw new InvalidOperationException(name + " is null.")); }
+    static void Check([DoesNotReturnIf(false)] bool condition, string message)
     {
-        return host.GetMethod(method, PrivateStatic).Invoke(null, args);
-    }
-    static object Field(string name) { return host.GetField(name, PrivateStatic).GetValue(null); }
-    static void Check(bool condition, string message)
-    {
-        if (!condition) throw new Exception(message);
+        if (!condition) throw new InvalidOperationException(message);
         Console.WriteLine("PASS " + message);
     }
     static bool WaitUntil(Func<bool> condition)
@@ -93,15 +97,16 @@ internal static class MouseHookRegression
             host = hostAssembly.GetType("DesktopHtmlHost.DesktopForm", true);
             // The host's own startup configuration, before any window: hook points, window rectangles
             // and Chromium client coordinates are then all physical pixels, as in the running wallpaper.
-            Type configuration = Array.Find(hostAssembly.GetTypes(), t => t.Name == "ApplicationConfiguration");
+            Type? configuration = Array.Find(hostAssembly.GetTypes(), t => t.Name == "ApplicationConfiguration");
             Check(configuration != null, "host has a startup configuration");
-            if (configuration != null) configuration.GetMethod("Initialize", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, null);
+            (configuration.GetMethod("Initialize", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
+                ?? throw new MissingMethodException(configuration.FullName, "Initialize")).Invoke(null, null);
             Check(AreDpiAwarenessContextsEqual(GetThreadDpiAwarenessContext(), new IntPtr(-4)), "host starts per-monitor v2 DPI aware");
             // These paths must not dereference a pointer or access a UI control.
-            Check((IntPtr)Invoke("HookCallback", -1, (IntPtr)0x201, IntPtr.Zero) == IntPtr.Zero, "negative hook code passes through");
-            Check((IntPtr)Invoke("HookCallback", 0, (IntPtr)0x200, IntPtr.Zero) == IntPtr.Zero, "motion passes through without reading event data");
-            Check((IntPtr)Invoke("HookCallback", 0, (IntPtr)0x20A, IntPtr.Zero) == IntPtr.Zero, "wheel passes through without reading event data");
-            Check((IntPtr)Invoke("HookCallback", 0, (IntPtr)0x201, IntPtr.Zero) == IntPtr.Zero, "absent routing does not swallow a click");
+            Check(Invoke<IntPtr>("HookCallback", -1, (IntPtr)0x201, IntPtr.Zero) == IntPtr.Zero, "negative hook code passes through");
+            Check(Invoke<IntPtr>("HookCallback", 0, (IntPtr)0x200, IntPtr.Zero) == IntPtr.Zero, "motion passes through without reading event data");
+            Check(Invoke<IntPtr>("HookCallback", 0, (IntPtr)0x20A, IntPtr.Zero) == IntPtr.Zero, "wheel passes through without reading event data");
+            Check(Invoke<IntPtr>("HookCallback", 0, (IntPtr)0x201, IntPtr.Zero) == IntPtr.Zero, "absent routing does not swallow a click");
 
             IntPtr destroyed;
             using (Receiver receiver = new Receiver())
@@ -111,13 +116,13 @@ internal static class MouseHookRegression
                 {
                     Point screen = local;
                     Check(ClientToScreen(receiver.Handle, ref screen), "test receiver screen coordinates");
-                    Check((bool)Invoke("ForwardMouseClick", receiver.Handle, screen.X, screen.Y, (uint)0x201), "button down accepted by native target");
-                    Check((bool)Invoke("ForwardMouseClick", receiver.Handle, screen.X, screen.Y, (uint)0x202), "button up accepted by native target");
+                    Check(Invoke<bool>("ForwardMouseClick", receiver.Handle, screen.X, screen.Y, (uint)0x201), "button down accepted by native target");
+                    Check(Invoke<bool>("ForwardMouseClick", receiver.Handle, screen.X, screen.Y, (uint)0x202), "button up accepted by native target");
                 }
                 Check(WaitUntil(delegate { Application.DoEvents(); return receiver.Messages.Count == 4; }), "posted clicks delivered without synchronous UI invocation");
                 Check(string.Join(",", receiver.Messages.ToArray()) == "513:23:37,514:23:37,513:-9:-7,514:-9:-7", "click order and signed client coordinates preserved");
             }
-            Check(!(bool)Invoke("ForwardMouseClick", destroyed, 0, 0, (uint)0x201), "destroyed target does not swallow a click");
+            Check(!Invoke<bool>("ForwardMouseClick", destroyed, 0, 0, (uint)0x201), "destroyed target does not swallow a click");
 
             // Hit-test rule: only the wallpaper and the desktop layers, never other windows of this process.
             using (Receiver ownWindow = new Receiver())
@@ -125,13 +130,13 @@ internal static class MouseHookRegression
             using (ChildWindow hostChild = new ChildWindow(hostWindow.Handle))
             {
                 IntPtr render = hostChild.Handle;
-                Check(!(bool)Invoke("ShouldForwardHit", ownWindow.Handle, hostWindow.Handle, render), "own top-level window above the panel keeps its click");
-                Check(!(bool)Invoke("ShouldForwardHit", IntPtr.Zero, hostWindow.Handle, render), "no hit window is not forwarded");
-                Check((bool)Invoke("ShouldForwardHit", render, hostWindow.Handle, render), "render window is forwarded");
-                Check((bool)Invoke("ShouldForwardHit", hostChild.Handle, hostWindow.Handle, IntPtr.Zero), "child of the wallpaper host is forwarded");
+                Check(!Invoke<bool>("ShouldForwardHit", ownWindow.Handle, hostWindow.Handle, render), "own top-level window above the panel keeps its click");
+                Check(!Invoke<bool>("ShouldForwardHit", IntPtr.Zero, hostWindow.Handle, render), "no hit window is not forwarded");
+                Check(Invoke<bool>("ShouldForwardHit", render, hostWindow.Handle, render), "render window is forwarded");
+                Check(Invoke<bool>("ShouldForwardHit", hostChild.Handle, hostWindow.Handle, IntPtr.Zero), "child of the wallpaper host is forwarded");
                 InitCommonControls();
                 IntPtr desktopIcons = CreateWindowEx(0, "SysListView32", "", 0, 0, 0, 10, 10, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
-                try { Check(desktopIcons != IntPtr.Zero && (bool)Invoke("ShouldForwardHit", desktopIcons, hostWindow.Handle, render), "desktop icon list (SysListView32) is forwarded"); }
+                try { Check(desktopIcons != IntPtr.Zero && Invoke<bool>("ShouldForwardHit", desktopIcons, hostWindow.Handle, render), "desktop icon list (SysListView32) is forwarded"); }
                 finally { DestroyWindow(desktopIcons); }
             }
 
@@ -141,68 +146,69 @@ internal static class MouseHookRegression
                 Point origin = new Point();
                 ClientToScreen(target.Handle, ref origin);
                 System.Drawing.Rectangle panel = new System.Drawing.Rectangle(origin.X, origin.Y, 100, 50);
-                Type snapshotType = host.GetNestedType("MouseRoutingSnapshot", BindingFlags.NonPublic);
-                object snapshot = Activator.CreateInstance(snapshotType, BindingFlags.NonPublic | BindingFlags.Instance, null,
+                Type snapshotType = Host.GetNestedType("MouseRoutingSnapshot", BindingFlags.NonPublic)
+                    ?? throw new MissingMemberException(Host.FullName, "MouseRoutingSnapshot");
+                object? snapshot = Activator.CreateInstance(snapshotType, BindingFlags.NonPublic | BindingFlags.Instance, null,
                     new object[] { panel, target.Handle, target.Handle }, null);
-                host.GetField("mouseRouting", PrivateStatic).SetValue(null, snapshot);
+                HostField("mouseRouting").SetValue(null, snapshot);
                 IntPtr outside = HookEvent(panel.Right + 400, panel.Bottom + 400), inside = HookEvent(panel.X + 10, panel.Y + 10);
                 try
                 {
-                    Check((IntPtr)Invoke("HookCallback", 0, (IntPtr)0x201, outside) == IntPtr.Zero, "press outside the panel passes through");
-                    Check((IntPtr)Invoke("HookCallback", 0, (IntPtr)0x202, inside) == IntPtr.Zero, "release inside the panel after an outside press is not swallowed");
-                    host.GetField("pairedRenderWindow", PrivateStatic).SetValue(null, target.Handle);
-                    Check((IntPtr)Invoke("HookCallback", 0, (IntPtr)0x202, outside) == (IntPtr)1, "release after a forwarded press follows it outside the panel");
-                    Check((IntPtr)host.GetField("pairedRenderWindow", PrivateStatic).GetValue(null) == IntPtr.Zero, "pairing ends with the release");
-                    Check((IntPtr)Invoke("HookCallback", 0, (IntPtr)0x202, outside) == IntPtr.Zero, "a second release is not swallowed");
-                    Check(WaitUntil(delegate { Application.DoEvents(); return target.Messages.Count == 1; }) && target.Messages[0].StartsWith("514:"),
+                    Check(Invoke<IntPtr>("HookCallback", 0, (IntPtr)0x201, outside) == IntPtr.Zero, "press outside the panel passes through");
+                    Check(Invoke<IntPtr>("HookCallback", 0, (IntPtr)0x202, inside) == IntPtr.Zero, "release inside the panel after an outside press is not swallowed");
+                    HostField("pairedRenderWindow").SetValue(null, target.Handle);
+                    Check(Invoke<IntPtr>("HookCallback", 0, (IntPtr)0x202, outside) == (IntPtr)1, "release after a forwarded press follows it outside the panel");
+                    Check(Field<IntPtr>("pairedRenderWindow") == IntPtr.Zero, "pairing ends with the release");
+                    Check(Invoke<IntPtr>("HookCallback", 0, (IntPtr)0x202, outside) == IntPtr.Zero, "a second release is not swallowed");
+                    Check(WaitUntil(delegate { Application.DoEvents(); return target.Messages.Count == 1; }) && target.Messages[0].StartsWith("514:", StringComparison.Ordinal),
                         "only the paired release reaches Chromium");
                 }
                 finally
                 {
-                    host.GetField("mouseRouting", PrivateStatic).SetValue(null, null);
+                    HostField("mouseRouting").SetValue(null, null);
                     Marshal.FreeHGlobal(outside);
                     Marshal.FreeHGlobal(inside);
                 }
             }
 
             System.Drawing.Rectangle client = new System.Drawing.Rectangle(0, 0, 1920, 1080);
-            Check((System.Drawing.Rectangle)Invoke("ClipPanelBounds", new System.Drawing.Rectangle(1800, 1000, 300, 200), client) == new System.Drawing.Rectangle(1800, 1000, 120, 80), "panel bounds are clipped to the client area");
-            Check(((System.Drawing.Rectangle)Invoke("ClipPanelBounds", new System.Drawing.Rectangle(2000, 0, 50, 50), client)).IsEmpty, "panel outside the client area routes nothing");
-            Check(((System.Drawing.Rectangle)Invoke("ClipPanelBounds", new System.Drawing.Rectangle(10, 10, 0, 40), client)).IsEmpty, "empty panel routes nothing");
+            Check(Invoke<System.Drawing.Rectangle>("ClipPanelBounds", new System.Drawing.Rectangle(1800, 1000, 300, 200), client) == new System.Drawing.Rectangle(1800, 1000, 120, 80), "panel bounds are clipped to the client area");
+            Check((Invoke<System.Drawing.Rectangle>("ClipPanelBounds", new System.Drawing.Rectangle(2000, 0, 50, 50), client)).IsEmpty, "panel outside the client area routes nothing");
+            Check((Invoke<System.Drawing.Rectangle>("ClipPanelBounds", new System.Drawing.Rectangle(10, 10, 0, 40), client)).IsEmpty, "empty panel routes nothing");
 
             for (int cycle = 0; cycle < 10; cycle++)
             {
                 Invoke("StartMouseHook");
-                Check(WaitUntil(delegate { return (IntPtr)Field("hookId") != IntPtr.Zero; }), "native hook installed");
-                Check(unchecked((uint)(int)Field("mouseHookThreadId")) != GetCurrentThreadId(), "hook serviced independently of caller UI thread");
-                Thread hookThread = (Thread)Field("mouseHookThread");
+                Check(WaitUntil(delegate { return Field<IntPtr>("hookId") != IntPtr.Zero; }), "native hook installed");
+                Check(unchecked((uint)Field<int>("mouseHookThreadId")) != GetCurrentThreadId(), "hook serviced independently of caller UI thread");
+                Thread hookThread = Field<Thread>("mouseHookThread");
                 Invoke("StopMouseHook");
-                Check(hookThread.Join(2000) && (IntPtr)Field("hookId") == IntPtr.Zero, "hook removed and message pump stopped");
+                Check(hookThread.Join(2000) && Field<IntPtr>("hookId") == IntPtr.Zero, "hook removed and message pump stopped");
             }
             for (int cycle = 0; cycle < 10; cycle++)
             {
                 Invoke("StartMouseHook");
-                Thread hookThread = (Thread)Field("mouseHookThread");
+                Thread hookThread = Field<Thread>("mouseHookThread");
                 Invoke("StopMouseHook");
-                Check(hookThread.Join(2000) && (IntPtr)Field("hookId") == IntPtr.Zero, "immediate shutdown cannot strand a hook");
+                Check(hookThread.Join(2000) && Field<IntPtr>("hookId") == IntPtr.Zero, "immediate shutdown cannot strand a hook");
             }
             // Paused runtime: no global hook. Resume reinstalls it, even right after the pause.
             Invoke("StartMouseHook");
-            Check(WaitUntil(delegate { return (IntPtr)Field("hookId") != IntPtr.Zero; }), "hook installed while visible");
+            Check(WaitUntil(delegate { return Field<IntPtr>("hookId") != IntPtr.Zero; }), "hook installed while visible");
             for (int cycle = 0; cycle < 5; cycle++)
             {
-                Thread running = (Thread)Field("mouseHookThread");
+                Thread running = Field<Thread>("mouseHookThread");
                 Invoke("UpdateMouseHookForRuntime", true);
-                Check(running.Join(2000) && (IntPtr)Field("hookId") == IntPtr.Zero, "hook absent while paused");
+                Check(running.Join(2000) && Field<IntPtr>("hookId") == IntPtr.Zero, "hook absent while paused");
                 Invoke("UpdateMouseHookForRuntime", false);
-                Check(WaitUntil(delegate { return (IntPtr)Field("hookId") != IntPtr.Zero; }), "resume reinstalls the hook");
+                Check(WaitUntil(delegate { return Field<IntPtr>("hookId") != IntPtr.Zero; }), "resume reinstalls the hook");
                 Invoke("UpdateMouseHookForRuntime", true);
                 Invoke("UpdateMouseHookForRuntime", false);
-                Check(WaitUntil(delegate { return (IntPtr)Field("hookId") != IntPtr.Zero && ((Thread)Field("mouseHookThread")).IsAlive; }), "immediate pause and resume keeps a hook installed");
+                Check(WaitUntil(delegate { return Field<IntPtr>("hookId") != IntPtr.Zero && (Field<Thread>("mouseHookThread")).IsAlive; }), "immediate pause and resume keeps a hook installed");
             }
-            Thread last = (Thread)Field("mouseHookThread");
+            Thread last = Field<Thread>("mouseHookThread");
             Invoke("StopMouseHook");
-            Check(last.Join(2000) && (IntPtr)Field("hookId") == IntPtr.Zero, "final stop removes the hook");
+            Check(last.Join(2000) && Field<IntPtr>("hookId") == IntPtr.Zero, "final stop removes the hook");
             Check(Field("mouseHookError") == null, "no callback or native lifecycle errors");
             return 0;
         }

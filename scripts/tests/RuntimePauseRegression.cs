@@ -8,7 +8,7 @@ using Microsoft.Web.WebView2.WinForms;
 
 // Executes the shipped page in a real WebView2 renderer, with a test-only host.
 // Complements physical desktop captures; this does not measure reveal latency.
-class RuntimePauseRegression : Form
+sealed class RuntimePauseRegression : Form
 {
     readonly WebView2 view = new WebView2 { Dock = DockStyle.Fill };
     readonly string project;
@@ -42,14 +42,14 @@ class RuntimePauseRegression : Form
     async Task Check(string expression, string label)
     {
         string actual = await view.CoreWebView2.ExecuteScriptAsync("Boolean(" + expression + ")");
-        if (actual != "true") throw new Exception(label + " (" + actual + ")");
+        if (actual != "true") throw new InvalidOperationException(label + " (" + actual + ")");
         Console.WriteLine("PASS " + label);
     }
 
     async Task Ready()
     {
         for (int i = 0; i < 100 && !pageReady; i++) await Task.Delay(100);
-        if (!pageReady) throw new Exception("Runtime-state handshake missing");
+        if (!pageReady) throw new InvalidOperationException("Runtime-state handshake missing");
         await Task.Delay(250);
     }
 
@@ -58,7 +58,7 @@ class RuntimePauseRegression : Form
         view.CoreWebView2.PostWebMessageAsJson(paused ? "{\"control\":\"SUSPEND\"}" : "{\"control\":\"RESUME\"}");
     }
 
-    async void Run(object sender, EventArgs args)
+    async void Run(object? sender, EventArgs args)
     {
         try
         {
@@ -66,7 +66,7 @@ class RuntimePauseRegression : Form
                 Path.Combine(project, "work", "runtime-pause-test-profile"));
             await view.EnsureCoreWebView2Async(environment);
             view.CoreWebView2.SetVirtualHostNameToFolderMapping("nexuswpp.local", project, CoreWebView2HostResourceAccessKind.DenyCors);
-            view.CoreWebView2.WebMessageReceived += delegate(object source, CoreWebView2WebMessageReceivedEventArgs message)
+            view.CoreWebView2.WebMessageReceived += delegate(object? source, CoreWebView2WebMessageReceivedEventArgs message)
             {
                 if (message.TryGetWebMessageAsString() == "REQUEST_RUNTIME_STATE")
                 {
@@ -210,8 +210,8 @@ class RuntimePauseRegression : Form
             string steps = await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Runtime.evaluate",
                 "{\"expression\":" + System.Text.Json.JsonSerializer.Serialize(countSpinnerSteps) + ",\"awaitPromise\":true,\"returnByValue\":true}");
             Console.WriteLine("SPINNER STEPS IN 2 S " + steps);
-            int stepCount = int.Parse(System.Text.RegularExpressions.Regex.Match(steps, "\"value\":(\\d+)").Groups[1].Value);
-            if (stepCount < 18 || stepCount > 26) throw new Exception("logo rings do not step at 12 Hz (" + stepCount + " steps in 2 s)");
+            int stepCount = int.Parse(System.Text.RegularExpressions.Regex.Match(steps, "\"value\":(\\d+)").Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+            if (stepCount < 18 || stepCount > 26) throw new InvalidOperationException("logo rings do not step at 12 Hz (" + stepCount + " steps in 2 s)");
             Console.WriteLine("PASS logo rings step at 12 Hz on the shared clock");
             await Check("document.getAnimations().filter(a => a.playState === 'running' && !(a instanceof CSSTransition)).length === 0", "no CSS animation runs at the display refresh rate");
             await view.CoreWebView2.ExecuteScriptAsync(@"window.ringWrites=0;const writeRing=window.writeRingOffset;

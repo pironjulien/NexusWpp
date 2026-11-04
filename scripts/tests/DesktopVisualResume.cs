@@ -39,7 +39,7 @@ internal static class DesktopVisualResume
     [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr window);
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr window, StringBuilder value, int size);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr window, [Out] char[] value, int size);
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] static extern IntPtr GetWindowLongPtr(IntPtr window, int index);
     [DllImport("dwmapi.dll")] static extern int DwmFlush();
     [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr window, int attribute, out int value, int size);
@@ -53,9 +53,11 @@ internal static class DesktopVisualResume
     static readonly List<ScenarioResult> Scenarios = new List<ScenarioResult>();
     static readonly List<string> Restoration = new List<string>();
     static readonly Dictionary<string, string> Options = new Dictionary<string, string>();
-    static string output, startedAt, error;
+    static readonly JsonSerializerOptions ResultJson = new JsonSerializerOptions { IncludeFields = true };
+    static string output = "";
+    static string? startedAt, error;
     static IntPtr foreground;
-    static Screen[] screens;
+    static Screen[] screens = Array.Empty<Screen>();
     static int appPid;
     static bool restored;
     static double Now { get { return Clock.Elapsed.TotalMilliseconds; } }
@@ -83,7 +85,8 @@ internal static class DesktopVisualResume
     }
     public sealed class FrameMetric
     {
-        public string Phase, ThumbnailPath, NativeImagePath;
+        public required string Phase;
+        public string? ThumbnailPath, NativeImagePath;
         public int Index, AnchorPairs, ExactPairs, CoverGridSamples, ExactOpaqueCoverGridSamples;
         public double CaptureStartMilliseconds, CaptureEndMilliseconds, CaptureDurationMilliseconds;
         public double DwmFlushStartMilliseconds, DwmFlushEndMilliseconds, RelativeToRemovalMilliseconds;
@@ -93,8 +96,9 @@ internal static class DesktopVisualResume
     }
     public sealed class ScreenResult
     {
-        public string DeviceName, ReferenceImagePath, AnchorImagePath;
-        public Area Bounds, WorkingArea;
+        public required string DeviceName;
+        public string? ReferenceImagePath, AnchorImagePath;
+        public required Area Bounds, WorkingArea;
         public uint DpiX, DpiY;
         public int CalibrationFrames, AnchorPairCount;
         public double CalibrationDurationMilliseconds;
@@ -107,7 +111,7 @@ internal static class DesktopVisualResume
     }
     public sealed class ScenarioResult
     {
-        public string Name;
+        public required string Name;
         public double CoverShowStartMilliseconds, CoverShowEndMilliseconds, RemovalStartMilliseconds, RemovalCompleteMilliseconds;
         public List<Area> ActualCoverBounds = new List<Area>();
         public double CoverOpacity;
@@ -115,22 +119,24 @@ internal static class DesktopVisualResume
     }
     sealed class ImageFrame : IDisposable
     {
-        internal FrameMetric Metric;
-        internal Bitmap Thumbnail, Native;
+        internal required FrameMetric Metric;
+        internal required Bitmap Thumbnail;
+        internal Bitmap? Native;
         internal bool KeepNative;
         public void Dispose() { if (Thumbnail != null) Thumbnail.Dispose(); if (Native != null) Native.Dispose(); }
     }
     sealed class ScreenProbe : IDisposable
     {
-        internal Screen Screen;
-        internal ScreenResult Result;
-        internal Bitmap Surface, Reference;
+        internal required Screen Screen;
+        internal required ScreenResult Result;
+        internal required Bitmap Surface;
+        internal Bitmap? Reference;
         internal readonly List<ImageFrame> Images = new List<ImageFrame>();
-        internal int[] Pixels;
-        internal bool[] Stable;
+        internal int[]? Pixels;
+        internal bool[]? Stable;
         internal int ResumeFrames;
         internal double Worst = double.PositiveInfinity;
-        internal ImageFrame WorstFrame;
+        internal ImageFrame? WorstFrame;
         internal bool ExactNativeSaved;
         public void Dispose()
         {
@@ -150,7 +156,7 @@ internal static class DesktopVisualResume
             Directory.CreateDirectory(output);
             appPid = Option("--app-pid");
             using (Process process = Process.GetProcessById(appPid))
-                if (process.ProcessName.ToLowerInvariant() != "nexuswpp") throw new InvalidOperationException("The application process changed.");
+                if (!string.Equals(process.ProcessName, "nexuswpp", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("The application process changed.");
             try { if (!SetProcessDpiAwarenessContext(new IntPtr(-4))) SetProcessDPIAware(); }
             catch (EntryPointNotFoundException) { SetProcessDPIAware(); }
             Application.EnableVisualStyles();
@@ -186,23 +192,23 @@ internal static class DesktopVisualResume
         {
             CloseCovers();
             RestoreWindows();
-            if (output != null) { try { WriteResult(); WriteIndex(); } catch (Exception exception) { File.WriteAllText(Path.Combine(output, "write-error.txt"), exception.ToString()); } }
+            if (output.Length > 0) { try { WriteResult(); WriteIndex(); } catch (Exception exception) { File.WriteAllText(Path.Combine(output, "write-error.txt"), exception.ToString()); } }
         }
     }
 
     static void SaveAndMinimizeWindows()
     {
-        uint ownPid = (uint)Process.GetCurrentProcess().Id;
+        uint ownPid = (uint)Environment.ProcessId;
         EnumWindows(delegate(IntPtr window, IntPtr unused)
         {
-            uint pid; GetWindowThreadProcessId(window, out pid);
+            uint pid; _ = GetWindowThreadProcessId(window, out pid);
             if (pid == ownPid || pid == appPid || !IsWindowVisible(window) || IsIconic(window)) return true;
-            StringBuilder className = new StringBuilder(256); GetClassName(window, className, className.Capacity);
-            string cls = className.ToString();
+            char[] className = new char[256];
+            string cls = new string(className, 0, Math.Max(0, GetClassName(window, className, className.Length)));
             if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd" || cls == "Button") return true;
             int cloaked;
             if (DwmGetWindowAttribute(window, 14, out cloaked, sizeof(int)) == 0 && cloaked != 0) return true;
-            Placement placement = new Placement { Length = Marshal.SizeOf(typeof(Placement)) };
+            Placement placement = new Placement { Length = Marshal.SizeOf<Placement>() };
             if (!GetWindowPlacement(window, ref placement)) return true;
             Windows.Add(new SavedWindow { Handle = window, Pid = pid, Placement = placement, Topmost = (GetWindowLongPtr(window, -20).ToInt64() & 8) != 0 });
             return true;
@@ -218,7 +224,7 @@ internal static class DesktopVisualResume
         for (int i = Windows.Count - 1; i >= 0; i--)
         {
             SavedWindow saved = Windows[i]; uint pid;
-            GetWindowThreadProcessId(saved.Handle, out pid);
+            _ = GetWindowThreadProcessId(saved.Handle, out pid);
             if (!IsWindow(saved.Handle) || pid != saved.Pid) { Restoration.Add("Window closed or replaced: " + saved.Handle); continue; }
             Placement placement = saved.Placement;
             bool placed = SetWindowPlacement(saved.Handle, ref placement);
@@ -269,7 +275,7 @@ internal static class DesktopVisualResume
         int count = 0;
         do
         {
-            DwmFlush();
+            _ = DwmFlush();
             foreach (ScreenProbe probe in probes)
             {
                 Capture(probe);
@@ -279,7 +285,11 @@ internal static class DesktopVisualResume
                     probe.Pixels = pixels; probe.Stable = Enumerable.Repeat(true, pixels.Length).ToArray();
                     probe.Reference = (Bitmap)probe.Surface.Clone();
                 }
-                else for (int i = 0; i < pixels.Length; i++) if (pixels[i] != probe.Pixels[i]) probe.Stable[i] = false;
+                else
+                {
+                    bool[] stable = probe.Stable ?? throw new InvalidOperationException("Calibration lost its stability map.");
+                    for (int i = 0; i < pixels.Length; i++) if (pixels[i] != probe.Pixels[i]) stable[i] = false;
+                }
             }
             count++;
             Pump(100);
@@ -293,8 +303,9 @@ internal static class DesktopVisualResume
             string prefix = name + "-screen" + i;
             probe.Result.ReferenceImagePath = prefix + "-reference.png";
             probe.Result.AnchorImagePath = prefix + "-anchors.png";
-            probe.Reference.Save(Path.Combine(output, probe.Result.ReferenceImagePath), ImageFormat.Png);
-            using (Bitmap annotated = (Bitmap)probe.Reference.Clone())
+            Bitmap reference = probe.Reference ?? throw new InvalidOperationException("Calibration captured no reference.");
+            reference.Save(Path.Combine(output, probe.Result.ReferenceImagePath), ImageFormat.Png);
+            using (Bitmap annotated = (Bitmap)reference.Clone())
             using (Graphics graphics = Graphics.FromImage(annotated))
             using (Pen pen = new Pen(Color.Lime, 1))
             {
@@ -315,6 +326,8 @@ internal static class DesktopVisualResume
     static void SelectAnchors(ScreenProbe probe)
     {
         int width = probe.Surface.Width, height = probe.Surface.Height;
+        int[] pixels = probe.Pixels ?? throw new InvalidOperationException("Calibration has no pixels.");
+        bool[] stable = probe.Stable ?? throw new InvalidOperationException("Calibration has no stability map.");
         // Spatial sampling over the real desktop, excluding taskbars and the outer icon strip.
         // Strong stable edges are learned from pixels, not guessed from DOM positions.
         Rectangle work = probe.Screen.WorkingArea; work.Offset(-probe.Screen.Bounds.X, -probe.Screen.Bounds.Y);
@@ -328,14 +341,14 @@ internal static class DesktopVisualResume
                 for (int x = Math.Max(1, left); x < Math.Min(width - 2, right); x += 2)
                 {
                     int at = y * width + x;
-                    if (!probe.Stable[at]) continue;
+                    if (!stable[at]) continue;
                     int other = at + 1;
-                    if (ErrorRgb(probe.Pixels[at], probe.Pixels[at + width]) > ErrorRgb(probe.Pixels[at], probe.Pixels[other])) other = at + width;
-                    if (!probe.Stable[other]) continue;
-                    int contrast = ErrorRgb(probe.Pixels[at], probe.Pixels[other]);
+                    if (ErrorRgb(pixels[at], pixels[at + width]) > ErrorRgb(pixels[at], pixels[other])) other = at + width;
+                    if (!stable[other]) continue;
+                    int contrast = ErrorRgb(pixels[at], pixels[other]);
                     if (contrast == 0 || (candidates.Count == 32 && contrast <= candidates[candidates.Count - 1].Contrast)) continue;
                     if (candidates.Any(a => Math.Abs(a.X - x) <= 3 && Math.Abs(a.Y - y) <= 3)) continue;
-                    candidates.Add(new Anchor { X = x, Y = y, OtherX = other % width, OtherY = other / width, Region = row * 6 + column, ReferenceRgb = probe.Pixels[at], OtherReferenceRgb = probe.Pixels[other], Contrast = contrast });
+                    candidates.Add(new Anchor { X = x, Y = y, OtherX = other % width, OtherY = other / width, Region = row * 6 + column, ReferenceRgb = pixels[at], OtherReferenceRgb = pixels[other], Contrast = contrast });
                     candidates.Sort((a, b) => b.Contrast.CompareTo(a.Contrast));
                     if (candidates.Count > 32) candidates.RemoveAt(candidates.Count - 1);
                 }
@@ -427,7 +440,7 @@ internal static class DesktopVisualResume
                 if (uncovered)
                 {
                     // Preserve native pixels of the first four frames, the first exact match and the largest observed mismatch.
-                    if (probe.ResumeFrames < (scenario.Name.StartsWith("rapid-") ? 2 : 4) || (!probe.ExactNativeSaved && metric.AnchorPairs > 0 && metric.ExactPairs == metric.AnchorPairs)) { image.Native = (Bitmap)probe.Surface.Clone(); image.KeepNative = true; }
+                    if (probe.ResumeFrames < (scenario.Name.StartsWith("rapid-", StringComparison.Ordinal) ? 2 : 4) || (!probe.ExactNativeSaved && metric.AnchorPairs > 0 && metric.ExactPairs == metric.AnchorPairs)) { image.Native = (Bitmap)probe.Surface.Clone(); image.KeepNative = true; }
                     if (metric.AnchorPairs > 0 && metric.ExactPairs == metric.AnchorPairs) probe.ExactNativeSaved = true;
                     if (metric.ExactPairFraction < probe.Worst)
                     {
@@ -442,7 +455,7 @@ internal static class DesktopVisualResume
             next += interval;
             while (Now < next) { Application.DoEvents(); Thread.Sleep(1); }
         } while (Now - start < duration);
-        if (phase == "uncovered" && !scenario.Name.StartsWith("rapid-"))
+        if (phase == "uncovered" && !scenario.Name.StartsWith("rapid-", StringComparison.Ordinal))
             foreach (ScreenProbe probe in probes)
             {
                 ImageFrame last = probe.Images[probe.Images.Count - 1];
@@ -508,11 +521,11 @@ internal static class DesktopVisualResume
         List<FrameMetric> frames = result.Frames.Where(f => f.Phase == "uncovered").ToList();
         if (frames.Count == 0) return;
         result.FirstUncoverCaptureEndMilliseconds = frames[0].CaptureEndMilliseconds - scenario.RemovalCompleteMilliseconds;
-        FrameMetric exact = frames.FirstOrDefault(f => f.AnchorPairs > 0 && f.ExactPairs == f.AnchorPairs && f.ExactOpaqueCoverGridSamples == 0);
+        FrameMetric? exact = frames.FirstOrDefault(f => f.AnchorPairs > 0 && f.ExactPairs == f.AnchorPairs && f.ExactOpaqueCoverGridSamples == 0);
         if (exact != null) result.FirstExactReferenceEndMilliseconds = exact.CaptureEndMilliseconds - scenario.RemovalCompleteMilliseconds;
         if (result.Frames.Any(f => f.Phase == "covered" && f.ExactOpaqueCoverGridSamples > 0))
         {
-            FrameMetric absent = frames.FirstOrDefault(f => f.ExactOpaqueCoverGridSamples == 0);
+            FrameMetric? absent = frames.FirstOrDefault(f => f.ExactOpaqueCoverGridSamples == 0);
             if (absent != null) result.FirstOpaqueCoverAbsentEndMilliseconds = absent.CaptureEndMilliseconds - scenario.RemovalCompleteMilliseconds;
         }
         result.WorstExactPairFractionAfterRemoval = frames.Min(f => f.ExactPairFraction);
@@ -523,7 +536,7 @@ internal static class DesktopVisualResume
     static void SaveImages(ScreenProbe probe)
     {
         // Flush after measured transitions so PNG/JPEG encoding cannot delay the captured resume.
-        string directory = "screen" + Array.IndexOf(screens, probe.Screen) + "-" + probe.Result.ReferenceImagePath.Split('-')[0];
+        string directory = "screen" + Array.IndexOf(screens, probe.Screen) + "-" + (probe.Result.ReferenceImagePath ?? "").Split('-')[0];
         Directory.CreateDirectory(Path.Combine(output, directory));
         for (int i = 0; i < probe.Images.Count; i++)
         {
@@ -559,10 +572,10 @@ internal static class DesktopVisualResume
 
     static void WriteResult()
     {
-        var serializer = new JsonSerializerOptions { IncludeFields = true };
+        Options.TryGetValue("--label", out string? label);
         object payload = new
         {
-            Label = Options.ContainsKey("--label") ? Options["--label"] : null,
+            Label = label,
             StartedAtUtc = startedAt, StopwatchFrequency = Stopwatch.Frequency,
             CaptureMethod = "Physical screen CopyFromScreen(SourceCopy), per-monitor DPI aware v2, DwmFlush before captures",
             Parameters = Options, Error = error, WindowsRestored = restored, Restoration = Restoration,
@@ -579,7 +592,7 @@ internal static class DesktopVisualResume
             },
             Scenarios = Scenarios
         };
-        File.WriteAllText(Path.Combine(output, "result.json"), JsonSerializer.Serialize(payload, serializer), new UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(output, "result.json"), JsonSerializer.Serialize(payload, ResultJson), new UTF8Encoding(false));
     }
 
     static void WriteIndex()

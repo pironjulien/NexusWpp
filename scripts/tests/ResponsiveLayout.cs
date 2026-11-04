@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Threading.Tasks;
@@ -11,7 +10,7 @@ using Microsoft.Web.WebView2.WinForms;
 
 // Real Evergreen WebView2, with Chromium viewport/DPR emulation. No display
 // configuration, installed wallpaper, power plan or user profile is modified.
-class ResponsiveLayout : Form
+sealed class ResponsiveLayout : Form
 {
     readonly WebView2 view = new WebView2 { Dock = DockStyle.Fill };
     readonly string project, output, casesPath, language;
@@ -44,14 +43,32 @@ class ResponsiveLayout : Form
         Shown += Run;
     }
 
+    // Off-screen and never activated: the run must not take the keyboard focus or the
+    // foreground from whoever is using the PC.
+    const int WS_EX_NOACTIVATE = 0x08000000;
+    protected override bool ShowWithoutActivation { get { return true; } }
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            CreateParams cp = base.CreateParams;
+            cp.ExStyle |= WS_EX_NOACTIVATE;
+            return cp;
+        }
+    }
+
+    // A missing node in the cases file or in a DevTools answer is a broken run, not a passed case.
+    static JsonNode Node(JsonNode? node, string name) { return node ?? throw new InvalidDataException("Missing JSON value: " + name); }
+    static T Field<T>(JsonNode node, string name) { return Node(node[name], name).GetValue<T>(); }
+
     async Task Script(string code)
     {
         var response = await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Runtime.evaluate",
             JsonSerializer.Serialize(new { expression = code, awaitPromise = true, returnByValue = true }));
-        if (response.Contains("\"exceptionDetails\"")) throw new Exception(response);
+        if (response.Contains("\"exceptionDetails\"")) throw new InvalidOperationException(response);
     }
 
-    async void Run(object sender, EventArgs args)
+    async void Run(object? sender, EventArgs args)
     {
         try
         {
@@ -59,7 +76,7 @@ class ResponsiveLayout : Form
             var environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(project, "work", "responsive-test-profile"));
             await view.EnsureCoreWebView2Async(environment);
             view.CoreWebView2.SetVirtualHostNameToFolderMapping("nexuswpp.local", project, CoreWebView2HostResourceAccessKind.DenyCors);
-            view.CoreWebView2.WebMessageReceived += delegate(object source, CoreWebView2WebMessageReceivedEventArgs message) {
+            view.CoreWebView2.WebMessageReceived += delegate(object? source, CoreWebView2WebMessageReceivedEventArgs message) {
                 if (message.TryGetWebMessageAsString() == "REQUEST_RUNTIME_STATE") {
                     view.CoreWebView2.PostWebMessageAsJson("{\"control\":\"SUSPEND\"}");
                     ready = true;
@@ -67,32 +84,33 @@ class ResponsiveLayout : Form
             };
             view.Source = new Uri("http://nexuswpp.local/index.html?lang=" + language);
             for (int i = 0; i < 100 && !ready; i++) await Task.Delay(100);
-            if (!ready) throw new Exception("Page did not initialize");
+            if (!ready) throw new InvalidOperationException("Page did not initialize");
             await Script(File.ReadAllText(Path.Combine(project, "scripts", "tests", "responsive_layout.js")));
-            var cases = JsonNode.Parse(File.ReadAllText(casesPath)).AsArray();
+            var cases = Node(JsonNode.Parse(File.ReadAllText(casesPath)), "cases").AsArray();
             var results = new JsonArray();
             int failures = 0;
-            foreach (JsonObject item in cases)
+            foreach (JsonNode? entry in cases)
             {
-                int w = (int)item["width"], h = (int)item["height"];
-                double dpr = (double)item["dpr"];
-                string id = (string)item["id"];
+                JsonObject item = Node(entry, "case").AsObject();
+                int w = Field<int>(item, "width"), h = Field<int>(item, "height");
+                double dpr = Field<double>(item, "dpr");
+                string id = Field<string>(item, "id");
                 await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Emulation.setDeviceMetricsOverride",
                     JsonSerializer.Serialize(new { width = w, height = h, deviceScaleFactor = dpr, mobile = false,
                         screenWidth = w, screenHeight = h }));
                 await Script("layoutFixture(" + item.ToJsonString() + ")");
                 await Script("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
                 var raw = await view.CoreWebView2.ExecuteScriptAsync("inspectLayout()");
-                var measurement = JsonNode.Parse(raw).AsObject();
+                var measurement = Node(JsonNode.Parse(raw), "inspectLayout()").AsObject();
                 measurement["case"] = item.DeepClone();
                 results.Add(measurement);
-                var issues = measurement["issues"].AsArray();
+                var issues = Node(measurement["issues"], "issues").AsArray();
                 if (issues.Count > 0) failures++;
-                if (item.ContainsKey("capture") && (bool)item["capture"])
+                if (item.ContainsKey("capture") && Field<bool>(item, "capture"))
                 {
                     var response = await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", "{\"format\":\"png\",\"captureBeyondViewport\":false}");
-                    var screenshot = JsonNode.Parse(response);
-                    File.WriteAllBytes(Path.Combine(output, id + ".png"), Convert.FromBase64String((string)screenshot["data"]));
+                    var screenshot = Node(JsonNode.Parse(response), "Page.captureScreenshot");
+                    File.WriteAllBytes(Path.Combine(output, id + ".png"), Convert.FromBase64String(Field<string>(screenshot, "data")));
                 }
                 Console.WriteLine((issues.Count == 0 ? "PASS " : "FAIL ") + id + " (" + issues.Count + " issues)");
                 File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new {

@@ -1,21 +1,25 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using DesktopHtmlHost;
-namespace DesktopHtmlHost { static class Program { internal static void LogDebug(string message) {} } }
-class FeatureRegression
+namespace DesktopHtmlHost { static class Program { internal static void LogDebug(string _) {} } }
+static class FeatureRegression
 {
-    static void Check(bool value,string name) {if(!value)throw new Exception(name);Console.WriteLine("PASS "+name);}
+    static readonly string[] NpuKinds={"Neural","Compute"}, NeuralKind={"Neural"};
+    // Throws on failure: the compiler knows what a passed check proves.
+    static void Check([DoesNotReturnIf(false)] bool value,string name) {if(!value)throw new InvalidOperationException(name);Console.WriteLine("PASS "+name);}
     static int Main(string[] args) {
         try {
             var sample=NvidiaSample.Create(53,64,1785,null,3.87,16376,900);
             Check(sample!=null && sample.PowerWatts==3.87 && sample.MemoryClock==null && sample.Utilization==53,"unsupported field preserves other NVIDIA readings");
             Check(NvidiaSample.Create(null,null,null,null,null,null,null)==null,"fully unavailable NVIDIA sample");
             sample=NvidiaSample.Create(101,-2,1200,500,double.NaN,8192,9000);
-            Check(sample.Utilization==null && sample.Temperature==null && sample.PowerWatts==null && sample.UsedMiB==null,"non-finite, invalid ranges and inconsistent VRAM rejected");
+            Check(sample!=null && sample.Utilization==null && sample.Temperature==null && sample.PowerWatts==null && sample.UsedMiB==null,"non-finite, invalid ranges and inconsistent VRAM rejected");
             var nv=new NvidiaTelemetry();nv.Accept(NvidiaSample.Create(0,31,210,405,3.8,16384,256),0);
             Check(nv.Current!=null && nv.Status=="fresh","successful sensor sample cached");
             nv.Accept(null,10);Check(nv.Current==null && nv.Status=="stale","failed read invalidates all previous live values immediately");
             nv.Accept(NvidiaSample.Create(1,32,null,null,4.1,null,null),20);
-            Check(nv.Current.PowerWatts==4.1 && nv.Current.CoreClock==null,"recovery never revives old unsupported fields");
+            Check(nv.Current!=null && nv.Current.PowerWatts==4.1 && nv.Current.CoreClock==null,"recovery never revives old unsupported fields");
             var engines=new[]{new GpuEngineReading{Name="pid_1_luid_A_phys_0_eng_0_engtype_3D",Utilization=30},new GpuEngineReading{Name="pid_2_luid_A_phys_0_eng_0_engtype_3D",Utilization=40},new GpuEngineReading{Name="pid_1_luid_A_phys_0_eng_1_engtype_3D",Utilization=50},new GpuEngineReading{Name="pid_1_luid_B_phys_0_eng_0_engtype_3D",Utilization=99}};
             Check(WindowsGpuTelemetry.BusiestEngine(engines,"luid_A","3D")==70,"GPU processes aggregate within each engine, separate engines and adapters stay distinct");
             Check(WindowsGpuTelemetry.BusiestEngine(engines,"","3D")==-1,"missing adapter is unavailable instead of idle");
@@ -42,15 +46,15 @@ class FeatureRegression
                 new GpuEngineReading{Name="pid_22_luid_0x0_0xNPU_phys_0_eng_1_engtype_Compute",Utilization=30},
                 new GpuEngineReading{Name="pid_33_luid_0x0_0xGPU_phys_0_eng_0_engtype_3D",Utilization=90}};
             int topPid,topPct;
-            WindowsGpuTelemetry.TopProcess(npuClients,"luid_0x0_0xNPU",new[]{"Neural","Compute"},out topPid,out topPct);
+            WindowsGpuTelemetry.TopProcess(npuClients,"luid_0x0_0xNPU",NpuKinds,out topPid,out topPct);
             Check(topPid==10 && topPct==35,"top NPU process sums one process's instances on an engine and ignores other adapters");
-            WindowsGpuTelemetry.TopProcess(new[]{new GpuEngineReading{Name="pid_10_luid_0x0_0xNPU_phys_0_eng_0_engtype_Neural",Utilization=0}},"luid_0x0_0xNPU",new[]{"Neural"},out topPid,out topPct);
+            WindowsGpuTelemetry.TopProcess(new[]{new GpuEngineReading{Name="pid_10_luid_0x0_0xNPU_phys_0_eng_0_engtype_Neural",Utilization=0}},"luid_0x0_0xNPU",NeuralKind,out topPid,out topPct);
             Check(topPid==-1 && topPct==0,"idle NPU has no top process");
-            WindowsGpuTelemetry.TopProcess(npuClients,"",new[]{"Neural"},out topPid,out topPct);
+            WindowsGpuTelemetry.TopProcess(npuClients,"",NeuralKind,out topPid,out topPct);
             Check(topPid==-1,"no NPU adapter, no top process");
 
             // Battery power flow (CallNtPowerInformation SystemBatteryState).
-            Check(System.Runtime.InteropServices.Marshal.SizeOf(typeof(BatteryState.SYSTEM_BATTERY_STATE))==32,"SYSTEM_BATTERY_STATE is 32 bytes");
+            Check(System.Runtime.InteropServices.Marshal.SizeOf<BatteryState.SYSTEM_BATTERY_STATE>()==32,"SYSTEM_BATTERY_STATE is 32 bytes");
             var battery=BatteryState.FromRaw(new BatteryState.SYSTEM_BATTERY_STATE{BatteryPresent=1,Rate=unchecked((uint)-12400),EstimatedTime=5400});
             Check(battery.RateMilliwatts==-12400 && battery.EstimatedSeconds==5400,"discharge rate is negative milliwatts with Windows' estimate");
             battery=BatteryState.FromRaw(new BatteryState.SYSTEM_BATTERY_STATE{BatteryPresent=1,Rate=0x80000000,EstimatedTime=0xFFFFFFFF});
@@ -92,7 +96,7 @@ class FeatureRegression
                 new GpuAdapterInfo{Name="Microsoft Basic Render Driver"},
                 new GpuAdapterInfo{Name="Intel(R) Arc(TM) A380 Graphics",DedicatedBytes=6L<<30},
                 new GpuAdapterInfo{Name="NVIDIA GeForce RTX 4070 Laptop GPU",DedicatedBytes=8334082048}};
-            GpuAdapterInfo igpu,dgpu;GpuClassifier.Select(adapters,out igpu,out dgpu);
+            GpuAdapterInfo? igpu,dgpu;GpuClassifier.Select(adapters,out igpu,out dgpu);
             Check(igpu==adapters[0] && dgpu==adapters[3],"selection keeps the first iGPU and the discrete GPU with the most memory");
             Check(GpuClassifier.FormatLuid(0x152a4)=="0x00000000_0x000152a4","LUID formatted like GPU counter instances");
 
@@ -102,13 +106,14 @@ class FeatureRegression
             Check(wddm!=null && wddm.TemperatureC==52.4 && wddm.MemoryClockMhz==8001 && wddm.FanRpm==null && wddm.PowerPercent==null,"deci-Celsius and Hz converted, unreported fan and power stay unavailable");
             Check(WddmGpuSample.Parse(0,0,0,0,0)==null,"driver without sensors reports nothing instead of zeros");
             wddm=WddmGpuSample.Parse(0,0,355,0,3200);
-            Check(wddm.FanRpm==0 && wddm.PowerPercent==35.5,"stopped fan is real only when the driver declares a fan");
+            Check(wddm!=null && wddm.FanRpm==0 && wddm.PowerPercent==35.5,"stopped fan is real only when the driver declares a fan");
             using(var dx=Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\DirectX")) {
                 if(dx!=null) foreach(var key in dx.GetSubKeyNames()) using(var sub=dx.OpenSubKey(key)) {
-                    object luid=sub.GetValue("AdapterLuid");if(luid==null||sub.GetValue("Description")==null)continue;
-                    var read=WddmGpuSensors.Read(Convert.ToInt64(luid));
-                    Console.WriteLine("INFO D3DKMT {0} [{1}]: {2}",sub.GetValue("Description"),GpuClassifier.ClassifyGpu(Convert.ToString(sub.GetValue("Description")),Convert.ToInt64(sub.GetValue("DedicatedVideoMemory")??0L)),
-                        read==null?"no sensor":string.Format("temp={0} memClock={1} fan={2} power%={3}",read.TemperatureC,read.MemoryClockMhz,read.FanRpm,read.PowerPercent));
+                    if(sub==null)continue;
+                    object? luid=sub.GetValue("AdapterLuid");if(luid==null||sub.GetValue("Description")==null)continue;
+                    var read=WddmGpuSensors.Read(Convert.ToInt64(luid,CultureInfo.InvariantCulture));
+                    Console.WriteLine("INFO D3DKMT {0} [{1}]: {2}",sub.GetValue("Description"),GpuClassifier.ClassifyGpu(Convert.ToString(sub.GetValue("Description"),CultureInfo.InvariantCulture)??"",Convert.ToInt64(sub.GetValue("DedicatedVideoMemory")??0L,CultureInfo.InvariantCulture)),
+                        read==null?"no sensor":string.Format(CultureInfo.InvariantCulture,"temp={0} memClock={1} fan={2} power%={3}",read.TemperatureC,read.MemoryClockMhz,read.FanRpm,read.PowerPercent));
                     Check(read==null || read.TemperatureC==null || (read.TemperatureC>0 && read.TemperatureC<150),"live D3DKMT reading is plausible or absent");
                 }
             }
@@ -122,7 +127,8 @@ class FeatureRegression
             // Live NVML reading on this PC (an NVIDIA adapter with its driver), or nothing at all.
             using(var dx=Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\DirectX")) {
                 if(dx!=null) foreach(var key in dx.GetSubKeyNames()) using(var sub=dx.OpenSubKey(key)) {
-                    string adapter=Convert.ToString(sub.GetValue("Description"));
+                    if(sub==null)continue;
+                    string? adapter=Convert.ToString(sub.GetValue("Description"),CultureInfo.InvariantCulture);
                     if(string.IsNullOrEmpty(adapter)||adapter.IndexOf("NVIDIA",StringComparison.OrdinalIgnoreCase)<0)continue;
                     var nvLive=new NvidiaTelemetry();
                     if(!nvLive.IsAvailable(adapter)){Console.WriteLine("INFO NVML absent for "+adapter);continue;}
@@ -162,12 +168,12 @@ class FeatureRegression
             var v1Ram=new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string,double>>{kv("chrome",3L<<30),kv("chrome",50L<<20),kv("Idle",0),kv("_Total",8L<<30),kv("dwm",100L<<20)};
             ProcessRanking.Rank(v1Cpu,v1Ram,8,out var top,out var topRam,new System.Collections.Generic.Dictionary<int,string>());
             Check(top.Length==3 && top[0].Name=="chrome" && top[0].CpuPercent==10 && top[0].RamMb==3072 && top[2].RamMb==50,"each repeated legacy instance keeps its own private memory");
-            Check(topRam.Name=="chrome" && topRam.RamMb==3072,"largest process found among repeated instance names");
+            Check(topRam!=null && topRam.Name=="chrome" && topRam.RamMb==3072,"largest process found among repeated instance names");
             var pidNames=new System.Collections.Generic.Dictionary<int,string>();
             var v2Cpu=new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string,double>>{kv("chrome:120",8),kv("chrome:340",16),kv("Idle:0",700),kv("_Total",800),kv("my:app:77",8)};
             var v2Ram=new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string,double>>{kv("chrome:340",2L<<20),kv("chrome:120",9L<<20),kv("my:app:77",1L<<20)};
             ProcessRanking.Rank(v2Cpu,v2Ram,8,out top,out topRam,pidNames);
-            Check(top[0].Name=="chrome" && top[0].CpuPercent==2 && top[0].RamMb==2 && topRam.RamMb==9 && pidNames[340]=="chrome" && pidNames[77]=="my:app" && !pidNames.ContainsKey(0),"Process V2 instances pair by name:pid, the pid names GPU clients");
+            Check(top[0].Name=="chrome" && top[0].CpuPercent==2 && top[0].RamMb==2 && topRam!=null && topRam.RamMb==9 && pidNames[340]=="chrome" && pidNames[77]=="my:app" && !pidNames.ContainsKey(0),"Process V2 instances pair by name:pid, the pid names GPU clients");
             using(var processQuery=new PdhQuery()) if(processQuery.Add(ProcessRanking.CpuV2)) {
                 processQuery.Collect();System.Threading.Thread.Sleep(200);processQuery.Collect(); // a rate needs two samples
                 var rows=processQuery.Instances(ProcessRanking.CpuV2);
@@ -183,9 +189,10 @@ class FeatureRegression
             var modes=PowerSchemes.OverlayModes("DED574B5-45A0-4F42-8737-46345C09C238",new System.Globalization.CultureInfo("fr-FR"));
             Check(modes.Count==3 && modes.TrueForAll(m=>m.Overlay) && modes[2].Active && !modes[0].Active && modes[1].Guid==PowerSchemes.OverlayBalanced && modes[1].Name=="Équilibré","Windows power modes with the active overlay marked");
             var plans=PowerSchemes.EnumeratePlans();
-            Check(plans!=null && plans.Count>0 && plans.TrueForAll(p=>p.Name!="" && (p.Kind=="eco"||p.Kind=="balanced"||p.Kind=="performance")),"powrprof enumerates the installed plans ("+(plans==null?0:plans.Count)+")");
+            int planCount=plans==null?0:plans.Count;
+            Check(plans!=null && plans.Count>0 && plans.TrueForAll(p=>p.Name!="" && (p.Kind=="eco"||p.Kind=="balanced"||p.Kind=="performance")),"powrprof enumerates the installed plans ("+planCount+")");
             foreach(var plan in plans) Console.WriteLine("INFO plan {0} {1} [{2}]",plan.Guid,plan.Name,plan.Kind);
-            string overlay=PowerSchemes.EffectiveOverlay();
+            string? overlay=PowerSchemes.EffectiveOverlay();
             Console.WriteLine("INFO effective power mode overlay: "+(overlay??"unavailable"));
             Check(overlay==null || Guid.TryParse(overlay,out _),"effective overlay is a GUID or unavailable");
             return 0;

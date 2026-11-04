@@ -91,7 +91,9 @@ namespace DesktopHtmlHost
     internal sealed class GpuAdapterInfo
     {
         internal string Name = "", Luid = "", Kind = "";
-        internal long LuidValue, DedicatedBytes, SharedBytes;
+        internal long LuidValue { get; init; }
+        internal long DedicatedBytes { get; init; }
+        internal long SharedBytes { get; init; }
     }
 
     internal static class GpuClassifier

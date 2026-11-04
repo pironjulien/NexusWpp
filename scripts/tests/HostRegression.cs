@@ -51,7 +51,7 @@ static class HostRegression
     static void Reparent(IntPtr child, IntPtr parent)
     {
         SetParent(child, parent);
-        SetWindowLong(child, GWL_STYLE, (GetWindowLong(child, GWL_STYLE) | WS_CHILD) & ~WS_POPUP);
+        _ = SetWindowLong(child, GWL_STYLE, (GetWindowLong(child, GWL_STYLE) | WS_CHILD) & ~WS_POPUP);
     }
 
     static void Placement()
@@ -174,8 +174,7 @@ static class HostRegression
     {
         var forms = new List<FakeWallpaper>();
         bool exitedByClose = false;
-        DesktopHostContext context = null;
-        context = new DesktopHostContext(() => { var form = new FakeWallpaper(); forms.Add(form); return form; });
+        var context = new DesktopHostContext(() => { var form = new FakeWallpaper(); forms.Add(form); return form; });
         int step = 0;
         var timer = new Timer { Interval = 100 };
         var started = DateTime.Now;
@@ -221,7 +220,7 @@ static class HostRegression
               TelemetryCollector.AdapterMemoryBytes(new WindowsGpuSample()) == -1, "iGPU memory counts dedicated and shared usage, like its budget");
         Check(TelemetryCollector.WmiDate("20260903000000.000000-000") == "03/09/2026" && TelemetryCollector.WmiDate("2026") == "" && TelemetryCollector.WmiDate(null) == "",
             "driver dates parsed from CIM datetimes");
-        var collector = new TelemetryCollector();
+        using var collector = new TelemetryCollector();
         collector.Initialize();
         collector.CollectStats();
         System.Threading.Thread.Sleep(1100);
@@ -231,8 +230,8 @@ static class HostRegression
         Check(cpu >= 0 && cpu <= 100, "CPU utilization measured (" + cpu + " %)");
         Check(!root.GetProperty("cpu").TryGetProperty("handles", out _), "no placeholder handle count");
         var ram = root.GetProperty("ram");
-        double used = double.Parse(ram.GetProperty("usedGb").GetString(), System.Globalization.CultureInfo.InvariantCulture);
-        double available = double.Parse(ram.GetProperty("availableGb").GetString(), System.Globalization.CultureInfo.InvariantCulture);
+        double used = double.Parse(ram.GetProperty("usedGb").GetString() ?? "", System.Globalization.CultureInfo.InvariantCulture);
+        double available = double.Parse(ram.GetProperty("availableGb").GetString() ?? "", System.Globalization.CultureInfo.InvariantCulture);
         Check(used > 0 && available > 0 && used + available <= ram.GetProperty("totalGb").GetInt32() + 0.2, "RAM in use and available are real and fit the installed memory");
         long disk = root.GetProperty("disk").GetProperty("utilization").GetInt64();
         Check(disk >= -1 && disk <= 100, "disk activity is a percentage or unavailable");

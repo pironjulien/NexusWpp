@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Management;
@@ -13,7 +14,7 @@ using Microsoft.Web.WebView2.WinForms;
 
 // A/B measurements of an identical, test-only workload in an isolated WebView2.
 // GPU numbers are process-group engine occupancy, not watts or DWM attribution.
-class GraphicsProfile : Form
+sealed class GraphicsProfile : Form
 {
     readonly WebView2 view = new WebView2 { Dock = DockStyle.Fill };
     readonly string project, assets, output;
@@ -29,43 +30,43 @@ class GraphicsProfile : Form
         ClientSize = new Size(1600, 950); StartPosition = FormStartPosition.CenterScreen;
         Controls.Add(view); Shown += Run;
     }
-    class Counter { public double Time, Stamp; }
-    class Sample { public Dictionary<string, Counter> Gpu = new Dictionary<string, Counter>(); public double Cpu; public DateTime At; }
+    sealed class Counter { public double Time, Stamp; }
+    sealed class Sample { public Dictionary<string, Counter> Gpu = new Dictionary<string, Counter>(); public double Cpu; public DateTime At; }
     Sample Snapshot() {
-        var ids = new HashSet<int> { Process.GetCurrentProcess().Id };
+        var ids = new HashSet<int> { Environment.ProcessId };
         using (var q = new ManagementObjectSearcher("SELECT ProcessId,ParentProcessId FROM Win32_Process")) {
             var children = new List<Tuple<int, int>>();
-            foreach (ManagementObject p in q.Get()) children.Add(Tuple.Create(Convert.ToInt32(p["ProcessId"]), Convert.ToInt32(p["ParentProcessId"])));
+            foreach (ManagementObject p in q.Get()) children.Add(Tuple.Create(Convert.ToInt32(p["ProcessId"], CultureInfo.InvariantCulture), Convert.ToInt32(p["ParentProcessId"], CultureInfo.InvariantCulture)));
             bool change; do { change = false; foreach (var p in children) if (ids.Contains(p.Item2)) change |= ids.Add(p.Item1); } while (change);
         }
         var sample = new Sample { At = DateTime.UtcNow };
         foreach (int id in ids) try { using (var p = Process.GetProcessById(id)) sample.Cpu += p.TotalProcessorTime.TotalSeconds; } catch { }
         using (var q = new ManagementObjectSearcher("SELECT Name,RunningTime,Timestamp_Sys100NS FROM Win32_PerfRawData_GPUPerformanceCounters_GPUEngine")) {
             foreach (ManagementObject p in q.Get()) {
-                string name = Convert.ToString(p["Name"]); string[] parts = name.Split('_'); int pid;
+                string name = Convert.ToString(p["Name"], CultureInfo.InvariantCulture) ?? ""; string[] parts = name.Split('_'); int pid;
                 if (parts.Length < 3 || !int.TryParse(parts[1], out pid) || !ids.Contains(pid)) continue;
-                sample.Gpu[name] = new Counter { Time = Convert.ToDouble(p["RunningTime"]), Stamp = Convert.ToDouble(p["Timestamp_Sys100NS"]) };
+                sample.Gpu[name] = new Counter { Time = Convert.ToDouble(p["RunningTime"], CultureInfo.InvariantCulture), Stamp = Convert.ToDouble(p["Timestamp_Sys100NS"], CultureInfo.InvariantCulture) };
             }
         }
         return sample;
     }
     async Task<string> Script(string expression) {
         string response=await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Runtime.evaluate",JsonSerializer.Serialize(new {expression=expression,returnByValue=true,awaitPromise=true}));
-        if(response.Contains("\"exceptionDetails\""))throw new Exception(response);
+        if(response.Contains("\"exceptionDetails\""))throw new InvalidOperationException(response);
         return response;
     }
-    async void Run(object sender, EventArgs e) {
+    async void Run(object? sender, EventArgs e) {
         try {
             Directory.CreateDirectory(output);
             var env = await CoreWebView2Environment.CreateAsync(null, Path.Combine(output, "profile"));
             await view.EnsureCoreWebView2Async(env);
             view.CoreWebView2.SetVirtualHostNameToFolderMapping("nexuswpp.local", assets, CoreWebView2HostResourceAccessKind.DenyCors);
-            view.CoreWebView2.WebMessageReceived+=delegate(object source,CoreWebView2WebMessageReceivedEventArgs message) {
+            view.CoreWebView2.WebMessageReceived+=delegate(object? source,CoreWebView2WebMessageReceivedEventArgs message) {
                 if(message.TryGetWebMessageAsString()=="REQUEST_RUNTIME_STATE")ready=true;
             };
             view.Source = new Uri("http://nexuswpp.local/index.html");
             for(int i=0;i<100 && !ready;i++)await Task.Delay(100);
-            if(!ready)throw new Exception("Page did not complete the host handshake");
+            if(!ready)throw new InvalidOperationException("Page did not complete the host handshake");
             string fixture = File.ReadAllText(Path.Combine(project, "scripts", "tests", "responsive_layout.js"));
             fixture = fixture.Replace("updateDOM(stats);", "window.profileStats = stats; updateDOM(stats);");
             await Script(fixture);
@@ -94,7 +95,7 @@ class GraphicsProfile : Form
                     var after = await Task.Run((Func<Sample>)Snapshot);
                     var engines = new Dictionary<string,double>();
                     foreach (var entry in after.Gpu) {
-                        Counter old; if (!before.Gpu.TryGetValue(entry.Key, out old) || entry.Value.Stamp <= old.Stamp) continue;
+                        Counter? old; if (!before.Gpu.TryGetValue(entry.Key, out old) || entry.Value.Stamp <= old.Stamp) continue;
                         string key = entry.Key.Substring(entry.Key.IndexOf('_',4)+1);
                         double value = Math.Max(0, (entry.Value.Time-old.Time)/(entry.Value.Stamp-old.Stamp)*100);
                         if (!engines.ContainsKey(key)) engines[key]=0; engines[key]+=value;
@@ -102,7 +103,7 @@ class GraphicsProfile : Form
                     var row = new { variant=label, run=run+1, cpuCores=(after.Cpu-before.Cpu)/(after.At-before.At).TotalSeconds,
                         gpuMax=engines.Count>0?(double?)engines.Values.Max():null, engines=engines };
                     string state=await Script("({hidden:document.hidden,paused:runtimeSuspended,ticks:profileTick,valid:profileTick>=20,framesRunning:isCanvasLoopRunning,packets:dataPackets.length})");
-                    if(state.Contains("\"hidden\":true") || state.Contains("\"paused\":true") || state.Contains("\"valid\":false")) throw new Exception("Invalid profile workload: "+state);
+                    if(state.Contains("\"hidden\":true") || state.Contains("\"paused\":true") || state.Contains("\"valid\":false")) throw new InvalidOperationException("Invalid profile workload: "+state);
                     results.Add(row); Console.WriteLine(label+" run "+(run+1)+" GPU "+row.gpuMax+" CPU "+row.cpuCores+" "+state);
                     File.WriteAllText(Path.Combine(output,"results.json"),JsonSerializer.Serialize(new { runtime=env.BrowserVersionString, results=results }));
                 }

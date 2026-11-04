@@ -2,11 +2,11 @@ using System;
 using System.Drawing;
 using DesktopHtmlHost;
 
-class CoverageTests
+static class CoverageTests
 {
     static void Expect(bool condition, string name)
     {
-        if (!condition) throw new Exception(name);
+        if (!condition) throw new InvalidOperationException(name);
         Console.WriteLine("PASS " + name);
     }
 
@@ -42,6 +42,6 @@ class CoverageTests
         Expect(!coverage.IsCovered, "offscreen and empty windows ignored");
         coverage.Cover(new Rectangle(-100, -100, 2200, 1300));
         Expect(coverage.IsCovered, "oversized maximized frame");
-        Expect(!new DesktopCoverage(new Rectangle[0]).IsCovered, "missing monitor information is not occlusion");
+        Expect(!new DesktopCoverage(Array.Empty<Rectangle>()).IsCovered, "missing monitor information is not occlusion");
     }
 }

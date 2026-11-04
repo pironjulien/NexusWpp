@@ -1,6 +1,6 @@
 using System;
-using System.Collections.Generic;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
 using System.Text.Json;
@@ -12,13 +12,13 @@ using Microsoft.Web.WebView2.WinForms;
 
 // Store screenshots from the real page fed with this PC's real telemetry
 // (same collector as the host). Viewport emulation only; nothing on the desktop changes.
-class StoreScreenshots : Form
+sealed class StoreScreenshots : Form
 {
     readonly WebView2 view = new WebView2 { Dock = DockStyle.Fill };
     readonly TelemetryCollector collector = new TelemetryCollector();
     readonly string project, output, language;
     readonly int warmupSeconds;
-    readonly string customLogoPath;
+    readonly string? customLogoPath;
     bool ready;
     int result = 1;
 
@@ -41,7 +41,7 @@ class StoreScreenshots : Form
     StoreScreenshots(string[] args)
     {
         project = args[0]; output = args[1]; language = args.Length > 2 ? args[2] : "fr";
-        warmupSeconds = args.Length > 3 ? int.Parse(args[3]) : 4;
+        warmupSeconds = args.Length > 3 ? int.Parse(args[3], CultureInfo.InvariantCulture) : 4;
         customLogoPath = args.Length > 4 ? args[4] : null;
         ClientSize = new Size(960, 540);
         ShowInTaskbar = false;
@@ -49,6 +49,12 @@ class StoreScreenshots : Form
         Location = new Point(-20000, -20000);
         Controls.Add(view);
         Shown += Run;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) collector.Dispose();
+        base.Dispose(disposing);
     }
 
     async Task FeedTelemetry(int seconds)
@@ -67,13 +73,13 @@ class StoreScreenshots : Form
             JsonSerializer.Serialize(new { width = w, height = h, deviceScaleFactor = scale, mobile = false, screenWidth = w, screenHeight = h }));
         await FeedTelemetry(4);
         var response = await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", "{\"format\":\"png\",\"captureBeyondViewport\":false}");
-        var screenshot = JsonNode.Parse(response);
+        string data = JsonNode.Parse(response)?["data"]?.GetValue<string>() ?? throw new InvalidDataException("Page.captureScreenshot returned no image.");
         string path = Path.Combine(output, name + "-" + language + ".png");
-        File.WriteAllBytes(path, Convert.FromBase64String((string)screenshot["data"]));
+        File.WriteAllBytes(path, Convert.FromBase64String(data));
         Console.WriteLine("SAVED " + path);
     }
 
-    async void Run(object sender, EventArgs args)
+    async void Run(object? sender, EventArgs args)
     {
         try
         {
@@ -82,7 +88,7 @@ class StoreScreenshots : Form
             var environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(project, "work", "store-screenshot-profile"));
             await view.EnsureCoreWebView2Async(environment);
             view.CoreWebView2.SetVirtualHostNameToFolderMapping("nexuswpp.local", project, CoreWebView2HostResourceAccessKind.DenyCors);
-            view.CoreWebView2.WebMessageReceived += delegate(object source, CoreWebView2WebMessageReceivedEventArgs message) {
+            view.CoreWebView2.WebMessageReceived += delegate(object? source, CoreWebView2WebMessageReceivedEventArgs message) {
                 if (message.TryGetWebMessageAsString() == "REQUEST_RUNTIME_STATE") {
                     view.CoreWebView2.PostWebMessageAsJson("{\"control\":\"RESUME\"}");
                     ready = true;
@@ -90,7 +96,7 @@ class StoreScreenshots : Form
             };
             view.Source = new Uri("http://nexuswpp.local/index.html?lang=" + language);
             for (int i = 0; i < 100 && !ready; i++) await Task.Delay(100);
-            if (!ready) throw new Exception("Page did not initialize");
+            if (!ready) throw new InvalidOperationException("Page did not initialize");
             await FeedTelemetry(warmupSeconds); // real deltas, and history behind the cards
 
             foreach (var shot in Shots)
