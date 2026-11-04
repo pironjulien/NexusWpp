@@ -15,8 +15,15 @@
 .\scripts\build_msix.ps1
 python .\scripts\make_medallion.py   # médaillon 600 px des SVG de branding\ (après une recopie depuis le kit)
 python .\scripts\export_icons.py   # icon.ico et logos MSIX depuis branding\*.svg (cairosvg)
-.\scripts\tag_release.ps1   # tag annote v<VERSION> sur le commit courant, non pousse (git push origin v<VERSION>)
+.\scripts\tag_release.ps1             # avant le push : la version est-elle prête à publier ?
+.\scripts\tag_release.ps1 -Download   # fichiers de la release v<VERSION> dans dist\release, attestation vérifiée
 ```
+
+## Publication
+
+- Les releases sont construites par GitHub, jamais sur le PC : pousser sur `main` un `VERSION` sans release `v<VERSION>` (avec sa section `## <date> — <VERSION>` dans `CHANGELOG.md`) lance `.github/workflows/release.yml` : `test.ps1`, MSIX non signé (le Store le signe), installeur non signé, `SHA256SUMS.txt`, attestation de provenance, puis la release immuable avec tous les fichiers et le tag.
+- Le Store reçoit le MSIX de la release (`tag_release.ps1 -Download`), jamais un MSIX construit en local.
+- L'installeur n'est pas signé Authenticode (pas de certificat public ; un certificat auto-signé ne prouve rien) : son origine se vérifie par `gh attestation verify <fichier> --repo pironjulien/NexusWpp`.
 
 ## Verification
 

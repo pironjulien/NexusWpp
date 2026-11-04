@@ -2,6 +2,12 @@
 
 ## Non publié
 
+### Releases construites par GitHub
+
+- Chaque nouvelle version est construite, testée et publiée par GitHub (`.github/workflows/release.yml`), plus sur le PC : `test.ps1`, paquet Store, installeur, `SHA256SUMS.txt` et attestation de provenance Sigstore, attachés à la release immuable `v<VERSION>` avec sa section du changelog.
+- Le Store reçoit le MSIX de la release (`scripts/tag_release.ps1 -Download` le télécharge et vérifie son attestation) ; `tag_release.ps1` vérifie sinon qu'une version est prête avant le push.
+- L'installeur n'est plus signé par un certificat auto-signé, qui ne prouvait rien : il reste non signé, et son origine se vérifie par `gh attestation verify NexusWppSetup.exe --repo pironjulien/NexusWpp`.
+
 ### Audit .NET 10
 
 - La température CPU est lue par le compteur de performances `\Thermal Zone Information(*)\Temperature`, échantillonné avec les autres, au lieu d'une requête WMI toutes les 5 s qui réveillait le service WMI. Même valeur (zone thermique Windows) ; la lecture ACPI reste en secours.

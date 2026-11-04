@@ -30,26 +30,6 @@ function Get-SignToolPath {
     return $null
 }
 
-function Get-LocalCodeSigningCert {
-    $publisher = "CN=JULIENPIRON.FR"
-    $cert = Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue |
-        Where-Object { $_.Subject -eq $publisher -and $_.HasPrivateKey } |
-        Sort-Object NotAfter -Descending |
-        Select-Object -First 1
-
-    if ($cert) { return $cert }
-
-    return New-SelfSignedCertificate `
-        -Type CodeSigningCert `
-        -Subject $publisher `
-        -FriendlyName "NexusWpp Local Code Signing" `
-        -CertStoreLocation "Cert:\CurrentUser\My" `
-        -KeyUsage DigitalSignature `
-        -NotAfter (Get-Date).AddYears(3)
-}
-
-$signToolPath = Get-SignToolPath
-
 if (-not [IO.Path]::GetFullPath($payloadDir).StartsWith([IO.Path]::GetFullPath($distDir) + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid payload directory.' }
 if (Test-Path -LiteralPath $payloadDir) {
     Remove-Item -LiteralPath $payloadDir -Recurse -Force
@@ -74,8 +54,14 @@ if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath (Join-Path $installerPublis
 }
 Copy-Item -LiteralPath (Join-Path $installerPublishDir "NexusWppSetup.exe") -Destination $installerExe -Force
 
-if (!$signToolPath) {
-    throw "signtool.exe not found. Install the Windows SDK or add signtool.exe to PATH."
+# Signed only with a real code-signing certificate. Otherwise the installer stays unsigned: a self-signed
+# certificate proves nothing to Windows; the GitHub release attests the file instead (README, "Releases").
+$signToolPath = $null
+if ($env:NEXUSWPP_SIGN_CERT_THUMBPRINT -or $env:NEXUSWPP_SIGN_PFX) {
+    $signToolPath = Get-SignToolPath
+    if (!$signToolPath) {
+        throw "signtool.exe not found. Install the Windows SDK or add signtool.exe to PATH."
+    }
 }
 
 $timestampUrl = if ($env:NEXUSWPP_TIMESTAMP_URL) { $env:NEXUSWPP_TIMESTAMP_URL } else { "http://timestamp.digicert.com" }
@@ -93,10 +79,7 @@ if ($env:NEXUSWPP_SIGN_CERT_THUMBPRINT) {
     & $signToolPath @pfxArgs
     if ($LASTEXITCODE -ne 0) { throw "signtool failed with exit code $LASTEXITCODE" }
 } else {
-    Write-Host "Signing installer with local self-signed certificate." -ForegroundColor Cyan
-    $cert = Get-LocalCodeSigningCert
-    & $signToolPath sign /fd SHA256 /sha1 $cert.Thumbprint $installerExe
-    if ($LASTEXITCODE -ne 0) { throw "signtool failed with exit code $LASTEXITCODE" }
+    Write-Host "Installer left unsigned (no NEXUSWPP_SIGN_CERT_THUMBPRINT or NEXUSWPP_SIGN_PFX)." -ForegroundColor Yellow
 }
 
 Remove-Item -LiteralPath $payloadDir -Recurse -Force

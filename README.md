@@ -65,7 +65,22 @@ The `VERSION` file is the single source of the version number for the EXE, the i
 
 The generated file is `dist\NexusWppSetup.exe`. It embeds the compiled application, the WebView2 SDK DLLs and the assets. At launch, it requests administrator rights, installs to `C:\nexuswpp`, checks for the WebView2 Evergreen Runtime and downloads it from Microsoft if needed, configures a single Windows startup entry via `HKLM\...\Run`, adds `NexusWpp` to the Start menu, registers NexusWpp in Installed apps with an uninstall command, then starts the wallpaper.
 
-To sign the installer, install the Windows SDK, then set one of the following configurations before the build:
+### Releases
+
+Every release is built by GitHub, not on a PC. Pushing to `main` a `VERSION` that has no `v<VERSION>` release yet runs [`release.yml`](.github/workflows/release.yml): `test.ps1`, then the Store package (`scripts/build_msix.ps1 -SkipSigning`) and the installer, `SHA256SUMS.txt`, a [build-provenance attestation](https://docs.github.com/actions/security-for-github-actions/using-artifact-attestations) of each file, and the immutable release `v<VERSION>` with its `CHANGELOG.md` section and every file attached. `.\scripts\tag_release.ps1` checks before the push that the version is ready; `.\scripts\tag_release.ps1 -Download` fetches the release files into `dist\release` and verifies them: its MSIX is the one submitted to the Microsoft Store.
+
+The release files are signed this way:
+
+- the MSIX is uploaded unsigned and signed by the Microsoft Store, which is how users get it;
+- `NexusWppSetup.exe` is **not Authenticode-signed**: a self-signed certificate on a CI runner proves nothing to Windows, and NexusWpp has no public code-signing certificate. Windows may show a SmartScreen or "unknown publisher" warning. Its origin is proven instead by the Sigstore attestation, which ties the file to this repository, the workflow and the commit that built it:
+
+```powershell
+gh attestation verify NexusWppSetup.exe --repo pironjulien/NexusWpp
+```
+
+The same command works on the MSIX; `SHA256SUMS.txt` lists the checksums and `NexusWpp-<VERSION>.intoto.jsonl` is the attestation bundle, for offline checks.
+
+To sign a local installer build with a real code-signing certificate, install the Windows SDK, then set one of the following configurations before the build:
 
 ```powershell
 $env:NEXUSWPP_SIGN_CERT_THUMBPRINT = "CODESIGNING_CERTIFICATE_THUMBPRINT"
@@ -80,7 +95,7 @@ $env:NEXUSWPP_SIGN_PFX_PASSWORD = "password"
 .\scripts\build_installer.ps1
 ```
 
-Without a public code-signing certificate, the installer works but may display a SmartScreen warning.
+Without these variables the installer is left unsigned; it works but may display a SmartScreen warning.
 
 To update an existing installation, simply run a newer `NexusWppSetup.exe`. The installer stops the running instance, replaces the files, cleans up old launchers, keeps a single `HKLM\...\Run` startup entry, updates the Start menu shortcut and restarts the wallpaper. Windows uninstallation uses `C:\nexuswpp\NexusWppSetup.exe /uninstall`.
 

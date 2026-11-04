@@ -1,0 +1,143 @@
+# Release: every new version is built, tested and published by GitHub, never on a PC.
+# On a push to main whose VERSION (four parts, e.g. 1.0.53.0) has no v<VERSION> release yet: test.ps1, then the
+# Store package (unsigned: the Store signs it) and the installer (unsigned, see README "Releases"), SHA256SUMS.txt,
+# a build-provenance attestation (Sigstore, keyless: gh attestation verify <file> --repo pironjulien/NexusWpp, the
+# bundle attached as NexusWpp-<VERSION>.intoto.jsonl), then the release v<VERSION> with its CHANGELOG section and
+# every file attached at creation (releases are immutable). The Store submission uses that release's MSIX.
+# Steps kept here rather than in NexusSystem's product-dev-release/product-promote, which expect X.Y.Z and a
+# development channel. Actions pinned by commit SHA; Dependabot (github-actions) keeps them up to date.
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      new: ${{ steps.version.outputs.new }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Version not released yet
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          version=$(tr -d '\r\n\357\273\277 ' < VERSION)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.0$ ]] || { echo "VERSION is not a four-part Store version: $version"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh api "repos/$REPOSITORY/releases/tags/v$version" --silent 2>/dev/null; then
+            echo "v$version is already released: nothing to publish."
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            tr -d '\r' < CHANGELOG.md | grep -q -- "^## .* — ${version//./\\.}\$" || { echo "CHANGELOG.md has no '## <date> — $version' section."; exit 1; }
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: check
+    if: needs.check.outputs.new == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Tests (test.ps1)
+        shell: pwsh
+        run: ./test.ps1
+      - name: Store package (unsigned, signed by the Store)
+        shell: pwsh
+        run: ./scripts/build_msix.ps1 -SkipSigning
+      - name: Installer (unsigned)
+        shell: pwsh
+        run: ./scripts/build_installer.ps1
+      - name: Release files and checksums
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          $release = New-Item -ItemType Directory release
+          $msix = "dist/msix/julienpiron.fr.NexusWpp_${env:VERSION}_x64.msix"
+          if (-not (Test-Path -LiteralPath $msix)) { throw "Missing $msix." }
+          Copy-Item -LiteralPath $msix, dist/NexusWppSetup.exe -Destination $release
+          Get-ChildItem $release -File | ForEach-Object { '{0}  {1}' -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name } |
+            Set-Content release/SHA256SUMS.txt -Encoding utf8NoBOM
+          Get-Content release/SHA256SUMS.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: release
+          path: release/*
+          if-no-files-found: error
+          retention-days: 3
+      - name: Keep test output on failure
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: release-test-output
+          path: work/
+          if-no-files-found: ignore
+
+  publish:
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: release
+          path: release
+      - name: Checksums match the files
+        run: |
+          set -euo pipefail
+          cd release
+          tr -d '\r' < SHA256SUMS.txt | sha256sum --strict -c -
+          listed=$(tr -d '\r' < SHA256SUMS.txt | awk '{print $2}' | sort)
+          present=$(find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -printf '%f\n' | sort)
+          [[ "$listed" == "$present" ]] || { echo "SHA256SUMS.txt does not list exactly the release files"; exit 1; }
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        id: provenance
+        with:
+          subject-path: release/*
+      - name: Release v<VERSION>
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+          VERSION: ${{ needs.check.outputs.version }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tr -d '\r' < CHANGELOG.md > changelog.md
+          start=$(grep -n -m1 -- "^## .* — ${VERSION//./\\.}\$" changelog.md | cut -d: -f1 || true)
+          [[ -n "$start" ]] || { echo "CHANGELOG.md has no '## <date> — $VERSION' section."; exit 1; }
+          tail -n "+$((start + 1))" changelog.md | awk '/^## / {exit} {print}' > notes.md
+          [[ -s notes.md ]] || { echo "CHANGELOG.md has no section for $VERSION."; exit 1; }
+          cp "$BUNDLE" "release/NexusWpp-$VERSION.intoto.jsonl"
+          gh release create "v$VERSION" release/* --repo "$REPOSITORY" --target "$GITHUB_SHA" \
+            --title "NexusWpp $VERSION" --notes-file notes.md --latest
