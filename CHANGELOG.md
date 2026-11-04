@@ -6,7 +6,7 @@
 
 - Libellé d'une case = valeur / φ : jusqu'à 11,1 px (0,618 lvw) pour des valeurs jusqu'à 18 px (1 lvw), au lieu de 12 px (0,7 lvw) ; rapport 1,62 au lieu de 1,5. Minimum de 9 px inchangé.
 - Unité d'une jauge = valeur / φ² : 11,46 au lieu de 12 % de la jauge pour « % » (rapport 2,62 au lieu de 2,5), 9,17 au lieu de 8 % pour l'unité réseau (2,62 au lieu de 3).
-- Durées : barres de mémoire 0,618 s (1/φ) au lieu de 0,55 s ; bordure et halo des cartes 0,382 s (1/φ²) au lieu de 0,4 s. Déjà au nombre d'or et gardés : rangée des accélérateurs et première ligne du portrait à 1,618, rapport de la colonne centrale.
+- Durées : barres de mémoire 0,618 s (1/φ) au lieu de 0,55 s ; bordure et halo des cartes 0,382 s (1/φ²) au lieu de 0,4 s. Déjà au nombre d'or et gardés : rangée des accélérateurs des fenêtres basses et première ligne du portrait à 1,618.
 - Non changés, pour garder la lisibilité et les 804 cas de disposition : largeurs des trois colonnes (1 / 1,22 / 1,12), taille de l'heure.
 
 ### Courbes des cartes par petits pas
