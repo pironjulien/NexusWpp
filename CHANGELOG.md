@@ -2,6 +2,13 @@
 
 ## Non publié
 
+### Proportions au nombre d'or
+
+- Libellé d'une case = valeur / φ : jusqu'à 11,1 px (0,618 lvw) pour des valeurs jusqu'à 18 px (1 lvw), au lieu de 12 px (0,7 lvw) ; rapport 1,62 au lieu de 1,5. Minimum de 9 px inchangé.
+- Unité d'une jauge = valeur / φ² : 11,46 au lieu de 12 % de la jauge pour « % » (rapport 2,62 au lieu de 2,5), 9,17 au lieu de 8 % pour l'unité réseau (2,62 au lieu de 3).
+- Durées : barres de mémoire 0,618 s (1/φ) au lieu de 0,55 s ; bordure et halo des cartes 0,382 s (1/φ²) au lieu de 0,4 s. Déjà au nombre d'or et gardés : rangée des accélérateurs et première ligne du portrait à 1,618, rapport de la colonne centrale.
+- Non changés, pour garder la lisibilité et les 804 cas de disposition : largeurs des trois colonnes (1 / 1,22 / 1,12), taille de l'heure.
+
 ### Courbes des cartes par petits pas
 
 - Les courbes d'historique en fond des cartes avancent par 6 petits pas par seconde au lieu d'un saut par seconde : chaque mesure est dessinée une fois, un pas à droite de sa place, puis le tracé est déplacé par une transformation du compositeur sur les images de l'horloge du centre (un pas toutes les 4 images à 24 i/s), sans mise en page ni nouveau dessin. Sur batterie, en mode économie ou avec les animations de Windows coupées, elles sautent toujours une fois par seconde.

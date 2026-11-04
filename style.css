@@ -195,7 +195,7 @@ body {
         0 12px 40px 0 rgba(0, 0, 0, 0.35), 
         inset 0 1px 1px rgba(255, 255, 255, 0.12), 
         inset 0 -1px 1px rgba(255, 255, 255, 0.04);
-    transition: border-color 0.4s ease, box-shadow 0.4s ease, background 0.4s ease;
+    transition: border-color 0.382s ease, box-shadow 0.382s ease, background 0.382s ease; /* 1 / φ² s */
     
     /* Hardware GPU acceleration layer promotion to optimize composite rendering */
     position: relative;
@@ -436,7 +436,7 @@ body {
 }
 
 .accelerator-card .gauge-value span {
-    font-size: 12cqw;
+    font-size: 11.46cqw; /* value / φ² */
 }
 
 .accelerator-card .card-sub-metrics {
@@ -527,8 +527,9 @@ body {
     text-shadow: 0 0 15px rgba(255, 255, 255, 0.08);
 }
 
+/* The unit is the value divided by φ² (30 / 2.618), the label of a reading the value divided by φ. */
 .gauge-value span {
-    font-size: 12cqw;
+    font-size: 11.46cqw;
     font-weight: 600;
     color: var(--text-secondary);
     margin-left: 2px;
@@ -536,7 +537,7 @@ body {
 
 /* Network throughput also includes a decimal and a longer unit. */
 #net-val { font-size: 24cqw; }
-#net-val span { font-size: 8cqw; }
+#net-val span { font-size: 9.17cqw; } /* value / φ² */
 
 .vram-scanner-eye {
     position: absolute;
@@ -860,7 +861,8 @@ body {
 
 .sub-metric .lbl {
     font-family: var(--font-body);
-    font-size: clamp(9px, calc(0.7 * var(--lvw)), 12px);
+    /* Value (up to 18 px, 1 lvw) / φ: up to 11.1 px, 0.618 lvw. */
+    font-size: clamp(9px, calc(0.618 * var(--lvw)), 11.1px);
     font-weight: 700;
     color: var(--text-dark);
     letter-spacing: 0.3px;
@@ -909,7 +911,7 @@ body {
     border-radius: 4px;
     transform: scaleX(0);
     transform-origin: left center;
-    transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+    transition: transform 0.618s cubic-bezier(0.22, 1, 0.36, 1); /* 1 / φ s */
 }
 
 .igpu-vram-bar {
