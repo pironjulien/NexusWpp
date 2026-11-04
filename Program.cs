@@ -26,9 +26,6 @@ namespace DesktopHtmlHost
         [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern bool SystemParametersInfo(int action, int param, StringBuilder value, int winIni);
 
-        [DllImport("user32.dll")]
-        private static extern bool SetProcessDPIAware();
-
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern int RegisterApplicationRestart(string commandLineArgs, int flags);
 
@@ -70,15 +67,14 @@ namespace DesktopHtmlHost
                 if (!FirstLaunch) MarkWelcomeShown();
                 LogDebug("NexusWpp " + NexusWpp.ReleaseVersion.Value + (IsPackaged ? " (Store)" : " (EXE)") + " starting on Windows " + RealWindowsVersion() + " (" + Application.ExecutablePath + ").");
 
-                // Force Process DPI Awareness to prevent Windows from virtualizing coordinates
-                SetProcessDPIAware();
+                // Per-monitor v2 DPI awareness (NexusWpp.csproj), visual styles and GDI+ text rendering,
+                // before any window exists: every coordinate is a physical pixel on every monitor.
+                ApplicationConfiguration.Initialize();
 
                 RegisterForUpdateRestart(args);
                 CleanupStaleWebView2Processes();
                 System.Threading.Tasks.Task.Run(() => PriorityStartup.ReconcileAsync());
 
-                Application.EnableVisualStyles();
-                Application.SetCompatibleTextRenderingDefault(false);
                 // No WinForms "Continue" dialog on the desktop: unexpected errors reach the crash handler below.
                 Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
                 AppDomain.CurrentDomain.UnhandledException += (sender, e) =>

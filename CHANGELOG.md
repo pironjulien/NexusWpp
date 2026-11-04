@@ -2,6 +2,14 @@
 
 ## Non publié
 
+### Affichage net sur plusieurs écrans
+
+- NexusWpp et son installeur sont désormais conscients du DPI de chaque écran (per-monitor v2, `<ApplicationHighDpiMode>` appliqué par `ApplicationConfiguration.Initialize()`), au lieu du seul DPI système (`SetProcessDPIAware`). Windows n'étire plus leur image : le fond reste net sur des écrans à mises à l'échelle différentes, ou après un changement d'échelle sans fermer la session.
+- Les clics du panneau des modes d'alimentation tombent au bon endroit sur ces configurations : le hook souris, la fenêtre, les zones de travail des écrans et Chromium parlent tous en pixels physiques.
+- L'échelle de secours du panneau vient du DPI réel de la fenêtre (`GetDpiForWindow`) au lieu de la valeur `AppliedDPI` du registre ; le changement temporaire de contexte DPI du contrôle de couverture disparaît.
+- La fenêtre de l'installeur se met à l'échelle de l'écran où elle s'ouvre, et se redimensionne si elle change d'écran.
+- Test : `test_mouse_hook.ps1` vérifie que l'hôte compilé démarre bien en per-monitor v2.
+
 ## 2026-11-04 — 1.0.53.0
 
 ### Releases construites par GitHub

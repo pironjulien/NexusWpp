@@ -11,7 +11,6 @@ using DesktopHtmlHost;
 // Real settings window captured from the screen, composited over a real dashboard render.
 static class StoreSettingsShot
 {
-    [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
     [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out RECT rect, int size);
     [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
 
@@ -21,7 +20,7 @@ static class StoreSettingsShot
         string defaultLogo = args[0], background = args[1], output = args[2];
         // The window follows the Windows display language; pin it to the screenshot's language.
         Thread.CurrentThread.CurrentUICulture = new CultureInfo(args.Length > 3 && args[3] == "en" ? "en-US" : "fr-FR");
-        SetProcessDPIAware();
+        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2); // same DPI mode as the host
         Application.EnableVisualStyles();
         using (var form = new SettingsForm(defaultLogo, () => { }, () => { }))
         {

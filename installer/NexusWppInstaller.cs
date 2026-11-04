@@ -31,16 +31,15 @@ namespace NexusWppInstaller
         private const string Publisher = "JULIENPIRON.FR";
         private const string UninstallKeyPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\NexusWpp";
 
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        private static extern bool SetProcessDPIAware();
-
         [STAThread]
         private static int Main(string[] args)
         {
             bool silent = HasArg(args, "/silent") || HasArg(args, "-silent") || HasArg(args, "/quiet") || HasArg(args, "-quiet");
             bool uninstall = HasArg(args, "/uninstall") || HasArg(args, "-uninstall");
 
-            try { SetProcessDPIAware(); } catch { }
+            // Per-monitor v2 DPI awareness (NexusWppInstaller.csproj) before any window: the dialog
+            // is drawn sharp at the DPI of the monitor it opens on and rescales when moved.
+            ApplicationConfiguration.Initialize();
 
             if (!IsAdministrator())
             {
@@ -83,9 +82,6 @@ namespace NexusWppInstaller
 
         private static int RunWithProgressWindow(bool uninstall)
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-
             using (InstallerProgressForm form = new InstallerProgressForm(uninstall))
             {
                 form.Shown += delegate
@@ -1117,6 +1113,11 @@ namespace NexusWppInstaller
         public InstallerProgressForm(bool uninstall)
         {
             ExitCode = 1;
+            // Layout written at 96 DPI, scaled to the monitor DPI (and again when the dialog changes monitor).
+            // Auto-scaling only happens inside a SuspendLayout/ResumeLayout pair.
+            SuspendLayout();
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
             Text = uninstall ? "Desinstallation NexusWpp " + Program.ProductVersion : "Installation NexusWpp " + Program.ProductVersion;
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -1190,6 +1191,7 @@ namespace NexusWppInstaller
             Controls.Add(progressTrack);
             Controls.Add(percentLabel);
             Controls.Add(closeButton);
+            ResumeLayout(false);
         }
 
         public void Report(int percent, string message)

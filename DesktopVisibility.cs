@@ -145,10 +145,7 @@ namespace DesktopHtmlHost
         private struct MonitorInfo { internal int Size; internal Rect Monitor, Work; internal uint Flags; }
         [DllImport("user32.dll")] private static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr clip, MonitorEnumProc callback, IntPtr data);
         [DllImport("user32.dll")] private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
-        [DllImport("user32.dll")] private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
-        private static readonly IntPtr PerMonitorAwareV2 = new IntPtr(-4);
-
-        // Monitor work areas in the calling thread's DPI context.
+        // Monitor work areas in physical pixels (the process is per-monitor v2 DPI aware).
         internal static List<Rectangle> GetMonitorWorkAreas()
         {
             var areas = new List<Rectangle>();
@@ -162,24 +159,13 @@ namespace DesktopHtmlHost
             return areas;
         }
 
-        // Window frames (DWM bounds are always physical pixels) and monitor work areas are
-        // compared in one per-monitor-v2 DPI context. The process itself is system-DPI aware,
-        // whose virtualized coordinates diverge from physical ones on mixed-DPI setups.
+        // Window frames (DWM bounds are always physical pixels) and monitor work areas are both
+        // physical pixels, since the process is per-monitor v2 DPI aware (NexusWpp.csproj).
         internal static bool ShouldSuspend(IntPtr host, out string reason)
         {
-            IntPtr previous = IntPtr.Zero;
-            try { previous = SetThreadDpiAwarenessContext(PerMonitorAwareV2); }
-            catch (EntryPointNotFoundException) { }
-            try
-            {
-                List<Rectangle> monitors = GetMonitorWorkAreas();
-                if (monitors.Count == 0) monitors = Screen.AllScreens.Select(s => s.WorkingArea).ToList();
-                return ShouldSuspend(host, monitors, out reason);
-            }
-            finally
-            {
-                if (previous != IntPtr.Zero) SetThreadDpiAwarenessContext(previous);
-            }
+            List<Rectangle> monitors = GetMonitorWorkAreas();
+            if (monitors.Count == 0) monitors = Screen.AllScreens.Select(s => s.WorkingArea).ToList();
+            return ShouldSuspend(host, monitors, out reason);
         }
 
         private static bool ShouldSuspend(IntPtr host, List<Rectangle> monitors, out string reason)

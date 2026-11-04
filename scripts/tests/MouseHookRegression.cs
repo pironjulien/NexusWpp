@@ -24,6 +24,10 @@ internal static class MouseHookRegression
     static extern IntPtr CreateWindowEx(int exStyle, string className, string name, int style, int x, int y, int width, int height, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr param);
     [DllImport("user32.dll")]
     static extern bool DestroyWindow(IntPtr window);
+    [DllImport("user32.dll")]
+    static extern IntPtr GetThreadDpiAwarenessContext();
+    [DllImport("user32.dll")]
+    static extern bool AreDpiAwarenessContextsEqual(IntPtr a, IntPtr b);
 
     sealed class Receiver : NativeWindow, IDisposable
     {
@@ -85,7 +89,14 @@ internal static class MouseHookRegression
     {
         try
         {
-            host = Assembly.LoadFrom(args[0]).GetType("DesktopHtmlHost.DesktopForm", true);
+            Assembly hostAssembly = Assembly.LoadFrom(args[0]);
+            host = hostAssembly.GetType("DesktopHtmlHost.DesktopForm", true);
+            // The host's own startup configuration, before any window: hook points, window rectangles
+            // and Chromium client coordinates are then all physical pixels, as in the running wallpaper.
+            Type configuration = Array.Find(hostAssembly.GetTypes(), t => t.Name == "ApplicationConfiguration");
+            Check(configuration != null, "host has a startup configuration");
+            if (configuration != null) configuration.GetMethod("Initialize", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, null);
+            Check(AreDpiAwarenessContextsEqual(GetThreadDpiAwarenessContext(), new IntPtr(-4)), "host starts per-monitor v2 DPI aware");
             // These paths must not dereference a pointer or access a UI control.
             Check((IntPtr)Invoke("HookCallback", -1, (IntPtr)0x201, IntPtr.Zero) == IntPtr.Zero, "negative hook code passes through");
             Check((IntPtr)Invoke("HookCallback", 0, (IntPtr)0x200, IntPtr.Zero) == IntPtr.Zero, "motion passes through without reading event data");

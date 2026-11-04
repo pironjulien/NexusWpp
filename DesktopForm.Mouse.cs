@@ -206,36 +206,15 @@ namespace DesktopHtmlHost
             return PostMessage(renderWin, msg, wParam, lParam);
         }
 
+        [DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+        // Scale of the wallpaper window itself (per-monitor v2): the DPI Windows applies to it below
+        // WorkerW, which is also the scale WebView2 rasterizes at. Used only when the page sends no ratio.
         private double GetDpiScale()
         {
-            try
-            {
-                using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Control Panel\Desktop\WindowMetrics"))
-                {
-                    if (key != null)
-                    {
-                        object val = key.GetValue("AppliedDPI");
-                        if (val != null)
-                        {
-                            int dpi = Convert.ToInt32(val);
-                            return dpi / 96.0;
-                        }
-                    }
-                }
-            }
-            catch { }
-
-            try
-            {
-                using (var g = this.CreateGraphics())
-                {
-                    return g.DpiX / 96.0;
-                }
-            }
-            catch
-            {
-                return 1.0;
-            }
+            uint dpi = IsHandleCreated ? GetDpiForWindow(Handle) : 0;
+            return (dpi > 0 ? dpi : DeviceDpi) / 96.0;
         }
     }
 }

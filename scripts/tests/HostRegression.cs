@@ -18,9 +18,6 @@ static class HostRegression
     [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr window, int index);
     [DllImport("user32.dll")] static extern int SetWindowLong(IntPtr window, int index, int value);
     [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
-    [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
-    [DllImport("user32.dll")] static extern IntPtr GetThreadDpiAwarenessContext();
-    [DllImport("user32.dll")] static extern bool AreDpiAwarenessContextsEqual(IntPtr a, IntPtr b);
 
     [StructLayout(LayoutKind.Sequential)]
     struct NativeRect { public int Left, Top, Right, Bottom; }
@@ -147,10 +144,8 @@ static class HostRegression
     static void Visibility()
     {
         Check(DesktopVisibility.GetMonitorWorkAreas().Count == Screen.AllScreens.Length, "every monitor work area enumerated");
-        IntPtr before = GetThreadDpiAwarenessContext();
         string reason;
         DesktopVisibility.ShouldSuspend(IntPtr.Zero, out reason);
-        Check(AreDpiAwarenessContextsEqual(before, GetThreadDpiAwarenessContext()), "coverage check restores the thread DPI context");
         Check(!string.IsNullOrEmpty(reason), "coverage check reports a reason");
     }
 
@@ -223,7 +218,8 @@ static class HostRegression
         string output = args.Length > 0 ? args[0] : Path.GetTempPath();
         Directory.CreateDirectory(output);
         Program.LogPathOverride = Path.Combine(output, "host-regression.log");
-        SetProcessDPIAware();
+        // Same DPI mode as the host (NexusWpp.csproj, ApplicationConfiguration.Initialize).
+        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         try
         {
