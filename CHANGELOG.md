@@ -2,6 +2,10 @@
 
 ## Non publié
 
+### Releases
+
+- `SHA256SUMS.txt` est écrit avec des fins de ligne LF : `sha256sum -c SHA256SUMS.txt` le lit tel quel (celui de 1.0.53.0, en CRLF, demande `tr -d '\r'`).
+
 ### Télémétrie moins coûteuse
 
 - Les capteurs NVIDIA (charge, température, fréquences, consommation, VRAM) sont lus par NVML, la bibliothèque du pilote NVIDIA (`nvml.dll` de System32, via `LibraryImport`), au lieu de lancer `nvidia-smi.exe` toutes les 5 s. Mêmes champs, même rythme (5 s sur secteur, 15 s sur batterie, recul jusqu'à 60 s après échec, aucune lecture d'un GPU en veille) ; sans NVML, les capteurs WDDM prennent le relais comme avant. La source affichée devient `nvml`.
