@@ -51,6 +51,19 @@ sealed class StoreScreenshots : Form
         Shown += Run;
     }
 
+    // Off-screen and never activated: the run must not take the keyboard focus or the
+    // foreground from whoever is using the PC.
+    protected override bool ShowWithoutActivation { get { return true; } }
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            CreateParams cp = base.CreateParams;
+            cp.ExStyle |= 0x08000000; // WS_EX_NOACTIVATE
+            return cp;
+        }
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing) collector.Dispose();

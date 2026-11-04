@@ -22,7 +22,8 @@ static class StoreSettingsShot
         Thread.CurrentThread.CurrentUICulture = new CultureInfo(args.Length > 3 && args[3] == "en" ? "en-US" : "fr-FR");
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2); // same DPI mode as the host
         Application.EnableVisualStyles();
-        using (var form = new SettingsForm(defaultLogo, () => { }, () => { }))
+        // Shown on top for the capture, but never activated: the keyboard stays with the user.
+        using (var form = new SettingsForm(defaultLogo, () => { }, () => { }) { ShowInactive = true })
         {
             form.TopMost = true;
             form.StartPosition = FormStartPosition.CenterScreen;
