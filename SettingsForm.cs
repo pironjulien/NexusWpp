@@ -65,7 +65,7 @@ namespace DesktopHtmlHost
             var section = new Label { Text = L("LOGO CENTRAL", "CENTER LOGO"), Font = new Font("Bahnschrift", 10F, FontStyle.Bold), ForeColor = Accent, AutoSize = true, Margin = new Padding(2, 22, 0, 0) };
 
             // First launch only: the wallpaper sits behind the desktop icons, so explain where it is.
-            Label welcomeLabel = null;
+            Label? welcomeLabel = null;
             if (welcome)
             {
                 welcomeLabel = new Label { Name = "welcome", BackColor = Panel, ForeColor = Ink, AutoSize = true, Dock = DockStyle.Fill,
@@ -108,8 +108,8 @@ namespace DesktopHtmlHost
             startupButton.FlatAppearance.BorderColor = Line;
             startupButton.Click += delegate { OpenUri("ms-settings:startupapps"); };
             // Store build: the package startup task waits for every other startup app.
-            CheckBox priorityBox = null;
-            Label priorityNote = null;
+            CheckBox? priorityBox = null;
+            Label? priorityNote = null;
             if (PriorityStartup.Available)
             {
                 priorityBox = new CheckBox { Name = "priorityStartup", ForeColor = Ink, AutoSize = true, Margin = new Padding(2, 12, 0, 0),
@@ -176,11 +176,11 @@ namespace DesktopHtmlHost
         const int LogoColumnWidth = 384, AppColumnWidth = 320, ColumnGap = 32;
         const float ContentWidth = LogoColumnWidth + ColumnGap + AppColumnWidth;
 
-        static TableLayoutPanel Column(int width, Padding margin, params Control[] controls)
+        static TableLayoutPanel Column(int width, Padding margin, params Control?[] controls)
         {
             var column = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = margin, BackColor = Back, Anchor = AnchorStyles.Top | AnchorStyles.Left };
             column.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, width));
-            foreach (Control control in controls)
+            foreach (Control? control in controls)
             {
                 if (control == null) continue;
                 column.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -205,9 +205,9 @@ namespace DesktopHtmlHost
             }
         }
 
-        async void TogglePriorityStartup(object sender, EventArgs e)
+        async void TogglePriorityStartup(object? sender, EventArgs e)
         {
-            var box = (CheckBox)sender;
+            if (sender is not CheckBox box) return;
             bool wanted = box.Checked;
             box.Enabled = false;
             try
@@ -237,7 +237,7 @@ namespace DesktopHtmlHost
             box.Enabled = true;
         }
 
-        void OpenLogsFolder(object sender, EventArgs e)
+        void OpenLogsFolder(object? sender, EventArgs e)
         {
             string folder = Program.GetLogsFolderForShell();
             try
@@ -285,7 +285,7 @@ namespace DesktopHtmlHost
             resetButton.ForeColor = custom ? Ink : Muted;
         }
 
-        async void ChooseImage(object sender, EventArgs e)
+        async void ChooseImage(object? sender, EventArgs e)
         {
             string fileName;
             using (var dialog = new OpenFileDialog())
@@ -300,7 +300,7 @@ namespace DesktopHtmlHost
             chooseButton.Enabled = false;
             resetButton.Enabled = false;
             SetStatus(L("Import de l'image…", "Importing the image…"), Muted);
-            Exception failure = null;
+            Exception? failure = null;
             try { await System.Threading.Tasks.Task.Run(() => UserSettings.ImportLogo(fileName)); }
             catch (Exception ex) { failure = ex; }
             if (IsDisposed) return;
@@ -320,7 +320,7 @@ namespace DesktopHtmlHost
             }
         }
 
-        void ResetLogo(object sender, EventArgs e)
+        void ResetLogo(object? sender, EventArgs e)
         {
             try
             {
@@ -344,7 +344,7 @@ namespace DesktopHtmlHost
         // Circular preview matching the radar's clipped center logo.
         sealed class LogoPreview : Control
         {
-            Image image;
+            Image? image;
 
             public LogoPreview()
             {
@@ -355,7 +355,7 @@ namespace DesktopHtmlHost
                 BackColor = Back;
             }
 
-            public void SetImage(string path)
+            public void SetImage(string? path)
             {
                 if (image != null) { image.Dispose(); image = null; }
                 if (path != null && File.Exists(path))

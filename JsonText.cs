@@ -12,7 +12,7 @@ namespace DesktopHtmlHost
     internal static class JsonText
     {
         static readonly JsonWriterOptions Options = new JsonWriterOptions { Encoder = JavaScriptEncoder.Create(UnicodeRanges.All) };
-        [ThreadStatic] static ArrayBufferWriter<byte> buffer;
+        [ThreadStatic] static ArrayBufferWriter<byte>? buffer;
 
         internal static string Write(Action<Utf8JsonWriter> body)
         {

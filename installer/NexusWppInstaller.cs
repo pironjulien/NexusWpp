@@ -1,6 +1,8 @@
 using System;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Management;
@@ -9,7 +11,6 @@ using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Principal;
-using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
@@ -171,7 +172,7 @@ namespace NexusWppInstaller
             progress.Report(70, "Suppression de l'entree Applications installees...");
             RemoveUninstallEntry();
 
-            string self = Environment.ProcessPath;
+            string self = SelfPath;
             string installFullPath = Path.GetFullPath(InstallDir);
             string selfFullPath = Path.GetFullPath(self);
             progress.Report(84, "Suppression des fichiers...");
@@ -196,6 +197,12 @@ namespace NexusWppInstaller
             }
 
             progress.Report(100, "Desinstallation terminee.");
+        }
+
+        // Path of this installer (Environment.ProcessPath is null only for a process without an executable file).
+        private static string SelfPath
+        {
+            get { return Environment.ProcessPath ?? throw new InvalidOperationException("The installer path is unknown."); }
         }
 
         private static bool HasArg(string[] args, string value)
@@ -266,7 +273,8 @@ namespace NexusWppInstaller
             var owner = security.GetOwner(typeof(SecurityIdentifier)) as SecurityIdentifier;
             // The administrator running this elevated installer may also own files it created
             // (depends on the "default owner" policy); a standard user cannot plant those.
-            return owner != null && (owner.Equals(AdministratorsSid) || owner.Equals(SystemSid) || owner.Equals(WindowsIdentity.GetCurrent().User));
+            return owner != null && (owner.Equals(AdministratorsSid) || owner.Equals(SystemSid) ||
+                (WindowsIdentity.GetCurrent().User is SecurityIdentifier user && owner.Equals(user)));
         }
 
         // True when every item under the install folder is a real file or folder owned by
@@ -319,7 +327,7 @@ namespace NexusWppInstaller
                 }
                 if (!IsTrustedInstallDir())
                 {
-                    string self = Path.GetFullPath(Environment.ProcessPath);
+                    string self = Path.GetFullPath(SelfPath);
                     if (self.StartsWith(Path.GetFullPath(InstallDir) + "\\", StringComparison.OrdinalIgnoreCase))
                     {
                         throw new InvalidOperationException(InstallDir + " is not owned by administrators. Run the installer from another folder.");
@@ -371,7 +379,7 @@ namespace NexusWppInstaller
                 {
                     foreach (ManagementObject item in searcher.Get())
                     {
-                        string commandLine = Convert.ToString(item["CommandLine"]);
+                        string? commandLine = Convert.ToString(item["CommandLine"], CultureInfo.InvariantCulture);
                         if (commandLine == null) continue;
                         if (commandLine.IndexOf("--webview-exe-name=nexuswpp.exe", StringComparison.OrdinalIgnoreCase) < 0 &&
                             commandLine.IndexOf("\\nexuswpp\\EBWebView", StringComparison.OrdinalIgnoreCase) < 0)
@@ -379,7 +387,7 @@ namespace NexusWppInstaller
                             continue;
                         }
 
-                        int pid = Convert.ToInt32(item["ProcessId"]);
+                        int pid = Convert.ToInt32(item["ProcessId"], CultureInfo.InvariantCulture);
                         try
                         {
                             using (Process process = Process.GetProcessById(pid))
@@ -416,10 +424,10 @@ namespace NexusWppInstaller
         {
             try
             {
-                using (RegistryKey key = root.OpenSubKey(path, false))
+                using (RegistryKey? key = root.OpenSubKey(path, false))
                 {
                     if (key == null) return false;
-                    string version = Convert.ToString(key.GetValue("pv"));
+                    string? version = Convert.ToString(key.GetValue("pv"), CultureInfo.InvariantCulture);
                     return !string.IsNullOrWhiteSpace(version) && version != "0.0.0.0";
                 }
             }
@@ -457,7 +465,7 @@ namespace NexusWppInstaller
                 psi.FileName = bootstrapper;
                 psi.Arguments = "/silent /install";
                 psi.UseShellExecute = false;
-                using (Process process = Process.Start(psi))
+                using (Process process = Process.Start(psi) ?? throw new InvalidOperationException("The WebView2 Runtime installer did not start."))
                 {
                     process.WaitForExit();
                     if (process.ExitCode != 0 && process.ExitCode != 1638)
@@ -482,7 +490,7 @@ namespace NexusWppInstaller
             Log("Extracting payload to " + InstallDir + ".");
 
             Assembly assembly = Assembly.GetExecutingAssembly();
-            using (Stream payload = assembly.GetManifestResourceStream(PayloadResourceName))
+            using (Stream? payload = assembly.GetManifestResourceStream(PayloadResourceName))
             {
                 if (payload == null)
                 {
@@ -507,7 +515,7 @@ namespace NexusWppInstaller
                             continue;
                         }
 
-                        Directory.CreateDirectory(Path.GetDirectoryName(targetPath));
+                        Directory.CreateDirectory(Path.GetDirectoryName(targetPath) ?? throw new InvalidOperationException("Unsafe archive entry: " + entry.FullName));
                         using (Stream input = entry.Open())
                         using (FileStream output = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None))
                         {
@@ -525,7 +533,7 @@ namespace NexusWppInstaller
 
             CleanupStartupEntries();
 
-            using (RegistryKey run = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true))
+            using (RegistryKey? run = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true))
             {
                 if (run == null) throw new InvalidOperationException("Unable to open HKLM Run key.");
                 run.SetValue("NexusWpp", command, RegistryValueKind.String);
@@ -538,7 +546,7 @@ namespace NexusWppInstaller
         {
             try
             {
-                using (RegistryKey run = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true))
+                using (RegistryKey? run = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true))
                 {
                     if (run != null) run.DeleteValue("NexusWpp", false);
                 }
@@ -553,7 +561,7 @@ namespace NexusWppInstaller
 
             try
             {
-                using (RegistryKey run = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true))
+                using (RegistryKey? run = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true))
                 {
                     if (run != null) run.DeleteValue("NexusWpp", false);
                 }
@@ -570,9 +578,9 @@ namespace NexusWppInstaller
                 psi.Arguments = "/Delete /TN NexusWpp /F";
                 psi.UseShellExecute = false;
                 psi.CreateNoWindow = true;
-                using (Process process = Process.Start(psi))
+                using (Process? process = Process.Start(psi))
                 {
-                    process.WaitForExit(10000);
+                    process?.WaitForExit(10000);
                 }
             }
             catch (Exception ex)
@@ -598,7 +606,7 @@ namespace NexusWppInstaller
         private static void RegisterStartMenuShortcut()
         {
             string shortcutPath = GetCommonStartMenuShortcutPath();
-            string shortcutDir = Path.GetDirectoryName(shortcutPath);
+            string? shortcutDir = Path.GetDirectoryName(shortcutPath);
             if (!string.IsNullOrEmpty(shortcutDir)) Directory.CreateDirectory(shortcutDir);
 
             CreateShellShortcut(
@@ -638,21 +646,22 @@ namespace NexusWppInstaller
 
         private static void CreateShellShortcut(string shortcutPath, string targetPath, string workingDirectory, string iconPath, string description)
         {
-            Type shellType = Type.GetTypeFromProgID("WScript.Shell");
+            Type? shellType = Type.GetTypeFromProgID("WScript.Shell");
             if (shellType == null) throw new InvalidOperationException("WScript.Shell is unavailable.");
 
-            object shell = null;
-            object shortcut = null;
+            object? shell = null;
+            object? shortcut = null;
             try
             {
                 shell = Activator.CreateInstance(shellType);
-                shortcut = shellType.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { shortcutPath });
+                shortcut = shellType.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { shortcutPath }, CultureInfo.InvariantCulture)
+                    ?? throw new InvalidOperationException("WScript.Shell did not create the shortcut.");
                 Type shortcutType = shortcut.GetType();
-                shortcutType.InvokeMember("TargetPath", BindingFlags.SetProperty, null, shortcut, new object[] { targetPath });
-                shortcutType.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, shortcut, new object[] { workingDirectory });
-                shortcutType.InvokeMember("IconLocation", BindingFlags.SetProperty, null, shortcut, new object[] { iconPath });
-                shortcutType.InvokeMember("Description", BindingFlags.SetProperty, null, shortcut, new object[] { description });
-                shortcutType.InvokeMember("Save", BindingFlags.InvokeMethod, null, shortcut, null);
+                shortcutType.InvokeMember("TargetPath", BindingFlags.SetProperty, null, shortcut, new object[] { targetPath }, CultureInfo.InvariantCulture);
+                shortcutType.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, shortcut, new object[] { workingDirectory }, CultureInfo.InvariantCulture);
+                shortcutType.InvokeMember("IconLocation", BindingFlags.SetProperty, null, shortcut, new object[] { iconPath }, CultureInfo.InvariantCulture);
+                shortcutType.InvokeMember("Description", BindingFlags.SetProperty, null, shortcut, new object[] { description }, CultureInfo.InvariantCulture);
+                shortcutType.InvokeMember("Save", BindingFlags.InvokeMethod, null, shortcut, null, CultureInfo.InvariantCulture);
             }
             finally
             {
@@ -723,7 +732,7 @@ namespace NexusWppInstaller
 
         private static void PersistInstallerForUninstall()
         {
-            string source = Environment.ProcessPath;
+            string source = SelfPath;
             string destination = Path.Combine(InstallDir, "NexusWppSetup.exe");
             if (!string.Equals(Path.GetFullPath(source), Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase))
             {
@@ -769,13 +778,13 @@ namespace NexusWppInstaller
             try
             {
                 const int SPI_GETDESKWALLPAPER = 0x0073, SPI_SETDESKWALLPAPER = 0x0014;
-                string wallpaper = null;
-                string sid = GetInteractiveUserSid();
+                string? wallpaper = null;
+                string? sid = GetInteractiveUserSid();
                 if (sid != null)
                 {
-                    using (RegistryKey desktop = Registry.Users.OpenSubKey(sid + @"\Control Panel\Desktop", false))
+                    using (RegistryKey? desktop = Registry.Users.OpenSubKey(sid + @"\Control Panel\Desktop", false))
                     {
-                        if (desktop != null) wallpaper = Convert.ToString(desktop.GetValue("Wallpaper"));
+                        if (desktop != null) wallpaper = Convert.ToString(desktop.GetValue("Wallpaper"), CultureInfo.InvariantCulture);
                     }
                 }
                 if (wallpaper == null)
@@ -813,18 +822,18 @@ namespace NexusWppInstaller
         }
 
         // Owner of the Explorer shell in this session: the person signed in at this desktop.
-        private static string GetInteractiveUserSid()
+        private static string? GetInteractiveUserSid()
         {
             try
             {
                 int session = Process.GetCurrentProcess().SessionId;
                 using (ManagementObjectSearcher searcher = new ManagementObjectSearcher(
-                    "SELECT Handle, SessionId FROM Win32_Process WHERE Name = 'explorer.exe' AND SessionId = " + session.ToString(System.Globalization.CultureInfo.InvariantCulture)))
+                    "SELECT Handle, SessionId FROM Win32_Process WHERE Name = 'explorer.exe' AND SessionId = " + session.ToString(CultureInfo.InvariantCulture)))
                 {
                     foreach (ManagementObject item in searcher.Get())
                     {
-                        ManagementBaseObject result = item.InvokeMethod("GetOwnerSid", null, null);
-                        string sid = result != null ? Convert.ToString(result["Sid"]) : null;
+                        ManagementBaseObject? result = item.InvokeMethod("GetOwnerSid", null, null);
+                        string? sid = result != null ? Convert.ToString(result["Sid"], CultureInfo.InvariantCulture) : null;
                         if (!string.IsNullOrEmpty(sid)) return sid;
                     }
                 }
@@ -845,7 +854,7 @@ namespace NexusWppInstaller
         internal static bool IsSignedByMicrosoft(string path, out string signer)
         {
             signer = "unsigned";
-            X509Certificate2 verified;
+            X509Certificate2? verified;
             if (!WinTrust.Verify(path, out verified)) return false;
             try
             {
@@ -854,7 +863,7 @@ namespace NexusWppInstaller
                     signer = certificate.Subject;
                     string commonName = certificate.GetNameInfo(X509NameType.SimpleName, false);
                     return string.Equals(commonName, "Microsoft Corporation", StringComparison.Ordinal) &&
-                        certificate.Subject.IndexOf("O=Microsoft Corporation", StringComparison.Ordinal) >= 0;
+                        certificate.Subject.Contains("O=Microsoft Corporation", StringComparison.Ordinal);
                 }
             }
             catch (Exception ex)
@@ -948,7 +957,7 @@ namespace NexusWppInstaller
 
         // The signer certificate is read from the verification that just succeeded, so the name
         // checked afterwards belongs to the very signature WinVerifyTrust accepted.
-        internal static unsafe bool Verify(string path, out X509Certificate2 signer)
+        internal static unsafe bool Verify(string path, [NotNullWhen(true)] out X509Certificate2? signer)
         {
             signer = null;
             const uint WTD_UI_NONE = 2, WTD_REVOKE_NONE = 0, WTD_CHOICE_FILE = 1, WTD_STATEACTION_VERIFY = 1, WTD_STATEACTION_CLOSE = 2;
@@ -1001,7 +1010,7 @@ namespace NexusWppInstaller
             void OnNavigate();
             void OnActivated();
             [return: MarshalAs(UnmanagedType.IDispatch)]
-            object FindWindowSW([MarshalAs(UnmanagedType.Struct)] ref object pvarLoc, [MarshalAs(UnmanagedType.Struct)] ref object pvarLocRoot,
+            object? FindWindowSW([MarshalAs(UnmanagedType.Struct)] ref object pvarLoc, [MarshalAs(UnmanagedType.Struct)] ref object? pvarLocRoot,
                 int swClass, out int phwnd, int swfwOptions);
         }
 
@@ -1051,7 +1060,7 @@ namespace NexusWppInstaller
 
         internal static void Execute(string file, string arguments, string directory, int show)
         {
-            Exception failure = null;
+            Exception? failure = null;
             // Shell COM objects expect a single-threaded apartment; bound the wait if Explorer hangs.
             var thread = new Thread(() =>
             {
@@ -1067,19 +1076,19 @@ namespace NexusWppInstaller
 
         private static void ExecuteOnSta(string file, string arguments, string directory, int show)
         {
-            Type shellWindowsType = Type.GetTypeFromCLSID(new Guid("9BA05972-F6A8-11CF-A442-00A0C90A8F39"), true);
-            var shellWindows = (IShellWindows)Activator.CreateInstance(shellWindowsType);
+            Type shellWindowsType = Type.GetTypeFromCLSID(new Guid("9BA05972-F6A8-11CF-A442-00A0C90A8F39"), true) ?? throw new InvalidOperationException("ShellWindows is not registered.");
+            var shellWindows = (IShellWindows)(Activator.CreateInstance(shellWindowsType) ?? throw new InvalidOperationException("ShellWindows could not be created."));
             object location = 0; // CSIDL_DESKTOP
-            object root = null;
-            int hwnd;
-            object desktop = shellWindows.FindWindowSW(ref location, ref root, SWC_DESKTOP, out hwnd, SWFO_NEEDDISPATCH);
+            object? root = null;
+            object? desktop = shellWindows.FindWindowSW(ref location, ref root, SWC_DESKTOP, out _, SWFO_NEEDDISPATCH);
             if (desktop == null) throw new InvalidOperationException("No desktop shell window.");
             var browser = (IShellBrowser)((IServiceProvider)desktop).QueryService(SID_STopLevelBrowser, typeof(IShellBrowser).GUID);
             IShellView view = browser.QueryActiveShellView();
             object folderView = view.GetItemObject(SVGIO_BACKGROUND, new Guid("00020400-0000-0000-C000-000000000046")); // IDispatch
-            object application = folderView.GetType().InvokeMember("Application", BindingFlags.GetProperty, null, folderView, null);
+            object application = folderView.GetType().InvokeMember("Application", BindingFlags.GetProperty, null, folderView, null, CultureInfo.InvariantCulture)
+                ?? throw new InvalidOperationException("The desktop folder view has no Shell application.");
             application.GetType().InvokeMember("ShellExecute", BindingFlags.InvokeMethod, null, application,
-                new object[] { file, arguments, directory, "open", show });
+                new object[] { file, arguments, directory, "open", show }, CultureInfo.InvariantCulture);
         }
     }
 
@@ -1203,7 +1212,7 @@ namespace NexusWppInstaller
 
             int safePercent = Math.Max(0, Math.Min(100, percent));
             statusLabel.Text = message;
-            percentLabel.Text = safePercent.ToString() + " %";
+            percentLabel.Text = safePercent.ToString(CultureInfo.InvariantCulture) + " %";
             progressFill.Width = (int)Math.Round(progressTrack.Width * (safePercent / 100.0));
             progressFill.Refresh();
         }

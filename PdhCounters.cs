@@ -31,7 +31,7 @@ namespace DesktopHtmlHost
         }
 
         [LibraryImport("pdh.dll", EntryPoint = "PdhOpenQueryW", StringMarshalling = StringMarshalling.Utf16)]
-        private static partial uint PdhOpenQuery(string dataSource, IntPtr userData, out IntPtr query);
+        private static partial uint PdhOpenQuery(string? dataSource, IntPtr userData, out IntPtr query);
         [LibraryImport("pdh.dll", EntryPoint = "PdhAddEnglishCounterW", StringMarshalling = StringMarshalling.Utf16)]
         private static partial uint PdhAddEnglishCounter(IntPtr query, string path, IntPtr userData, out IntPtr counter);
         [LibraryImport("pdh.dll")]
@@ -83,7 +83,7 @@ namespace DesktopHtmlHost
 
         // Every instance of a wildcard counter, e.g. "\GPU Engine(*)\Utilization Percentage".
         // Instances that appear or disappear between samples are handled by PDH.
-        public unsafe List<KeyValuePair<string, double>> Instances(string englishPath)
+        public unsafe List<KeyValuePair<string, double>>? Instances(string englishPath)
         {
             var result = new List<KeyValuePair<string, double>>();
             IntPtr counter;
@@ -101,7 +101,7 @@ namespace DesktopHtmlHost
                     PDH_FMT_COUNTERVALUE_ITEM item = items[i];
                     if (item.CStatus != PDH_CSTATUS_VALID_DATA && item.CStatus != PDH_CSTATUS_NEW_DATA) continue;
                     if (double.IsNaN(item.DoubleValue) || double.IsInfinity(item.DoubleValue)) continue;
-                    result.Add(new KeyValuePair<string, double>(Marshal.PtrToStringUni(item.Name), item.DoubleValue));
+                    result.Add(new KeyValuePair<string, double>(Marshal.PtrToStringUni(item.Name) ?? "", item.DoubleValue));
                 }
             }
             finally
@@ -113,7 +113,7 @@ namespace DesktopHtmlHost
 
         public void Dispose()
         {
-            if (query != IntPtr.Zero) { PdhCloseQuery(query); query = IntPtr.Zero; }
+            if (query != IntPtr.Zero) { _ = PdhCloseQuery(query); query = IntPtr.Zero; }
             counters.Clear();
         }
     }

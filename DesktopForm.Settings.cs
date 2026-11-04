@@ -1,16 +1,6 @@
 ﻿using System;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using System.IO;
-using System.Diagnostics;
-using Microsoft.Win32;
-using Microsoft.Web.WebView2.WinForms;
-using Microsoft.Web.WebView2.Core;
-using System.Management;
-using System.Net.NetworkInformation;
-using System.Text;
-using System.Collections.Generic;
-using System.Linq;
 using System.Globalization;
 using System.Threading;
 
@@ -74,7 +64,7 @@ namespace DesktopHtmlHost
                 settingsForm.Activate();
                 return;
             }
-            string directory = Path.GetDirectoryName(htmlPath);
+            string? directory = Path.GetDirectoryName(htmlPath);
             if (string.IsNullOrEmpty(directory)) directory = AppDomain.CurrentDomain.BaseDirectory;
             settingsForm = new SettingsForm(Path.Combine(directory, "julienpiron.png"), PostSettings, QuitFromUser, welcome);
             settingsForm.FormClosed += delegate { settingsForm = null; };

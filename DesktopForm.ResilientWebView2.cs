@@ -1,18 +1,7 @@
 ﻿using System;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
-using System.IO;
-using System.Diagnostics;
-using Microsoft.Win32;
 using Microsoft.Web.WebView2.WinForms;
-using Microsoft.Web.WebView2.Core;
-using System.Management;
-using System.Net.NetworkInformation;
-using System.Text;
-using System.Collections.Generic;
-using System.Linq;
 using System.Globalization;
-using System.Threading;
 
 namespace DesktopHtmlHost
 {
@@ -21,11 +10,11 @@ namespace DesktopHtmlHost
     {
         private sealed class ResilientWebView2 : WebView2
         {
-            private bool shutdownStarted = false;
+            private bool shutdownStarted;
 
             // Raised (on the UI thread) when a lifecycle exception is suppressed outside a shutdown:
             // the CoreWebView2 behind this control is gone and the page is no longer updated.
-            internal event EventHandler LifecycleFault;
+            internal event EventHandler? LifecycleFault;
 
             internal void BeginShutdown()
             {
@@ -122,22 +111,22 @@ namespace DesktopHtmlHost
 
             internal static bool IsDisposedLifecycleException(Exception ex)
             {
-                InvalidOperationException invalid = ex as InvalidOperationException;
+                InvalidOperationException? invalid = ex as InvalidOperationException;
                 if (invalid == null || string.IsNullOrEmpty(invalid.Message))
                 {
                     return false;
                 }
 
-                return invalid.Message.IndexOf(
+                return invalid.Message.Contains(
                     "CoreWebView2 members cannot be accessed after the WebView2 control is disposed",
-                    StringComparison.OrdinalIgnoreCase) >= 0;
+                    StringComparison.OrdinalIgnoreCase);
             }
 
             private void LogSuppressedLifecycleException(string context, Exception ex)
             {
                 Program.LogDebug("Suppressed WebView2 " + context + " after disposal: " + ex.Message);
                 if (shutdownStarted) return;
-                EventHandler handler = LifecycleFault;
+                EventHandler? handler = LifecycleFault;
                 if (handler != null) handler(this, EventArgs.Empty);
             }
         }

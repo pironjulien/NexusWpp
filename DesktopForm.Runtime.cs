@@ -1,16 +1,6 @@
 ﻿using System;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
-using System.IO;
-using System.Diagnostics;
-using Microsoft.Win32;
 using Microsoft.Web.WebView2.WinForms;
-using Microsoft.Web.WebView2.Core;
-using System.Management;
-using System.Net.NetworkInformation;
-using System.Text;
-using System.Collections.Generic;
-using System.Linq;
 using System.Globalization;
 using System.Threading;
 
@@ -58,7 +48,7 @@ namespace DesktopHtmlHost
                 windowChangeTimer.Tick += delegate
                 {
                     windowChangeTimer.Stop();
-                    FullscreenTimer_Tick(null, null);
+                    FullscreenTimer_Tick(null, EventArgs.Empty);
                 };
             }
             windowWatcher = new WindowChangeWatcher(delegate
@@ -83,8 +73,8 @@ namespace DesktopHtmlHost
         private const int RecoveryStreakWindowMs = 60000;
         private int recoveryStreak;
         private int lastRecoveryTick;
-        private System.Windows.Forms.Timer recoveryDelayTimer;
-        private string delayedRecoveryReason;
+        private System.Windows.Forms.Timer? recoveryDelayTimer;
+        private string delayedRecoveryReason = "";
 
         // First recovery is immediate; a streak backs off 1 s, 2 s, 4 s ... up to 60 s.
         internal static int RecoveryDelayMs(int streak)
@@ -157,7 +147,7 @@ namespace DesktopHtmlHost
 
             if (telemetryTimer != null) telemetryTimer.Stop();
 
-            WebView2 oldWebView = webView;
+            WebView2? oldWebView = webView;
             webView = null;
             webViewInitialized = false;
 
@@ -166,7 +156,7 @@ namespace DesktopHtmlHost
                 try
                 {
                     oldWebView.Disposed -= WebView_Disposed;
-                    ResilientWebView2 faulted = oldWebView as ResilientWebView2;
+                    ResilientWebView2? faulted = oldWebView as ResilientWebView2;
                     if (faulted != null) faulted.LifecycleFault -= WebView_LifecycleFault;
                     Controls.Remove(oldWebView);
                 }
@@ -180,7 +170,7 @@ namespace DesktopHtmlHost
 
                 try
                 {
-                    ResilientWebView2 resilientWebView = oldWebView as ResilientWebView2;
+                    ResilientWebView2? resilientWebView = oldWebView as ResilientWebView2;
                     if (resilientWebView != null)
                     {
                         resilientWebView.BeginShutdown();
@@ -205,13 +195,13 @@ namespace DesktopHtmlHost
             RestartDesktopSearch("WebView2 recovery");
         }
 
-        private void FullscreenTimer_Tick(object sender, EventArgs e)
+        private void FullscreenTimer_Tick(object? sender, EventArgs e)
         {
             // Never touch Handle without one: that would create a new top-level window.
             if (isClosing || IsDisposed || !IsHandleCreated) return;
             try
             {
-                Exception hookError = Interlocked.Exchange(ref mouseHookError, null);
+                Exception? hookError = Interlocked.Exchange(ref mouseHookError, null);
                 if (hookError != null) Program.LogDebug("Mouse hook error: " + hookError);
                 // Explorer restarted or replaced WorkerW without destroying our window.
                 if (desktopAttached && (!IsWindow(currentDesktopParent) || GetParent(Handle) != currentDesktopParent))
@@ -279,7 +269,7 @@ namespace DesktopHtmlHost
             }
             if (!runtimeSuspended)
             {
-                try { TelemetryTimer_Tick(null, null); }
+                try { TelemetryTimer_Tick(null, EventArgs.Empty); }
                 catch (Exception ex) { Program.LogDebug("Telemetry after resume error: " + ex.Message); }
             }
         }

@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Windows.Forms;
 
 namespace DesktopHtmlHost
@@ -113,7 +112,7 @@ namespace DesktopHtmlHost
             int length = GetClassName(hwnd, name, 256);
             return length > 0 ? new string(name, 0, length) : "";
         }
-        private static readonly uint OwnProcessId = (uint)Process.GetCurrentProcess().Id;
+        private static readonly uint OwnProcessId = (uint)Environment.ProcessId;
         private static readonly Dictionary<uint, string> ProcessNames = new Dictionary<uint, string>();
         private static readonly HashSet<string> NonOpaqueShellProcesses = new HashSet<string>
         {
@@ -124,14 +123,14 @@ namespace DesktopHtmlHost
         // which bounds the effect of a recycled PID inheriting another classification.
         private static int processNamesResetAt = Environment.TickCount;
 
-        private static string GetProcessName(uint processId)
+        private static string? GetProcessName(uint processId)
         {
             if (unchecked(Environment.TickCount - processNamesResetAt) > 10000)
             {
                 ProcessNames.Clear();
                 processNamesResetAt = Environment.TickCount;
             }
-            string name;
+            string? name;
             if (ProcessNames.TryGetValue(processId, out name)) return name;
             try
             {
@@ -178,7 +177,7 @@ namespace DesktopHtmlHost
         private static bool ShouldSuspend(IntPtr host, List<Rectangle> monitors, out string reason)
         {
             var coverage = new DesktopCoverage(monitors);
-            string foundReason = null;
+            string? foundReason = null;
             var coverers = new List<string>();
             EnumWindows(delegate(IntPtr hwnd, IntPtr unused)
             {
@@ -208,7 +207,7 @@ namespace DesktopHtmlHost
 
                 // Shell/input surfaces can span the screen without opaque pixels.
                 // Keep Explorer file windows eligible; desktop windows are excluded by class.
-                string name = GetProcessName(processId);
+                string? name = GetProcessName(processId);
                 if (name == null || NonOpaqueShellProcesses.Contains(name)) return true;
                 // A fullscreen window on one monitor must not pause a visible second monitor.
                 coverage.Cover(window);

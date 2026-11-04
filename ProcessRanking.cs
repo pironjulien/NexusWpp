@@ -33,7 +33,7 @@ namespace DesktopHtmlHost
         // Ranks every process: the four busiest by CPU (share of all logical processors) and the
         // largest private working set. pidNames receives pid -> name when the instances carry a pid.
         internal static void Rank(List<KeyValuePair<string, double>> cpuRows, List<KeyValuePair<string, double>> ramRows, int cpuCount,
-            out ProcessUsage[] top, out ProcessUsage topRam, Dictionary<int, string> pidNames)
+            out ProcessUsage[] top, out ProcessUsage? topRam, Dictionary<int, string>? pidNames)
         {
             cpuCount = Math.Max(1, cpuCount);
             // Same instance key and the same occurrence of that key in both arrays.

@@ -9,13 +9,13 @@ namespace DesktopHtmlHost
 {
     // One button of the power panel: a Windows power plan, or a Windows 10/11 power mode overlay
     // (the "Power mode" setting of Modern Standby laptops that ship a single plan).
-    public class PowerPlanInfo
+    internal sealed class PowerPlanInfo
     {
-        public string Guid;
-        public string Name;
-        public bool Active;
-        public string Kind = "balanced"; // eco, balanced or performance: icon and order, never the label
-        public bool Overlay;
+        internal required string Guid;
+        internal required string Name;
+        internal bool Active;
+        internal string Kind = "balanced"; // eco, balanced or performance: icon and order, never the label
+        internal bool Overlay;
     }
 
     // Power plans through powrprof (Unicode names, no child process, no output parsing).
@@ -46,7 +46,7 @@ namespace DesktopHtmlHost
         [LibraryImport("powrprof.dll")]
         private static partial uint PowerSetActiveOverlayScheme(in Guid overlayGuid);
 
-        internal static string KindFromGuid(string guid)
+        internal static string? KindFromGuid(string? guid)
         {
             switch ((guid ?? "").ToLowerInvariant())
             {
@@ -58,7 +58,7 @@ namespace DesktopHtmlHost
         }
 
         // GUID_POWERSCHEME_PERSONALITY: the built-in plan a custom plan was derived from.
-        internal static string KindFromPersonality(uint personality)
+        internal static string? KindFromPersonality(uint personality)
         {
             switch (personality)
             {
@@ -71,7 +71,7 @@ namespace DesktopHtmlHost
 
         // Explicit words of the plan name (accents removed, whole words only, so "Recommended"
         // is not "eco"); null when the name says nothing.
-        internal static string KindFromName(string name)
+        internal static string? KindFromName(string? name)
         {
             string decomposed = (name ?? "").Normalize(NormalizationForm.FormD);
             var plain = new StringBuilder(decomposed.Length);
@@ -80,7 +80,7 @@ namespace DesktopHtmlHost
                 if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark) continue;
                 plain.Append(char.IsLetterOrDigit(c) ? char.ToLowerInvariant(c) : ' ');
             }
-            var words = new HashSet<string>(plain.ToString().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries));
+            var words = new HashSet<string>(plain.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries));
             string[] eco = { "economie", "economies", "eco", "saver", "saving", "silent", "silencieux", "quiet", "battery", "batterie", "efficiency", "efficacite" };
             string[] performance = { "performance", "performances", "performant", "turbo", "extreme", "extremes", "gaming", "jeu", "jeux", "ultimate", "optimales", "max" };
             if (eco.Any(words.Contains)) return "eco";
@@ -101,7 +101,7 @@ namespace DesktopHtmlHost
         }
 
         // Every installed plan, or null when powrprof cannot enumerate them.
-        internal static List<PowerPlanInfo> EnumeratePlans()
+        internal static List<PowerPlanInfo>? EnumeratePlans()
         {
             try
             {
@@ -115,7 +115,7 @@ namespace DesktopHtmlHost
                     // OEM plans often keep the Balanced personality whatever their purpose (MSI
                     // "Performances extremes" here), so an explicit name wins over it.
                     uint personality;
-                    string kind = KindFromGuid(guid) ?? KindFromName(name);
+                    string? kind = KindFromGuid(guid) ?? KindFromName(name);
                     if (kind == null && PowerReadACValueIndex(IntPtr.Zero, scheme, NoSubgroup, Personality, out personality) == 0)
                         kind = KindFromPersonality(personality);
                     plans.Add(new PowerPlanInfo { Guid = guid, Name = string.IsNullOrEmpty(name) ? guid : name, Kind = kind ?? "balanced" });
@@ -143,7 +143,7 @@ namespace DesktopHtmlHost
         }
 
         // Undocumented but stable since Windows 10 1709 (Settings uses it); null when missing.
-        internal static string EffectiveOverlay()
+        internal static string? EffectiveOverlay()
         {
             try
             {

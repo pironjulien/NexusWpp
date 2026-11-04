@@ -12,7 +12,12 @@
          Applied by ApplicationConfiguration.Initialize() in Program.cs. -->
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <LangVersion>latest</LangVersion>
-    <!-- LibraryImport (NVML) generates pinning code. -->
+    <Nullable>enable</Nullable>
+    <!-- Recommended .NET analyzers and the build-time code-style rules of .editorconfig, all errors
+         (TreatWarningsAsErrors). -->
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- LibraryImport generates pinning code; native structures are read in place. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <PlatformTarget>x64</PlatformTarget>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -28,7 +33,11 @@
     <GenerateAssemblyInformationalVersionAttribute>false</GenerateAssemblyInformationalVersionAttribute>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
-    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- The compiler's documentation pass lets IDE0005 (unnecessary using) run at build time;
+         the XML file itself is neither copied next to the exe nor published. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <CopyDocumentationFileToOutputDirectory>false</CopyDocumentationFileToOutputDirectory>
+    <PublishDocumentationFile>false</PublishDocumentationFile>
     <DebugType>none</DebugType>
     <Optimize>true</Optimize>
     <Deterministic>true</Deterministic>

@@ -1,18 +1,6 @@
 ﻿using System;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
-using System.IO;
-using System.Diagnostics;
-using Microsoft.Win32;
-using Microsoft.Web.WebView2.WinForms;
-using Microsoft.Web.WebView2.Core;
-using System.Management;
-using System.Net.NetworkInformation;
-using System.Text;
-using System.Collections.Generic;
-using System.Linq;
 using System.Globalization;
-using System.Threading;
 
 namespace DesktopHtmlHost
 {
@@ -67,10 +55,10 @@ namespace DesktopHtmlHost
                 Program.LogDebug("Power result post error: " + ex.Message);
             }
 
-            TelemetryTimer_Tick(null, null);
+            TelemetryTimer_Tick(null, EventArgs.Empty);
         }
 
-        private void TelemetryTimer_Tick(object sender, EventArgs e)
+        private void TelemetryTimer_Tick(object? sender, EventArgs e)
         {
             if (isClosing || IsDisposed) return;
             if (runtimeSuspended) return;
@@ -106,7 +94,7 @@ namespace DesktopHtmlHost
                             {
                                 telemetryCollectPending = false;
                                 if (!runtimeSuspended && generation != telemetryGeneration)
-                                    TelemetryTimer_Tick(null, null);
+                                    TelemetryTimer_Tick(null, EventArgs.Empty);
                             }
                         }))
                         {

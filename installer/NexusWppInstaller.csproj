@@ -9,6 +9,14 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <!-- Same analysis as the host (NexusWpp.csproj): recommended analyzers and the code-style rules
+         of .editorconfig, all errors. The documentation pass only serves IDE0005 and is not shipped. -->
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <CopyDocumentationFileToOutputDirectory>false</CopyDocumentationFileToOutputDirectory>
+    <PublishDocumentationFile>false</PublishDocumentationFile>
     <!-- LibraryImport (wintrust, user32) passes pinned buffers and structures by pointer. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <PlatformTarget>x64</PlatformTarget>

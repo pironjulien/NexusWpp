@@ -1,17 +1,18 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 
 namespace DesktopHtmlHost
 {
-    internal sealed class GpuEngineReading { internal string Name; internal int Utilization; }
+    internal sealed class GpuEngineReading { internal string Name = ""; internal int Utilization; }
     internal sealed class WindowsGpuSample
     {
         internal int Utilization=-1, Decode=-1, Encode=-1;
         internal long SharedBytes=-1, DedicatedBytes=-1;
-        internal int TopPid=-1, TopPct=0; // busiest process on this adapter
+        internal int TopPid=-1, TopPct; // busiest process on this adapter
     }
     internal static class WindowsGpuTelemetry
     {
@@ -35,16 +36,16 @@ namespace DesktopHtmlHost
             foreach(var row in rows) {
                 if(row.Name==null||row.Name.IndexOf(luid,StringComparison.OrdinalIgnoreCase)<0)continue;
                 bool kindMatch=false;
-                foreach(var kind in kinds) if(row.Name.IndexOf("engtype_"+kind,StringComparison.OrdinalIgnoreCase)>=0) kindMatch=true;
+                foreach(var kind in kinds) if(row.Name.Contains("engtype_"+kind,StringComparison.OrdinalIgnoreCase)) kindMatch=true;
                 if(!kindMatch||!row.Name.StartsWith("pid_",StringComparison.OrdinalIgnoreCase))continue;
                 int end=row.Name.IndexOf('_',4);
                 int p;
-                if(end<0||!int.TryParse(row.Name.Substring(4,end-4),out p))continue;
+                if(end<0||!int.TryParse(row.Name.AsSpan(4,end-4),out p))continue;
                 string key=p+"|"+row.Name.Substring(row.Name.IndexOf(luid,StringComparison.OrdinalIgnoreCase));
                 long old;perEngine.TryGetValue(key,out old);perEngine[key]=old+Math.Max(0,row.Utilization);
             }
             foreach(var entry in perEngine) {
-                int p=int.Parse(entry.Key.Substring(0,entry.Key.IndexOf('|')));
+                int p=int.Parse(entry.Key.AsSpan(0,entry.Key.IndexOf('|')),CultureInfo.InvariantCulture);
                 int value=(int)Math.Min(100,entry.Value);
                 if(value>pct){pct=value;pid=p;}
             }
@@ -59,6 +60,7 @@ namespace DesktopHtmlHost
         const string EngineUtilization=@"\GPU Engine(*)\Utilization Percentage";
         const string SharedUsage=@"\GPU Adapter Memory(*)\Shared Usage";
         const string DedicatedUsage=@"\GPU Adapter Memory(*)\Dedicated Usage";
+        static readonly string[] GraphicsKinds={"3D","Compute","VideoDecode","VideoEncode"}, NpuKinds={"Neural","Compute"};
         internal static void AddCounters(PdhQuery perf) {
             perf.Add(EngineUtilization);perf.Add(SharedUsage);perf.Add(DedicatedUsage);
         }
@@ -71,16 +73,15 @@ namespace DesktopHtmlHost
                 foreach(var engine in engines) rows.Add(new GpuEngineReading {Name=engine.Key,Utilization=(int)Math.Round(Math.Max(0,engine.Value))});
                 for(int i=0;i<3;i++) {result[i].Utilization=i==2?BusiestNpuEngine(rows,luids[i]):BusiestEngine(rows,luids[i],"3D");result[i].Decode=BusiestEngine(rows,luids[i],"VideoDecode");result[i].Encode=BusiestEngine(rows,luids[i],"VideoEncode");}
                 // Copy engines are left out: every desktop app (and dwm) uses them at a trickle.
-                var graphicsKinds=new[]{"3D","Compute","VideoDecode","VideoEncode"};
-                TopProcess(rows,luids[0],graphicsKinds,out result[0].TopPid,out result[0].TopPct);
-                TopProcess(rows,luids[1],graphicsKinds,out result[1].TopPid,out result[1].TopPct);
-                TopProcess(rows,luids[2],new[]{"Neural","Compute"},out result[2].TopPid,out result[2].TopPct);
+                TopProcess(rows,luids[0],GraphicsKinds,out result[0].TopPid,out result[0].TopPct);
+                TopProcess(rows,luids[1],GraphicsKinds,out result[1].TopPid,out result[1].TopPct);
+                TopProcess(rows,luids[2],NpuKinds,out result[2].TopPid,out result[2].TopPct);
             }
             var shared=perf.Instances(SharedUsage);var dedicated=perf.Instances(DedicatedUsage);
             for(int i=0;i<3;i++) {
                 if(string.IsNullOrEmpty(luids[i]))continue;
-                if(shared!=null) foreach(var row in shared) if(row.Key.IndexOf(luids[i],StringComparison.OrdinalIgnoreCase)>=0) result[i].SharedBytes=(long)Math.Max(0,row.Value);
-                if(dedicated!=null) foreach(var row in dedicated) if(row.Key.IndexOf(luids[i],StringComparison.OrdinalIgnoreCase)>=0) result[i].DedicatedBytes=(long)Math.Max(0,row.Value);
+                if(shared!=null) foreach(var row in shared) if(row.Key.Contains(luids[i],StringComparison.OrdinalIgnoreCase)) result[i].SharedBytes=(long)Math.Max(0,row.Value);
+                if(dedicated!=null) foreach(var row in dedicated) if(row.Key.Contains(luids[i],StringComparison.OrdinalIgnoreCase)) result[i].DedicatedBytes=(long)Math.Max(0,row.Value);
             }
             return result;
         }
@@ -123,11 +124,11 @@ namespace DesktopHtmlHost
         internal static bool IsIntegratedAmdName(string lowerName)
         {
             return (lowerName.Contains("radeon") || lowerName.Contains("amd")) &&
-                   lowerName.EndsWith("graphics") && !lowerName.Contains(" rx") && !lowerName.Contains(" pro ");
+                   lowerName.EndsWith("graphics", StringComparison.Ordinal) && !lowerName.Contains(" rx") && !lowerName.Contains(" pro ");
         }
 
         // The discrete adapter with the most memory, and the first integrated adapter.
-        internal static void Select(IEnumerable<GpuAdapterInfo> adapters, out GpuAdapterInfo igpu, out GpuAdapterInfo dgpu)
+        internal static void Select(IEnumerable<GpuAdapterInfo> adapters, out GpuAdapterInfo? igpu, out GpuAdapterInfo? dgpu)
         {
             igpu = null; dgpu = null;
             foreach (var adapter in adapters)
@@ -140,7 +141,7 @@ namespace DesktopHtmlHost
 
         internal static string FormatLuid(long luid)
         {
-            return string.Format("0x{0:x8}_0x{1:x8}", (uint)((luid >> 32) & 0xFFFFFFFF), (uint)(luid & 0xFFFFFFFF));
+            return string.Format(CultureInfo.InvariantCulture, "0x{0:x8}_0x{1:x8}", (uint)((luid >> 32) & 0xFFFFFFFF), (uint)(luid & 0xFFFFFFFF));
         }
     }
 
@@ -151,7 +152,7 @@ namespace DesktopHtmlHost
         internal double? TemperatureC, MemoryClockMhz, PowerPercent;
         internal int? FanRpm;
 
-        internal static WddmGpuSample Parse(ulong memoryFrequencyHz, uint fanRpm, uint powerTenthsPercent, uint temperatureDeciC, uint maxFanRpm)
+        internal static WddmGpuSample? Parse(ulong memoryFrequencyHz, uint fanRpm, uint powerTenthsPercent, uint temperatureDeciC, uint maxFanRpm)
         {
             var sample = new WddmGpuSample();
             if (temperatureDeciC > 0 && temperatureDeciC < 1500) sample.TemperatureC = Math.Round(temperatureDeciC / 10.0, 1);
@@ -214,7 +215,7 @@ namespace DesktopHtmlHost
             return true;
         }
 
-        internal static WddmGpuSample Read(long luid)
+        internal static WddmGpuSample? Read(long luid)
         {
             uint handle;
             if (luid == 0 || Open(luid, out handle) != 0) return null;

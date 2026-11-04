@@ -1,15 +1,10 @@
 using System;
+using System.Buffers;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using System.IO;
-using System.Diagnostics;
-using Microsoft.Win32;
-using Microsoft.Web.WebView2.WinForms;
-using Microsoft.Web.WebView2.Core;
 using System.Management;
-using System.Net.NetworkInformation;
 using System.Text;
-using System.Collections.Generic;
 using System.Linq;
 using System.Globalization;
 using System.Threading;
@@ -18,7 +13,7 @@ namespace DesktopHtmlHost
 {
     static partial class Program
     {
-        private static Mutex appMutex;
+        private static Mutex? appMutex;
         private const string AppDataFolderName = "NexusWpp";
         internal const string ShowSettingsEventName = @"Local\NexusWppShowSettings";
         internal static bool QuitRequestedByUser;
@@ -28,7 +23,7 @@ namespace DesktopHtmlHost
         private static unsafe partial bool SystemParametersInfo(int action, int param, char* value, int winIni);
 
         [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)]
-        private static partial int RegisterApplicationRestart(string commandLineArgs, int flags);
+        private static partial int RegisterApplicationRestart(string? commandLineArgs, int flags);
 
         [LibraryImport("kernel32.dll")]
         private static unsafe partial int GetCurrentPackageFullName(ref int packageFullNameLength, char* packageFullName);
@@ -54,7 +49,7 @@ namespace DesktopHtmlHost
                 if (!createdNew)
                 {
                     // Launching NexusWpp again (Start menu, Store "Open") shows the running instance's settings.
-                    EventWaitHandle showSettings;
+                    EventWaitHandle? showSettings;
                     if (EventWaitHandle.TryOpenExisting(ShowSettingsEventName, out showSettings))
                     {
                         // This launch owns the foreground right: let the running instance bring Settings to front.
@@ -81,7 +76,7 @@ namespace DesktopHtmlHost
                 Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
                 AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
                 {
-                    Exception error = e.ExceptionObject as Exception;
+                    Exception? error = e.ExceptionObject as Exception;
                     if (error != null) WriteCrashLog(error);
                 };
 
@@ -155,7 +150,7 @@ namespace DesktopHtmlHost
                 int length = 0;
                 if (GetCurrentPackageFamilyName(ref length, null) == 122 /* ERROR_INSUFFICIENT_BUFFER */ && length > 0)
                 {
-                    string family = null;
+                    string? family = null;
                     fixed (char* name = new char[length])
                     {
                         if (GetCurrentPackageFamilyName(ref length, name) == 0) family = new string(name);
@@ -179,7 +174,7 @@ namespace DesktopHtmlHost
         {
             try
             {
-                string restartArgs = BuildRestartCommandLine(args);
+                string? restartArgs = BuildRestartCommandLine(args);
                 int result = RegisterApplicationRestart(restartArgs, RESTART_NO_REBOOT);
                 if (result != 0)
                 {
@@ -192,7 +187,7 @@ namespace DesktopHtmlHost
             }
         }
 
-        private static string BuildRestartCommandLine(string[] args)
+        private static string? BuildRestartCommandLine(string[] args)
         {
             if (args == null || args.Length == 0)
             {
@@ -202,6 +197,8 @@ namespace DesktopHtmlHost
             return string.Join(" ", args.Select(QuoteCommandLineArgument).ToArray());
         }
 
+        private static readonly SearchValues<char> QuotedArgumentChars = SearchValues.Create(" \t\"");
+
         private static string QuoteCommandLineArgument(string value)
         {
             if (string.IsNullOrEmpty(value))
@@ -209,7 +206,7 @@ namespace DesktopHtmlHost
                 return "\"\"";
             }
 
-            if (value.IndexOfAny(new[] { ' ', '\t', '"' }) < 0)
+            if (value.AsSpan().IndexOfAny(QuotedArgumentChars) < 0)
             {
                 return value;
             }
@@ -286,7 +283,7 @@ namespace DesktopHtmlHost
         {
             try { return new System.Drawing.Icon(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icon.ico"), size); }
             catch (Exception ex) { LogDebug("icon.ico unavailable, using the exe icon: " + ex.Message); }
-            try { return System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
+            try { return System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? System.Drawing.SystemIcons.Application; }
             catch { return System.Drawing.SystemIcons.Application; }
         }
 
@@ -321,7 +318,7 @@ namespace DesktopHtmlHost
             {
                 lock (logLock)
                 {
-                    string directory = Path.GetDirectoryName(filePath);
+                    string? directory = Path.GetDirectoryName(filePath);
                     if (!string.IsNullOrEmpty(directory))
                     {
                         Directory.CreateDirectory(directory);
@@ -348,11 +345,11 @@ namespace DesktopHtmlHost
         }
 
         // Tests that compile the host sources log to their own folder, never the user's log.
-        internal static string LogPathOverride = null;
+        internal static string? LogPathOverride { get; set; }
 
         internal static void LogDebug(string message)
         {
-            string line = string.Format("[{0}] {1}\r\n", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), message);
+            string line = string.Format(CultureInfo.InvariantCulture, "[{0}] {1}\r\n", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture), message);
             AppendLog(LogPathOverride ?? Path.Combine(GetAppDataFolder(), "webview_debug.log"), line);
         }
 
@@ -367,7 +364,7 @@ namespace DesktopHtmlHost
                 {
                     foreach (ManagementObject process in searcher.Get())
                     {
-                        string commandLine = Convert.ToString(process["CommandLine"] ?? "");
+                        string commandLine = Convert.ToString(process["CommandLine"], CultureInfo.InvariantCulture) ?? "";
                         if (commandLine.IndexOf(profileFolder, StringComparison.OrdinalIgnoreCase) < 0 &&
                             commandLine.IndexOf("--webview-exe-name=nexuswpp.exe", StringComparison.OrdinalIgnoreCase) < 0)
                         {

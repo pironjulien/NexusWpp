@@ -60,7 +60,7 @@ namespace DesktopHtmlHost
                     graphics.SmoothingMode = SmoothingMode.HighQuality;
                     graphics.DrawImage(source, new Rectangle(0, 0, LogoSize, LogoSize), crop, GraphicsUnit.Pixel);
                 }
-                Directory.CreateDirectory(Path.GetDirectoryName(destinationPath));
+                Directory.CreateDirectory(Path.GetDirectoryName(destinationPath) ?? throw new ArgumentException("The logo path has no folder.", nameof(destinationPath)));
                 string temporary = destinationPath + ".tmp";
                 square.Save(temporary, ImageFormat.Png);
                 // Atomic swap: a crash or a concurrent read never sees a missing or half-written logo.
@@ -74,8 +74,8 @@ namespace DesktopHtmlHost
         {
             const int OrientationTag = 0x0112;
             if (Array.IndexOf(image.PropertyIdList, OrientationTag) < 0) return;
-            PropertyItem item = image.GetPropertyItem(OrientationTag);
-            if (item.Value == null || item.Value.Length < 2) return;
+            PropertyItem? item = image.GetPropertyItem(OrientationTag);
+            if (item?.Value == null || item.Value.Length < 2) return;
             int orientation = BitConverter.ToUInt16(item.Value, 0);
             RotateFlipType rotation;
             switch (orientation)
@@ -103,7 +103,7 @@ namespace DesktopHtmlHost
             return BuildSettingsMessage(HasCustomLogo ? CustomLogoPath : null);
         }
 
-        public static string BuildSettingsMessage(string logoPath)
+        public static string BuildSettingsMessage(string? logoPath)
         {
             string logo = "null";
             if (logoPath != null)

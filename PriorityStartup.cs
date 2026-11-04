@@ -34,7 +34,8 @@ namespace DesktopHtmlHost
 
         static dynamic RootFolder()
         {
-            dynamic service = Activator.CreateInstance(Type.GetTypeFromProgID("Schedule.Service", true));
+            Type scheduler = Type.GetTypeFromProgID("Schedule.Service", true) ?? throw new InvalidOperationException("Task Scheduler is not registered.");
+            dynamic service = Activator.CreateInstance(scheduler) ?? throw new InvalidOperationException("Task Scheduler could not be created.");
             service.Connect();
             return service.GetFolder(@"\");
         }

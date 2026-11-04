@@ -1,0 +1,23 @@
+root = true
+
+[*.cs]
+# Code style enforced at build time (EnforceCodeStyleInBuild): dead code and redundancy only,
+# so the build never imposes a formatting taste on the existing code.
+dotnet_diagnostic.IDE0005.severity = warning # unnecessary using directive
+dotnet_diagnostic.IDE0035.severity = warning # unreachable code
+dotnet_diagnostic.IDE0043.severity = warning # invalid format string
+dotnet_diagnostic.IDE0044.severity = warning # field can be readonly
+dotnet_diagnostic.IDE0051.severity = warning # unused private member
+dotnet_diagnostic.IDE0052.severity = warning # private member assigned but never read
+dotnet_diagnostic.IDE0059.severity = warning # value assigned but never used
+dotnet_diagnostic.IDE0060.severity = warning # unused parameter
+dotnet_diagnostic.IDE0076.severity = warning # invalid global suppression
+dotnet_diagnostic.IDE0077.severity = warning # invalid suppression attribute
+dotnet_diagnostic.IDE0079.severity = warning # unnecessary suppression
+dotnet_diagnostic.IDE0080.severity = warning # unnecessary null-forgiving operator
+dotnet_diagnostic.IDE0100.severity = warning # redundant equality with true/false
+dotnet_diagnostic.IDE0110.severity = warning # unnecessary discard
+
+# Applications, not libraries: no XML documentation is written. The documentation pass only
+# exists so that IDE0005 can run at build time.
+dotnet_diagnostic.CS1591.severity = none

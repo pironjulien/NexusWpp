@@ -16,7 +16,7 @@ namespace DesktopHtmlHost
                 && value.Value >= 0 && value.Value <= maximum ? value : null;
         }
         // Validated sample from raw driver readings (null = not supported or failed).
-        internal static NvidiaSample Create(double? utilization, double? temperature, double? coreClock, double? memoryClock,
+        internal static NvidiaSample? Create(double? utilization, double? temperature, double? coreClock, double? memoryClock,
             double? powerWatts, double? totalMiB, double? usedMiB)
         {
             var sample = new NvidiaSample {
@@ -79,7 +79,7 @@ namespace DesktopHtmlHost
         readonly Stopwatch clock = Stopwatch.StartNew();
         long lastAttempt = long.MinValue / 2, lastSuccess = -1;
         int failures, intervalMs = IntervalMs;
-        NvidiaSample sample;
+        NvidiaSample? sample;
         string status;
         bool? available;
         bool initialized, memoryV2Unsupported;
@@ -87,7 +87,7 @@ namespace DesktopHtmlHost
         internal string Status { get { return status == "fresh" && AgeMs > 2 * intervalMs ? "stale" : status; } }
         internal long AgeMs { get { return lastSuccess < 0 ? -1 : Math.Max(0, clock.ElapsedMilliseconds - lastSuccess); } }
         internal NvidiaTelemetry() { status = "unavailable"; }
-        internal NvidiaSample Current { get { return Status == "fresh" ? sample : null; } }
+        internal NvidiaSample? Current { get { return Status == "fresh" ? sample : null; } }
 
         // NVML is installed with the driver and the adapter is an NVIDIA one.
         internal bool IsAvailable(string adapterName)
@@ -107,7 +107,7 @@ namespace DesktopHtmlHost
             return Math.Min(MaxIntervalMs, interval);
         }
 
-        internal NvidiaSample Read(string adapterName, bool adapterSuspended, bool onBattery)
+        internal NvidiaSample? Read(string adapterName, bool adapterSuspended, bool onBattery)
         {
             if (!IsAvailable(adapterName)) { if (lastSuccess < 0) status = "unavailable"; return Current; }
             intervalMs = NextIntervalMs(0, onBattery);
@@ -118,14 +118,14 @@ namespace DesktopHtmlHost
             // A failed attempt invalidates the old values immediately; history keeps the gap.
             return Current;
         }
-        internal void Accept(NvidiaSample next, long now)
+        internal void Accept(NvidiaSample? next, long now)
         {
             sample = next;
             if (next != null) { lastSuccess = now; status = "fresh"; failures = 0; }
             else { status = lastSuccess < 0 ? "unavailable" : "stale"; failures++; }
         }
 
-        NvidiaSample Query(string adapterName)
+        NvidiaSample? Query(string adapterName)
         {
             try {
                 if (!initialized) {
@@ -136,7 +136,7 @@ namespace DesktopHtmlHost
                 if (device == IntPtr.Zero) device = FindDevice(adapterName);
                 // Do not attach another GPU's sensors to this adapter on multi-GPU PCs. A session opened
                 // before a driver update or restart no longer lists the GPU: the next attempt opens a new one.
-                if (device == IntPtr.Zero) { Nvml.Shutdown(); initialized = false; return null; }
+                if (device == IntPtr.Zero) { _ = Nvml.Shutdown(); initialized = false; return null; }
                 var next = ReadDevice(device);
                 // A lost or replaced GPU (driver update, TDR) is looked up again next time.
                 if (next == null) device = IntPtr.Zero;
@@ -169,7 +169,7 @@ namespace DesktopHtmlHost
             return IntPtr.Zero;
         }
 
-        NvidiaSample ReadDevice(IntPtr handle)
+        NvidiaSample? ReadDevice(IntPtr handle)
         {
             Nvml.Utilization rates; uint temperature, core, memory, milliwatts;
             double? utilization = Nvml.DeviceGetUtilizationRates(handle, out rates) == Nvml.Success ? rates.Gpu : (double?)null;

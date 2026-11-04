@@ -14,20 +14,20 @@ using System.Text.Json;
 
 namespace DesktopHtmlHost
 {
-    public class TelemetryCollector
+    internal sealed class TelemetryCollector : IDisposable
     {
         // Static / Boot cached specs
         public string MotherboardInfo = "";
         public string CpuInfo = "";
         public string CpuL2Cache = "";
         public string CpuL3Cache = "";
-        public int CpuCores = 0;
-        public int CpuLogical = 0;
+        public int CpuCores;
+        public int CpuLogical;
         public string CpuBaseSpeed = "0.00";
-        public int TotalRamGb = 0;
-        public int RamSpeedMts = 0;
+        public int TotalRamGb;
+        public int RamSpeedMts;
         public string RamType = "";
-        public int RamModules = 0;
+        public int RamModules;
         public string NetworkName = "";
         public string IgpuInfo = "";
         public string IgpuDriver = "";
@@ -38,14 +38,14 @@ namespace DesktopHtmlHost
         public string NpuName = "";
         public string NpuDriver = "";
         public string NpuDriverDate = "";
-        public bool NpuDetected = false;
+        public bool NpuDetected;
         public string DiskName = "";
 
         private string igpuLuid = "";
         private string dgpuLuid = "";
         private string npuLuid = "";
         private readonly List<string> directxAdapterLuids = new List<string>();
-        private long igpuLuidValue, dgpuLuidValue;
+        private long dgpuLuidValue;
         private string dgpuInstanceId = "";
         // Windows GPU memory budget of the iGPU (dedicated carve-out + shared system memory).
         private long igpuMemoryBudgetBytes;
@@ -55,8 +55,8 @@ namespace DesktopHtmlHost
         public List<PowerPlanInfo> PowerPlans = new List<PowerPlanInfo>();
 
         // Historical rates
-        private ulong prevIdleTime = 0;
-        private ulong prevSystemTime = 0;
+        private ulong prevIdleTime;
+        private ulong prevSystemTime;
         // After a pause longer than this, rate counters are rebased instead of averaging the pause.
         private const long RebaseGapMs = 2500;
         private readonly Stopwatch collectClock = Stopwatch.StartNew();
@@ -66,40 +66,39 @@ namespace DesktopHtmlHost
         private DateTime lastPingTime = DateTime.MinValue;
         private const int PowerPlansRefreshSeconds = 5;
         private DateTime lastPowerPlansRefresh = DateTime.UtcNow;
-        private volatile bool isPingPending = false;
+        private volatile bool isPingPending;
         private DateTime pingStartedAt = DateTime.MinValue;
 
         // Process lists and cached top processes (ProcessRanking.cs)
         // Replaced as a whole by the ranking worker; read once per collection.
         private volatile ProcessUsage[] cachedTopProcesses = Array.Empty<ProcessUsage>();
-        private volatile ProcessUsage cachedTopRamProcess;
+        private volatile ProcessUsage? cachedTopRamProcess;
         private int topProcessCounter = 3; // first ranking on the first collection
-        private bool topProcessUpdatePending = false;
+        private bool topProcessUpdatePending;
 
         private readonly NetworkTelemetry network = new NetworkTelemetry();
 
         // Slow perf counters cached separately so the UI can receive 2Hz payloads
         // without running every WMI query twice per second.
-        private DateTime lastMemoryPerfTime = DateTime.MinValue;
-        private long cachedRamCachedBytes = 0;
-        private long cachedRamPoolPagedBytes = 0;
-        private long cachedRamPoolNonPagedBytes = 0;
-        private long cachedRamActivityVal = 0;
+        private long cachedRamCachedBytes;
+        private long cachedRamPoolPagedBytes;
+        private long cachedRamPoolNonPagedBytes;
+        private long cachedRamActivityVal;
         private DateTime lastGpuPerfTime = DateTime.MinValue;
-        private int cachedIgpuUtil = 0;
-        private long cachedIgpuMemBytes = 0;
-        private int cachedNpuUtil = 0;
-        private long cachedNpuMemBytes = 0;
-        private int cachedDgpuUtil = 0;
-        private long cachedDgpuMemBytes = 0;
-        private int cachedIgpuDecodeUtil = 0;
+        private int cachedIgpuUtil;
+        private long cachedIgpuMemBytes;
+        private int cachedNpuUtil;
+        private long cachedNpuMemBytes;
+        private int cachedDgpuUtil;
+        private long cachedDgpuMemBytes;
+        private int cachedIgpuDecodeUtil;
 
         // NVIDIA sensors come from NVML (NvidiaTelemetry.cs), the driver library itself.
         // Windows performance counters remain the fast utilization source.
         private readonly NvidiaTelemetry nvidiaTelemetry = new NvidiaTelemetry();
-        private int cachedNpuTopPid = -1, cachedNpuTopPct = 0;
+        private int cachedNpuTopPid = -1, cachedNpuTopPct;
         private int cachedIgpuEncodeUtil = -1;
-        private int cachedIgpuTopPid = -1, cachedIgpuTopPct = 0, cachedDgpuTopPid = -1, cachedDgpuTopPct = 0;
+        private int cachedIgpuTopPid = -1, cachedIgpuTopPct, cachedDgpuTopPid = -1, cachedDgpuTopPct;
 
         // Busiest client of an adapter: {"name","pct"}; empty name = measured idle; null = no reading.
         private void WriteTopProcess(Utf8JsonWriter json, bool detected, bool fresh, int pid, int pct)
@@ -115,14 +114,14 @@ namespace DesktopHtmlHost
         // pid -> name from the last ranking ("Process V2" instances), replaced as a whole every 4 s.
         private volatile Dictionary<int, string> rankedPidNames = new Dictionary<int, string>();
         private Dictionary<int, string> processNames = new Dictionary<int, string>();
-        private Dictionary<int, string> processNamesSource;
+        private Dictionary<int, string>? processNamesSource;
 
         // Process names for pids seen in GPU counters. Pids are reused after exit, so names the ranking
         // did not cover are only kept until the next ranking.
         private string ProcessName(int pid)
         {
             var ranked = rankedPidNames;
-            if (ranked.TryGetValue(pid, out string name)) return name;
+            if (ranked.TryGetValue(pid, out string? name)) return name;
             if (!ReferenceEquals(processNamesSource, ranked)) { processNames = new Dictionary<int, string>(); processNamesSource = ranked; }
             if (processNames.TryGetValue(pid, out name)) return name;
             try { using (var process = Process.GetProcessById(pid)) name = process.ProcessName; }
@@ -133,8 +132,29 @@ namespace DesktopHtmlHost
         }
 
         // One persistent PDH query sampled once per collection (memory, system, CPU clock, GPU/NPU).
-        private PdhQuery perf;
-        private PdhQuery processPerf;
+        private PdhQuery? perf;
+        private PdhQuery? processPerf;
+        // perf belongs to the collection (sampleLock), processPerf to the ranking worker (rankingLock).
+        private readonly object sampleLock = new object();
+        private readonly object rankingLock = new object();
+
+        // The wallpaper form disposes its collector when it is closed or replaced after an Explorer
+        // restart. On the thread pool: a collection or ranking still running finishes, then the
+        // queries close under the locks their users hold.
+        public void Dispose()
+        {
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                lock (sampleLock)
+                lock (rankingLock)
+                {
+                    perf?.Dispose();
+                    perf = null;
+                    processPerf?.Dispose();
+                    processPerf = null;
+                }
+            });
+        }
         private string pdhProcessCpu = ProcessRanking.CpuV2, pdhProcessPrivateBytes = ProcessRanking.RamV2;
         // Task Manager "Cached": the three standby lists plus the modified page list.
         private const string PdhModifiedPages = @"\Memory\Modified Page List Bytes";
@@ -190,7 +210,7 @@ namespace DesktopHtmlHost
 
         private static string ResolveSystemDrive()
         {
-            string drive = Environment.GetEnvironmentVariable("SystemDrive");
+            string? drive = Environment.GetEnvironmentVariable("SystemDrive");
             return !string.IsNullOrEmpty(drive) && System.Text.RegularExpressions.Regex.IsMatch(drive, "^[A-Za-z]:$")
                 ? drive.ToUpperInvariant() : "C:";
         }
@@ -201,17 +221,16 @@ namespace DesktopHtmlHost
         private static readonly string PdhDiskLatency = @"\LogicalDisk(" + SystemDrive + @")\Avg. Disk sec/Transfer";
         private bool diskCountersAvailable;
         private bool gpuCountersFresh;
-        private DateTime lastGpuAttempt = DateTime.MinValue;
         private DateTime lastNpuDiscovery = DateTime.MinValue;
 
         // Driver-reported sensors of a non-NVIDIA discrete GPU (D3DKMT), read at most every 2 s.
-        private WddmGpuSample wddmSample;
+        private WddmGpuSample? wddmSample;
         private long wddmLastAttemptMs = -1, wddmLastSuccessMs = -1;
 
         // Real sensors state
-        private long dgpuVramTotalBytes = 0;
-        private bool cpuThermalPerfUnavailable = false;
-        private bool cpuThermalAcpiUnavailable = false;
+        private long dgpuVramTotalBytes;
+        private bool cpuThermalPerfUnavailable;
+        private bool cpuThermalAcpiUnavailable;
         private int thermalPerfEmptyReads;
         private DateTime lastCpuTempTime = DateTime.MinValue;
         private int cachedCpuTempC = -1;
@@ -240,10 +259,10 @@ namespace DesktopHtmlHost
                             using (var subkey = rootKey.OpenSubKey(subkeyName))
                             {
                                 if (subkey == null) continue;
-                                string desc = Convert.ToString(subkey.GetValue("Description") ?? "").Trim();
-                                object luidValObj = subkey.GetValue("AdapterLuid");
+                                string desc = (Convert.ToString(subkey.GetValue("Description"), CultureInfo.InvariantCulture) ?? "").Trim();
+                                object? luidValObj = subkey.GetValue("AdapterLuid");
                                 if (luidValObj == null || string.IsNullOrEmpty(desc)) continue;
-                                long luidVal = Convert.ToInt64(luidValObj);
+                                long luidVal = Convert.ToInt64(luidValObj, CultureInfo.InvariantCulture);
                                 // Entries of removed adapters keep the LUID of an older boot.
                                 if (WddmGpuSensors.AdapterExists(luidVal) == false) continue;
                                 string formattedLuid = GpuClassifier.FormatLuid(luidVal);
@@ -251,18 +270,18 @@ namespace DesktopHtmlHost
                                 adapters.Add(new GpuAdapterInfo
                                 {
                                     Name = desc, Luid = formattedLuid, LuidValue = luidVal,
-                                    DedicatedBytes = Convert.ToInt64(subkey.GetValue("DedicatedVideoMemory") ?? 0L),
-                                    SharedBytes = Convert.ToInt64(subkey.GetValue("SharedSystemMemory") ?? 0L)
+                                    DedicatedBytes = Convert.ToInt64(subkey.GetValue("DedicatedVideoMemory") ?? 0L, CultureInfo.InvariantCulture),
+                                    SharedBytes = Convert.ToInt64(subkey.GetValue("SharedSystemMemory") ?? 0L, CultureInfo.InvariantCulture)
                                 });
                             }
                         }
                     }
                 }
-                GpuAdapterInfo igpu, dgpu;
+                GpuAdapterInfo? igpu, dgpu;
                 GpuClassifier.Select(adapters, out igpu, out dgpu);
                 if (igpu != null)
                 {
-                    igpuLuid = igpu.Luid; igpuLuidValue = igpu.LuidValue; IgpuInfo = igpu.Name;
+                    igpuLuid = igpu.Luid; IgpuInfo = igpu.Name;
                     igpuMemoryBudgetBytes = igpu.DedicatedBytes + igpu.SharedBytes;
                 }
                 if (dgpu != null)
@@ -280,6 +299,11 @@ namespace DesktopHtmlHost
 
         public void Initialize()
         {
+            lock (sampleLock) InitializeLocked();
+        }
+
+        private void InitializeLocked()
+        {
             try { OpenPerformanceCounters(); }
             catch (Exception ex) { DesktopHtmlHost.Program.LogDebug("Performance counters unavailable: " + ex.Message); }
 
@@ -293,12 +317,12 @@ namespace DesktopHtmlHost
                 {
                     foreach (ManagementObject obj in searcher.Get())
                     {
-                        object mfgVal = obj["Manufacturer"];
-                        object prodVal = obj["Product"];
-                        string mfg = mfgVal != null ? mfgVal.ToString() : "";
-                        string prod = prodVal != null ? prodVal.ToString() : "";
+                        object? mfgVal = obj["Manufacturer"];
+                        object? prodVal = obj["Product"];
+                        string mfg = mfgVal?.ToString() ?? "";
+                        string prod = prodVal?.ToString() ?? "";
                         mfg = mfg.Replace(" Co., Ltd.", "").Replace("ASUSTeK COMPUTER INC.", "ASUS");
-                        MotherboardInfo = string.Format("{0} ({1})", mfg, prod);
+                        MotherboardInfo = string.Format(CultureInfo.InvariantCulture, "{0} ({1})", mfg, prod);
                         break;
                     }
                 }
@@ -308,15 +332,15 @@ namespace DesktopHtmlHost
                 {
                     foreach (ManagementObject obj in searcher.Get())
                     {
-                        object cpuNameVal = obj["Name"];
-                        if (cpuNameVal != null) CpuInfo = cpuNameVal.ToString().Trim();
-                        uint l2 = Convert.ToUInt32(obj["L2CacheSize"] ?? 0);
-                        uint l3 = Convert.ToUInt32(obj["L3CacheSize"] ?? 0);
-                        CpuL2Cache = string.Format("{0:F1} Mo", l2 / 1024.0);
-                        CpuL3Cache = string.Format("{0:F1} Mo", l3 / 1024.0);
-                        CpuCores = Convert.ToInt32(obj["NumberOfCores"] ?? CpuCores);
-                        CpuLogical = Convert.ToInt32(obj["NumberOfLogicalProcessors"] ?? CpuLogical);
-                        uint maxClock = Convert.ToUInt32(obj["MaxClockSpeed"] ?? 0);
+                        object? cpuNameVal = obj["Name"];
+                        if (cpuNameVal != null) CpuInfo = (cpuNameVal.ToString() ?? "").Trim();
+                        uint l2 = Convert.ToUInt32(obj["L2CacheSize"] ?? 0, CultureInfo.InvariantCulture);
+                        uint l3 = Convert.ToUInt32(obj["L3CacheSize"] ?? 0, CultureInfo.InvariantCulture);
+                        CpuL2Cache = string.Format(CultureInfo.CurrentCulture, "{0:F1} Mo", l2 / 1024.0);
+                        CpuL3Cache = string.Format(CultureInfo.CurrentCulture, "{0:F1} Mo", l3 / 1024.0);
+                        CpuCores = Convert.ToInt32(obj["NumberOfCores"] ?? CpuCores, CultureInfo.InvariantCulture);
+                        CpuLogical = Convert.ToInt32(obj["NumberOfLogicalProcessors"] ?? CpuLogical, CultureInfo.InvariantCulture);
+                        uint maxClock = Convert.ToUInt32(obj["MaxClockSpeed"] ?? 0, CultureInfo.InvariantCulture);
                         CpuBaseSpeed = (maxClock / 1000.0).ToString("F2", CultureInfo.InvariantCulture);
                         break;
                     }
@@ -330,12 +354,12 @@ namespace DesktopHtmlHost
                     int modules = 0;
                     foreach (ManagementObject obj in searcher.Get())
                     {
-                        totalCapacity += Convert.ToUInt64(obj["Capacity"] ?? 0);
-                        speed = Convert.ToUInt32(obj["Speed"] ?? speed);
+                        totalCapacity += Convert.ToUInt64(obj["Capacity"] ?? 0, CultureInfo.InvariantCulture);
+                        speed = Convert.ToUInt32(obj["Speed"] ?? speed, CultureInfo.InvariantCulture);
                         modules++;
                         if (string.IsNullOrEmpty(RamType))
                         {
-                            int smbiosType = Convert.ToInt32(obj["SMBIOSMemoryType"] ?? 0);
+                            int smbiosType = Convert.ToInt32(obj["SMBIOSMemoryType"] ?? 0, CultureInfo.InvariantCulture);
                             RamType = MemoryTypeFromSmbios(smbiosType);
                         }
                     }
@@ -356,10 +380,10 @@ namespace DesktopHtmlHost
                 {
                     foreach (ManagementObject obj in searcher.Get())
                     {
-                        object nameVal = obj["DeviceName"];
-                        object driverVerVal = obj["DriverVersion"];
-                        object dateRawVal = obj["DriverDate"];
-                        string name = nameVal != null ? nameVal.ToString() : "";
+                        object? nameVal = obj["DeviceName"];
+                        object? driverVerVal = obj["DriverVersion"];
+                        object? dateRawVal = obj["DriverDate"];
+                        string name = nameVal?.ToString() ?? "";
                         if (!IsLikelyNpuDeviceName(name))
                         {
                             continue;
@@ -367,7 +391,7 @@ namespace DesktopHtmlHost
 
                         NpuName = name;
                         NpuDetected = true;
-                        NpuDriver = driverVerVal != null ? driverVerVal.ToString() : "";
+                        NpuDriver = driverVerVal?.ToString() ?? "";
                         NpuDriverDate = WmiDate(dateRawVal);
                         break;
                     }
@@ -380,10 +404,10 @@ namespace DesktopHtmlHost
                     {
                         foreach (ManagementObject obj in searcher.Get())
                         {
-                            object deviceId = obj["DeviceID"];
+                            object? deviceId = obj["DeviceID"];
                             if (deviceId != null)
                             {
-                                partitionDeviceId = deviceId.ToString().Replace("\\", "\\\\").Replace("'", "\\'");
+                                partitionDeviceId = (deviceId.ToString() ?? "").Replace("\\", "\\\\").Replace("'", "\\'");
                                 break;
                             }
                         }
@@ -396,10 +420,10 @@ namespace DesktopHtmlHost
                         {
                             foreach (ManagementObject obj in searcher.Get())
                             {
-                                object model = obj["Model"];
+                                object? model = obj["Model"];
                                 if (model != null)
                                 {
-                                    DiskName = model.ToString().Trim();
+                                    DiskName = (model.ToString() ?? "").Trim();
                                     break;
                                 }
                             }
@@ -412,10 +436,10 @@ namespace DesktopHtmlHost
                         {
                             foreach (ManagementObject obj in searcher.Get())
                             {
-                                object model = obj["Model"];
+                                object? model = obj["Model"];
                                 if (model != null)
                                 {
-                                    DiskName = model.ToString().Trim();
+                                    DiskName = (model.ToString() ?? "").Trim();
                                     break;
                                 }
                             }
@@ -433,8 +457,8 @@ namespace DesktopHtmlHost
                     {
                         foreach (ManagementObject obj in searcher.Get())
                         {
-                            object nameVal = obj["Name"];
-                            string name = nameVal != null ? nameVal.ToString() : "";
+                            object? nameVal = obj["Name"];
+                            string name = nameVal?.ToString() ?? "";
                             if (IsLikelyNpuDeviceName(name))
                             {
                                 NpuName = name;
@@ -467,10 +491,10 @@ namespace DesktopHtmlHost
                 {
                     foreach (ManagementObject obj in searcher.Get())
                     {
-                        string name = Convert.ToString(obj["Name"] ?? "");
-                        string driverVer = Convert.ToString(obj["DriverVersion"] ?? "");
+                        string name = Convert.ToString(obj["Name"], CultureInfo.InvariantCulture) ?? "";
+                        string driverVer = Convert.ToString(obj["DriverVersion"], CultureInfo.InvariantCulture) ?? "";
                         string driverDate = WmiDate(obj["DriverDate"]);
-                        string instanceId = Convert.ToString(obj["PNPDeviceID"] ?? "");
+                        string instanceId = Convert.ToString(obj["PNPDeviceID"], CultureInfo.InvariantCulture) ?? "";
 
                         // Driver details attach to the adapters classified from the registry;
                         // without the registry, the same classifier works from the name alone.
@@ -500,9 +524,9 @@ namespace DesktopHtmlHost
         }
 
         // CIM datetime "20260903000000.000000-000" -> "03/09/2026"; empty when absent or malformed.
-        internal static string WmiDate(object value)
+        internal static string WmiDate(object? value)
         {
-            string raw = Convert.ToString(value ?? "");
+            string raw = Convert.ToString(value, CultureInfo.InvariantCulture) ?? "";
             return raw.Length >= 8 && DateTime.TryParseExact(raw.Substring(0, 8), "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime date)
                 ? date.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "";
         }
@@ -541,14 +565,14 @@ namespace DesktopHtmlHost
                         using (var subkey = classKey.OpenSubKey(subkeyName))
                         {
                             if (subkey == null) continue;
-                            string desc = Convert.ToString(subkey.GetValue("DriverDesc") ?? "");
+                            string desc = Convert.ToString(subkey.GetValue("DriverDesc"), CultureInfo.InvariantCulture) ?? "";
                             if (string.IsNullOrEmpty(desc)) continue;
                             if (!desc.Equals(GpuName, StringComparison.OrdinalIgnoreCase)) continue;
 
-                            object qw = subkey.GetValue("HardwareInformation.qwMemorySize");
+                            object? qw = subkey.GetValue("HardwareInformation.qwMemorySize");
                             if (qw != null)
                             {
-                                long bytes = Convert.ToInt64(qw);
+                                long bytes = Convert.ToInt64(qw, CultureInfo.InvariantCulture);
                                 if (bytes > 0)
                                 {
                                     dgpuVramTotalBytes = bytes;
@@ -556,8 +580,8 @@ namespace DesktopHtmlHost
                                 }
                             }
 
-                            object dw = subkey.GetValue("HardwareInformation.MemorySize");
-                            byte[] raw = dw as byte[];
+                            object? dw = subkey.GetValue("HardwareInformation.MemorySize");
+                            byte[]? raw = dw as byte[];
                             if (raw != null && raw.Length >= 4)
                             {
                                 long bytes = BitConverter.ToUInt32(raw, 0);
@@ -569,7 +593,7 @@ namespace DesktopHtmlHost
                             }
                             else if (dw != null)
                             {
-                                long bytes = Convert.ToInt64(dw);
+                                long bytes = Convert.ToInt64(dw, CultureInfo.InvariantCulture);
                                 if (bytes > 0)
                                 {
                                     dgpuVramTotalBytes = bytes;
@@ -630,7 +654,7 @@ namespace DesktopHtmlHost
                     {
                         foreach (ManagementObject obj in searcher.Get())
                         {
-                            double deciKelvin = Convert.ToDouble(obj["CurrentTemperature"] ?? 0.0);
+                            double deciKelvin = Convert.ToDouble(obj["CurrentTemperature"] ?? 0.0, CultureInfo.InvariantCulture);
                             double celsius = (deciKelvin / 10.0) - 273.15;
                             if (celsius > maxCelsius) maxCelsius = celsius;
                         }
@@ -662,8 +686,8 @@ namespace DesktopHtmlHost
                    lower.Contains("inference") ||
                    lower.Contains(" vpu") ||
                    lower.Contains("(vpu") ||
-                   lower.Equals("npu") ||
-                   lower.StartsWith("npu ") ||
+                   lower == "npu" ||
+                   lower.StartsWith("npu ", StringComparison.Ordinal) ||
                    lower.Contains(" npu ") ||
                    lower.Contains("(npu");
         }
@@ -677,7 +701,7 @@ namespace DesktopHtmlHost
                     searcher.Options.Timeout = TimeSpan.FromSeconds(2);
                     foreach (ManagementObject obj in searcher.Get())
                     {
-                        string name = Convert.ToString(obj["Name"] ?? "");
+                        string name = Convert.ToString(obj["Name"], CultureInfo.InvariantCulture) ?? "";
                         string luid = ExtractLuidFromCounterName(name);
                         if (string.IsNullOrEmpty(luid))
                         {
@@ -721,14 +745,14 @@ namespace DesktopHtmlHost
 
         public void UpdatePowerPlansCache(bool allowPowercfg = true)
         {
-            List<PowerPlanInfo> plans = PowerSchemes.EnumeratePlans() ?? (allowPowercfg ? ReadPowerPlansFromPowercfg() : null);
+            List<PowerPlanInfo>? plans = PowerSchemes.EnumeratePlans() ?? (allowPowercfg ? ReadPowerPlansFromPowercfg() : null);
             if (plans == null || plans.Count == 0) return;
 
             // A single plan (usual on Modern Standby laptops) makes a one-button panel that does
             // nothing: the real control there is the Windows power mode, applied as an overlay.
             if (plans.Count == 1)
             {
-                string overlay = PowerSchemes.EffectiveOverlay();
+                string? overlay = PowerSchemes.EffectiveOverlay();
                 if (overlay != null)
                 {
                     PowerPlans = PowerSchemes.OverlayModes(overlay, CultureInfo.CurrentUICulture);
@@ -749,7 +773,9 @@ namespace DesktopHtmlHost
         }
 
         // Fallback when powrprof cannot enumerate: powercfg from System32 (never resolved through PATH).
-        private static List<PowerPlanInfo> ReadPowerPlansFromPowercfg()
+        private static readonly char[] LineBreaks = { '\r', '\n' };
+
+        private static List<PowerPlanInfo>? ReadPowerPlansFromPowercfg()
         {
             try
             {
@@ -764,6 +790,7 @@ namespace DesktopHtmlHost
                 };
                 using (var p = Process.Start(startInfo))
                 {
+                    if (p == null) return null;
                     // A stuck powercfg must not block the caller (UI thread on plan changes).
                     var read = p.StandardOutput.ReadToEndAsync();
                     if (!read.Wait(3000))
@@ -774,7 +801,7 @@ namespace DesktopHtmlHost
                     }
                     string output = read.Result;
                     p.WaitForExit(2000);
-                    string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                    string[] lines = output.Split(LineBreaks, StringSplitOptions.RemoveEmptyEntries);
                     foreach (var line in lines)
                     {
                         var match = System.Text.RegularExpressions.Regex.Match(line, @"GUID.*:\s*([a-f0-9\-]+)\s*\(([^)]+)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
@@ -796,14 +823,14 @@ namespace DesktopHtmlHost
         }
 
         // Marks the active plan or power mode; cheap enough for every collection.
-        private void RefreshActivePowerPlan(List<PowerPlanInfo> plans)
+        private static void RefreshActivePowerPlan(List<PowerPlanInfo> plans)
         {
             bool overlays = plans.Count > 0 && plans[0].Overlay;
             string active = overlays ? (PowerSchemes.EffectiveOverlay() ?? "") : GetActivePowerPlanGuid();
             foreach (var plan in plans) plan.Active = plan.Guid.Equals(active, StringComparison.OrdinalIgnoreCase);
         }
 
-        public string GetActivePowerPlanGuid()
+        public static string GetActivePowerPlanGuid()
         {
             try
             {
@@ -848,7 +875,7 @@ namespace DesktopHtmlHost
             var plans = PowerPlans;
             var target = plans.FirstOrDefault(p => p.Guid.Equals(guidStr, StringComparison.OrdinalIgnoreCase));
             bool overlay = target != null && target.Overlay;
-            uint result = overlay ? PowerSchemes.SetOverlay(target.Guid) : Win32.PowerSetActiveScheme(IntPtr.Zero, requestedGuid);
+            uint result = target is { Overlay: true } ? PowerSchemes.SetOverlay(target.Guid) : Win32.PowerSetActiveScheme(IntPtr.Zero, requestedGuid);
             if (result != 0)
             {
                 error = (overlay ? "PowerSetActiveOverlayScheme=" : "PowerSetActiveScheme=") + result.ToString(CultureInfo.InvariantCulture);
@@ -872,7 +899,7 @@ namespace DesktopHtmlHost
             return success;
         }
 
-        private string lastPingTarget;
+        private string? lastPingTarget;
 
         private void UpdatePing()
         {
@@ -888,12 +915,12 @@ namespace DesktopHtmlHost
             var targets = new List<string> { "1.1.1.1", "8.8.8.8" };
             if (lastPingTarget != null && targets.Remove(lastPingTarget)) targets.Insert(0, lastPingTarget);
             // Corporate and captive networks often drop public ICMP; the router still answers.
-            string gateway = network.Gateway;
+            string? gateway = network.Gateway;
             if (gateway != null) targets.Add(gateway);
             PingNext(targets, 0, gateway);
         }
 
-        private void PingNext(List<string> targets, int index, string gateway)
+        private void PingNext(List<string> targets, int index, string? gateway)
         {
             try
             {
@@ -941,9 +968,13 @@ namespace DesktopHtmlHost
             {
                 try
                 {
-                    if (processPerf == null || !processPerf.Collect()) return;
-                    var cpuRows = processPerf.Instances(pdhProcessCpu);
-                    var ramRows = processPerf.Instances(pdhProcessPrivateBytes);
+                    List<KeyValuePair<string, double>>? cpuRows, ramRows;
+                    lock (rankingLock)
+                    {
+                        if (processPerf == null || !processPerf.Collect()) return;
+                        cpuRows = processPerf.Instances(pdhProcessCpu);
+                        ramRows = processPerf.Instances(pdhProcessPrivateBytes);
+                    }
                     if (cpuRows == null || ramRows == null) return;
                     var pidNames = new Dictionary<int, string>();
                     ProcessRanking.Rank(cpuRows, ramRows, Environment.ProcessorCount, out var top, out var topRam, pidNames);
@@ -975,12 +1006,17 @@ namespace DesktopHtmlHost
             }
             if (perf != null) perf.Collect();
             // The ranking worker only starts from this thread, so no sample is in flight here.
-            if (processPerf != null && !topProcessUpdatePending) processPerf.Collect();
+            lock (rankingLock) if (processPerf != null && !topProcessUpdatePending) processPerf.Collect();
             network.Rebase();
             Thread.Sleep(250);
         }
 
         public string CollectStats()
+        {
+            lock (sampleLock) return CollectStatsLocked();
+        }
+
+        private string CollectStatsLocked()
         {
             long gapStartMs = collectClock.ElapsedMilliseconds;
             if (lastCollectMs >= 0 && gapStartMs - lastCollectMs > RebaseGapMs) RebaseRateCounters();
@@ -1049,7 +1085,7 @@ namespace DesktopHtmlHost
             bool perfSampled = perf != null && perf.Collect();
 
             network.Update(perf, perfSampled);
-            if (perfSampled)
+            if (perf != null && perfSampled)
             {
                 // Task Manager CPU utilization when the counter exists; GetSystemTimes (busy time) otherwise.
                 double? utility = perf.Value(PdhCpuUtility);
@@ -1060,7 +1096,6 @@ namespace DesktopHtmlHost
                 {
                     ramCachedBytes = (long)(modified.Value + (perf.Value(PdhStandbyNormal) ?? 0) + (perf.Value(PdhStandbyReserve) ?? 0) + (perf.Value(PdhStandbyCore) ?? 0));
                     cachedRamCachedBytes = ramCachedBytes;
-                    lastMemoryPerfTime = DateTime.Now;
                 }
                 double? poolPaged = perf.Value(PdhPoolPaged), poolNonPaged = perf.Value(PdhPoolNonPaged), faults = perf.Value(PdhPageFaults);
                 if (poolPaged.HasValue) cachedRamPoolPagedBytes = ramPoolPagedBytes = (long)poolPaged.Value;
@@ -1072,7 +1107,7 @@ namespace DesktopHtmlHost
             int threadsCount = -1;
             int processesCount = -1;
             double cpuFreqGhz = 0;
-            if (perfSampled)
+            if (perf != null && perfSampled)
             {
                 double? threads = perf.Value(PdhThreads), processes = perf.Value(PdhProcesses);
                 if (threads.HasValue && processes.HasValue)
@@ -1085,22 +1120,22 @@ namespace DesktopHtmlHost
                 // counter's own Processor Frequency base (true base clock on hybrid CPUs), not
                 // to the WMI MaxClockSpeed value which can be a different reference.
                 double? perfPct = perf.Value(PdhCpuPerformance), counterBaseMhz = perf.Value(PdhCpuFrequency);
-                if (perfPct > 0 && counterBaseMhz > 0)
+                if (perfPct is double pct && pct > 0 && counterBaseMhz is double baseMhz && baseMhz > 0)
                 {
-                    cpuFreqGhz = counterBaseMhz.Value * perfPct.Value / 100.0 / 1000.0;
+                    cpuFreqGhz = baseMhz * pct / 100.0 / 1000.0;
                 }
             }
 
             // System drive activity (PDH LogicalDisk, formerly a ~20 ms raw WMI query per tick).
             double? diskRead = null, diskWrite = null, diskIdle = null, diskLatency = null;
-            if (perfSampled && diskCountersAvailable)
+            if (perf != null && perfSampled && diskCountersAvailable)
             {
                 diskRead = perf.Value(PdhDiskRead); diskWrite = perf.Value(PdhDiskWrite);
                 diskIdle = perf.Value(PdhDiskIdle); diskLatency = perf.Value(PdhDiskLatency);
             }
             bool diskRatesValid = diskRead.HasValue && diskWrite.HasValue;
-            double diskReadMbNum = diskRatesValid ? Math.Max(0, diskRead.Value) / (1024.0 * 1024.0) : -1;
-            double diskWriteMbNum = diskRatesValid ? Math.Max(0, diskWrite.Value) / (1024.0 * 1024.0) : -1;
+            double diskReadMbNum = diskRatesValid ? Math.Max(0, diskRead.GetValueOrDefault()) / (1024.0 * 1024.0) : -1;
+            double diskWriteMbNum = diskRatesValid ? Math.Max(0, diskWrite.GetValueOrDefault()) / (1024.0 * 1024.0) : -1;
             long diskActiveTime = diskIdle.HasValue ? DiskActiveTime(diskIdle.Value) : -1;
             double diskResponse = diskLatency.HasValue ? Math.Max(0, diskLatency.Value) : -1;
 
@@ -1112,9 +1147,8 @@ namespace DesktopHtmlHost
             int npuUtil = cachedNpuUtil;
             long npuMemBytes = cachedNpuMemBytes;
             int dgpuUtil = cachedDgpuUtil;
-            if (perfSampled)
+            if (perf != null && perfSampled)
             {
-                lastGpuAttempt = DateTime.UtcNow;
                 gpuCountersFresh = false;
                 // The WMI lookup costs 0.3 to 3 s: at most once a minute while no LUID is known.
                 if (NpuDetected && string.IsNullOrEmpty(npuLuid) && (DateTime.UtcNow - lastNpuDiscovery).TotalSeconds >= 60)
@@ -1172,7 +1206,7 @@ namespace DesktopHtmlHost
 
             // NVIDIA metrics come from NVML in process (no helper process every 5 s); the reads
             // are throttled and skipped while the GPU is suspended.
-            NvidiaSample nv = nvidiaTelemetry.Read(GpuName, dgpuSuspended, saveEnergy);
+            NvidiaSample? nv = nvidiaTelemetry.Read(GpuName, dgpuSuspended, saveEnergy);
             bool nvidiaStatsSuccess = nv != null;
             int gpuUtil = nv != null && nv.Utilization.HasValue ? (int)Math.Round(nv.Utilization.Value) : dgpuUtil;
             double gpuTemp = nv != null ? nv.Temperature ?? -1 : -1;
@@ -1200,7 +1234,7 @@ namespace DesktopHtmlHost
                 bool wddmFresh = wddmSample != null && wddmLastSuccessMs >= 0 && nowMs - wddmLastSuccessMs <= 6000;
                 gpuSensorStatus = wddmFresh ? "fresh" : wddmLastSuccessMs < 0 ? "unavailable" : "stale";
                 gpuSensorAgeMs = wddmLastSuccessMs < 0 ? -1 : nowMs - wddmLastSuccessMs;
-                if (wddmFresh)
+                if (wddmFresh && wddmSample != null)
                 {
                     gpuTemp = wddmSample.TemperatureC ?? -1;
                     gpuMemClock = wddmSample.MemoryClockMhz ?? -1;
@@ -1260,7 +1294,7 @@ namespace DesktopHtmlHost
             string windowsGpuStatus = windowsGpuFresh ? "fresh" : lastGpuPerfTime == DateTime.MinValue ? "unavailable" : "stale";
             double sampledAt = Math.Round((DateTime.UtcNow - DateTime.UnixEpoch).TotalMilliseconds);
             ProcessUsage[] topProcesses = cachedTopProcesses;
-            ProcessUsage topRamProcess = cachedTopRamProcess;
+            ProcessUsage? topRamProcess = cachedTopRamProcess;
             int cpuCount = Math.Max(1, Environment.ProcessorCount);
 
             // Field names and types are the contract read by telemetry-state.js, dashboard.js and app.js.

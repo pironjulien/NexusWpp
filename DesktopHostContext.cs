@@ -17,8 +17,8 @@ namespace DesktopHtmlHost
     {
         private const int RecreateDelayMs = 1000;
         private readonly Func<Form> createForm;
-        private Form form;
-        private Timer recreateTimer;
+        private Form? form;
+        private Timer? recreateTimer;
 
         internal DesktopHostContext(Func<Form> createForm)
         {
@@ -26,7 +26,7 @@ namespace DesktopHtmlHost
             StartForm();
         }
 
-        internal Form CurrentForm { get { return form; } }
+        internal Form? CurrentForm { get { return form; } }
 
         private void StartForm()
         {
@@ -37,15 +37,15 @@ namespace DesktopHtmlHost
             form.Show();
         }
 
-        private void Form_FormClosed(object sender, FormClosedEventArgs e)
+        private void Form_FormClosed(object? sender, FormClosedEventArgs e)
         {
             if (ReferenceEquals(sender, form)) ExitThread();
         }
 
-        private void Form_HandleDestroyed(object sender, EventArgs e)
+        private void Form_HandleDestroyed(object? sender, EventArgs e)
         {
-            Form lost = sender as Form;
-            IDesktopHostWindow state = sender as IDesktopHostWindow;
+            Form? lost = sender as Form;
+            IDesktopHostWindow? state = sender as IDesktopHostWindow;
             if (lost == null || state == null || !ReferenceEquals(lost, form) || lost.RecreatingHandle) return;
             if (lost.IsDisposed || lost.Disposing || !state.HandleLost) return; // normal close: FormClosed ends the loop
 
@@ -55,17 +55,17 @@ namespace DesktopHtmlHost
             if (recreateTimer == null)
             {
                 recreateTimer = new Timer { Interval = RecreateDelayMs };
-                recreateTimer.Tick += delegate { recreateTimer.Stop(); Recreate(); };
+                recreateTimer.Tick += delegate { recreateTimer?.Stop(); Recreate(); };
             }
             pendingDisposal = lost;
             recreateTimer.Start();
         }
 
-        private Form pendingDisposal;
+        private Form? pendingDisposal;
 
         private void Recreate()
         {
-            Form lost = pendingDisposal;
+            Form? lost = pendingDisposal;
             pendingDisposal = null;
             if (lost != null)
             {

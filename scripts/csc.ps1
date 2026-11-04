@@ -1,5 +1,5 @@
 # Builds csc-style arguments (/out:, /target:, /main:, /reference:, sources...) as a .NET 10 Windows
-# project, so the test and tool harnesses compile against the same runtime as the host.
+# project, so the test and tool harnesses compile against the same runtime and analysis as the host.
 # Unsafe blocks are on, as in the host (LibraryImport stubs).
 # The output folder receives <name>.exe with its runtime files; it runs on the installed .NET 10
 # desktop runtime (the shipped app itself is self-contained, see NexusWpp.csproj).
@@ -71,6 +71,13 @@ $properties = @(
     '<SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>',
     '<UseWindowsForms>true</UseWindowsForms>',
     '<LangVersion>latest</LangVersion>',
+    # Same analysis as NexusWpp.csproj: nullable references, recommended analyzers and the
+    # code-style rules of .editorconfig (the documentation pass only serves IDE0005).
+    '<Nullable>enable</Nullable>',
+    '<AnalysisLevel>latest-recommended</AnalysisLevel>',
+    '<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>',
+    '<GenerateDocumentationFile>true</GenerateDocumentationFile>',
+    '<CopyDocumentationFileToOutputDirectory>false</CopyDocumentationFileToOutputDirectory>',
     "<PlatformTarget>$platform</PlatformTarget>",
     "<AllowUnsafeBlocks>$unsafe</AllowUnsafeBlocks>",
     "<AssemblyName>$name</AssemblyName>",

@@ -1,16 +1,10 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
-using System.IO;
-using System.Diagnostics;
 using Microsoft.Win32;
 using Microsoft.Web.WebView2.WinForms;
 using Microsoft.Web.WebView2.Core;
-using System.Management;
-using System.Net.NetworkInformation;
-using System.Text;
-using System.Collections.Generic;
-using System.Linq;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Threading;
 
@@ -18,57 +12,58 @@ namespace DesktopHtmlHost
 {
     public partial class DesktopForm : Form, IDesktopHostWindow
     {
-        private WebView2 webView;
-        private string htmlPath;
-        private NotifyIcon trayIcon;
-        private SettingsForm settingsForm;
-        private EventWaitHandle showSettingsEvent;
-        private RegisteredWaitHandle showSettingsWait;
-        private System.Windows.Forms.Timer searchTimer;
-        private int retryCount = 0;
+        private WebView2? webView;
+        private readonly string htmlPath;
+        private NotifyIcon? trayIcon;
+        private SettingsForm? settingsForm;
+        private EventWaitHandle? showSettingsEvent;
+        private RegisteredWaitHandle? showSettingsWait;
+        private readonly System.Windows.Forms.Timer searchTimer;
+        private int retryCount;
         private const int maxRetries = 300;
         private const int progmanFallbackRetries = 8;
-        private bool webViewInitialized = false;
-        private bool webViewInitializing = false;
-        private bool webViewRecoveryPending = false;
-        private CoreWebView2Environment webViewEnvironment;
-        private bool desktopAttached = false;
-        private bool attachedToTemporaryParent = false;
+        private bool webViewInitialized;
+        private bool webViewInitializing;
+        private bool webViewRecoveryPending;
+        private CoreWebView2Environment? webViewEnvironment;
+        private bool desktopAttached;
+        private bool attachedToTemporaryParent;
         private IntPtr currentDesktopParent = IntPtr.Zero;
         private DateTime startupTime = DateTime.Now;
 
         // --- Telemetry state ---
-        private System.Windows.Forms.Timer telemetryTimer;
-        private TelemetryCollector telemetryCollector;
-        private bool telemetryReady = false;
+        private System.Windows.Forms.Timer? telemetryTimer;
+        private TelemetryCollector? telemetryCollector;
+        private bool telemetryReady;
         // volatile: telemetryCollectPending, runtimeSuspended and isClosing are also used from the thread pool.
-        private volatile bool telemetryCollectPending = false;
-        private System.Windows.Forms.Timer fullscreenTimer;
-        private volatile bool runtimeSuspended = false;
+        private volatile bool telemetryCollectPending;
+        private System.Windows.Forms.Timer? fullscreenTimer;
+        private volatile bool runtimeSuspended;
         // Suspend only after the desktop stays covered this long; resume on the first visible check.
         private const int SuspendConfirmMs = 1500;
         private int coveredSince;
         private bool coveredPending;
-        private WindowChangeWatcher windowWatcher;
-        private System.Windows.Forms.Timer windowChangeTimer;
-        private bool sessionInactive = false;
-        private int telemetryGeneration = 0;
+        private WindowChangeWatcher? windowWatcher;
+        private System.Windows.Forms.Timer? windowChangeTimer;
+        private bool sessionInactive;
+        private int telemetryGeneration;
         private string fullscreenReason = "";
-        private volatile bool isClosing = false;
-        private bool displayOff = false;
-        private ShellEventWindow shellEvents;
+        private volatile bool isClosing;
+        private bool displayOff;
+        private ShellEventWindow? shellEvents;
 
         // --- Static Hook and Bounds State ---
-        private static DesktopForm activeInstance;
+        private static DesktopForm? activeInstance;
         private static IntPtr hookId = IntPtr.Zero;
-        private static LowLevelMouseProc mouseProc;
-        private static Thread mouseHookThread;
+        // Kept alive for as long as Windows may call the hook.
+        private static readonly LowLevelMouseProc mouseProc = HookCallback;
+        private static Thread? mouseHookThread;
         private static int mouseHookThreadId;
         private static int mouseHookStopRequested;
-        private static Exception mouseHookError;
+        private static Exception? mouseHookError;
         private static System.Drawing.Rectangle remotePanelBounds = System.Drawing.Rectangle.Empty;
         private static IntPtr renderWindow = IntPtr.Zero;
-        private static MouseRoutingSnapshot mouseRouting;
+        private static MouseRoutingSnapshot? mouseRouting;
 
         // Published by the UI thread as one immutable snapshot. The mouse thread must
         // never invoke a WinForms control or wait for WebView2/the display driver.
@@ -101,7 +96,7 @@ namespace DesktopHtmlHost
         private static partial IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
 
         [LibraryImport("kernel32.dll", EntryPoint = "GetModuleHandleW", StringMarshalling = StringMarshalling.Utf16)]
-        private static partial IntPtr GetModuleHandle(string lpModuleName);
+        private static partial IntPtr GetModuleHandle(string? lpModuleName);
 
         [LibraryImport("kernel32.dll")]
         private static partial uint GetCurrentThreadId();
@@ -206,7 +201,7 @@ namespace DesktopHtmlHost
         private const int WM_LBUTTONUP = 0x0202;
 
         [LibraryImport("user32.dll", EntryPoint = "FindWindowW", StringMarshalling = StringMarshalling.Utf16)]
-        private static partial IntPtr FindWindow(string lpClassName, string lpWindowName);
+        private static partial IntPtr FindWindow(string lpClassName, string? lpWindowName);
 
         [LibraryImport("user32.dll", EntryPoint = "SendMessageTimeoutW")]
         private static partial IntPtr SendMessageTimeout(
@@ -226,7 +221,7 @@ namespace DesktopHtmlHost
         private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
 
         [LibraryImport("user32.dll", EntryPoint = "FindWindowExW", StringMarshalling = StringMarshalling.Utf16)]
-        private static partial IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string lpszClass, string lpszWindow);
+        private static partial IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string lpszClass, string? lpszWindow);
 
         [LibraryImport("user32.dll")]
         private static partial IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
@@ -325,7 +320,7 @@ namespace DesktopHtmlHost
                         if (isClosing || IsDisposed || displayOff == !on) return;
                         displayOff = !on;
                         Program.LogDebug(on ? "Display turned on." : "Display turned off.");
-                        FullscreenTimer_Tick(null, null);
+                        FullscreenTimer_Tick(null, EventArgs.Empty);
                     });
                 if (!shellEvents.DisplayNotificationsRegistered)
                 {
@@ -370,7 +365,7 @@ namespace DesktopHtmlHost
             this.Controls.Add(webView);
         }
 
-        private void WebView_Disposed(object sender, EventArgs e)
+        private void WebView_Disposed(object? sender, EventArgs e)
         {
             if (isClosing || IsDisposed || !ReferenceEquals(sender, webView))
             {
@@ -380,13 +375,13 @@ namespace DesktopHtmlHost
             QueueWebViewRecovery("unexpected WebView2 disposal");
         }
 
-        private void WebView_LifecycleFault(object sender, EventArgs e)
+        private void WebView_LifecycleFault(object? sender, EventArgs e)
         {
             if (isClosing || IsDisposed || !ReferenceEquals(sender, webView)) return;
             QueueWebViewRecovery("suppressed WebView2 lifecycle exception");
         }
 
-        private void SearchTimer_Tick(object sender, EventArgs e)
+        private void SearchTimer_Tick(object? sender, EventArgs e)
         {
             if (desktopAttached && !attachedToTemporaryParent)
             {
@@ -458,7 +453,7 @@ namespace DesktopHtmlHost
             int style = GetWindowLong(this.Handle, GWL_STYLE);
             style |= WS_CHILD;
             style &= ~WS_POPUP;
-            SetWindowLong(this.Handle, GWL_STYLE, style);
+            _ = SetWindowLong(this.Handle, GWL_STYLE, style);
             SetWindowPos(this.Handle, IntPtr.Zero, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
 
             desktopAttached = true;
@@ -518,7 +513,7 @@ namespace DesktopHtmlHost
                 window.Width, window.Height, primary.Left - window.Left, primary.Top - window.Top, primary.Width, primary.Height);
         }
 
-        private string lastLayoutMessage;
+        private string? lastLayoutMessage;
 
         private void PostLayout()
         {
@@ -528,7 +523,7 @@ namespace DesktopHtmlHost
                 RECT bounds;
                 if (!GetWindowRect(Handle, out bounds)) return;
                 System.Drawing.Rectangle window = System.Drawing.Rectangle.FromLTRB(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom);
-                Screen primary = Screen.PrimaryScreen;
+                Screen? primary = Screen.PrimaryScreen;
                 if (window.Width <= 0 || window.Height <= 0 || primary == null) return;
                 string message = BuildLayoutMessage(window, primary.Bounds);
                 if (message != lastLayoutMessage)
@@ -544,7 +539,7 @@ namespace DesktopHtmlHost
             }
         }
 
-        private void SystemEvents_DisplaySettingsChanged(object sender, EventArgs e)
+        private void SystemEvents_DisplaySettingsChanged(object? sender, EventArgs e)
         {
             if (isClosing || IsDisposed) return;
             TryBeginInvoke((MethodInvoker)delegate {
@@ -560,7 +555,7 @@ namespace DesktopHtmlHost
             });
         }
 
-        private void SystemEvents_PowerModeChanged(object sender, PowerModeChangedEventArgs e)
+        private void SystemEvents_PowerModeChanged(object? sender, PowerModeChangedEventArgs e)
         {
             if (e.Mode == PowerModes.Resume)
             {
@@ -568,7 +563,7 @@ namespace DesktopHtmlHost
             }
         }
 
-        private void SystemEvents_SessionSwitch(object sender, SessionSwitchEventArgs e)
+        private void SystemEvents_SessionSwitch(object? sender, SessionSwitchEventArgs e)
         {
             if (e.Reason == SessionSwitchReason.SessionLock ||
                 e.Reason == SessionSwitchReason.RemoteDisconnect ||
@@ -576,7 +571,7 @@ namespace DesktopHtmlHost
             {
                 TryBeginInvoke((MethodInvoker)delegate {
                     sessionInactive = true;
-                    FullscreenTimer_Tick(null, null);
+                    FullscreenTimer_Tick(null, EventArgs.Empty);
                 });
             }
             if (e.Reason == SessionSwitchReason.SessionUnlock ||
@@ -586,7 +581,7 @@ namespace DesktopHtmlHost
             {
                 TryBeginInvoke((MethodInvoker)delegate {
                     sessionInactive = false;
-                    FullscreenTimer_Tick(null, null);
+                    FullscreenTimer_Tick(null, EventArgs.Empty);
                 });
                 QueueDesktopReattach("session became active: " + e.Reason);
             }
@@ -634,7 +629,7 @@ namespace DesktopHtmlHost
             }
         }
 
-        private void SystemEvents_SessionEnding(object sender, SessionEndingEventArgs e)
+        private void SystemEvents_SessionEnding(object? sender, SessionEndingEventArgs e)
         {
             Program.LogDebug("Windows session ending: closing NexusWpp cleanly.");
             BeginCleanShutdown();
@@ -672,7 +667,7 @@ namespace DesktopHtmlHost
             {
                 try
                 {
-                    ResilientWebView2 resilientWebView = webView as ResilientWebView2;
+                    ResilientWebView2? resilientWebView = webView as ResilientWebView2;
                     if (resilientWebView != null)
                     {
                         resilientWebView.BeginShutdown();
@@ -708,6 +703,7 @@ namespace DesktopHtmlHost
                 SystemEvents.SessionSwitch -= SystemEvents_SessionSwitch;
                 SystemEvents.SessionEnding -= SystemEvents_SessionEnding;
                 StopMouseHook();
+                telemetryCollector?.Dispose();
                 if (shellEvents != null) { shellEvents.Dispose(); shellEvents = null; }
                 if (recoveryDelayTimer != null) { recoveryDelayTimer.Dispose(); recoveryDelayTimer = null; }
                 if (searchTimer != null)
@@ -724,7 +720,7 @@ namespace DesktopHtmlHost
                 }
                 if (webView != null)
                 {
-                    ResilientWebView2 resilientWebView = webView as ResilientWebView2;
+                    ResilientWebView2? resilientWebView = webView as ResilientWebView2;
                     if (resilientWebView != null)
                     {
                         resilientWebView.BeginShutdown();
@@ -780,7 +776,7 @@ namespace DesktopHtmlHost
             }
         }
 
-        private bool TryGetCoreWebView2(out CoreWebView2 coreWebView)
+        private bool TryGetCoreWebView2([NotNullWhen(true)] out CoreWebView2? coreWebView)
         {
             coreWebView = null;
             // Startup messages are replayed by the page's runtime-state handshake.
@@ -834,7 +830,7 @@ namespace DesktopHtmlHost
 
         private bool PostWebMessageAsJsonSafe(string payload, string context)
         {
-            CoreWebView2 coreWebView;
+            CoreWebView2? coreWebView;
             if (!TryGetCoreWebView2(out coreWebView))
             {
                 return false;

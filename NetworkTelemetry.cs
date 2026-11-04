@@ -19,12 +19,13 @@ namespace DesktopHtmlHost
 
         sealed class Adapter
         {
-            internal string Id, PdhInstance;
+            internal required string Id, PdhInstance;
         }
 
         // Published values: empty / -1 when unknown, "none" when offline. Never a placeholder.
         internal long RxKBps = -1, TxKBps = -1, LinkSpeedMbps;
-        internal string Ip = "", Ipv6 = "", Name = "", Type = "none", Gateway;
+        internal string Ip = "", Ipv6 = "", Name = "", Type = "none";
+        internal string? Gateway;
 
         readonly Stopwatch clock = Stopwatch.StartNew();
         volatile bool identityDirty = true;
@@ -47,7 +48,7 @@ namespace DesktopHtmlHost
             catch (Exception ex) { Program.LogDebug("Network change notifications unavailable: " + ex.Message); }
         }
 
-        internal void AddCounters(PdhQuery perf)
+        internal void AddCounters(PdhQuery? perf)
         {
             pdhAvailable = perf != null && perf.Add(PdhReceived) && perf.Add(PdhSent);
         }
@@ -75,13 +76,13 @@ namespace DesktopHtmlHost
 
         // Called on the collection thread; perfSampled tells whether the shared PDH query was
         // collected for this tick.
-        internal void Update(PdhQuery perf, bool perfSampled)
+        internal void Update(PdhQuery? perf, bool perfSampled)
         {
             try
             {
                 if (identityDirty || clock.ElapsedMilliseconds - lastIdentityMs >= IdentityRefreshMs) RefreshIdentity();
 
-                if (pdhAvailable && perfSampled)
+                if (pdhAvailable && perfSampled && perf != null)
                 {
                     var received = perf.Instances(PdhReceived);
                     var sent = perf.Instances(PdhSent);
@@ -133,7 +134,7 @@ namespace DesktopHtmlHost
                 var stats = ni.GetIPStatistics();
                 var bytes = new[] { stats.BytesReceived, stats.BytesSent };
                 current[ni.Id] = bytes;
-                long[] before;
+                long[]? before;
                 if (previousBytes.TryGetValue(ni.Id, out before))
                 {
                     rx += Math.Max(0, bytes[0] - before[0]);
@@ -153,7 +154,8 @@ namespace DesktopHtmlHost
             identityDirty = false;
             lastIdentityMs = clock.ElapsedMilliseconds;
             var counted = new List<Adapter>();
-            string ip = "", ipv6 = "", name = "", type = "none", gateway = null;
+            string ip = "", ipv6 = "", name = "", type = "none";
+            string? gateway = null;
             long linkMbps = 0;
             bool pinnedToGateway = false;
 
@@ -164,12 +166,12 @@ namespace DesktopHtmlHost
                 if (pinnedToGateway) continue;
 
                 var ipProps = ni.GetIPProperties();
-                string ipv4Gateway = null;
+                string? ipv4Gateway = null;
                 foreach (GatewayIPAddressInformation gw in ipProps.GatewayAddresses)
                 {
                     if (gw.Address.AddressFamily == AddressFamily.InterNetwork && !gw.Address.Equals(System.Net.IPAddress.Any)) { ipv4Gateway = gw.Address.ToString(); break; }
                 }
-                string v4 = null, v6 = null;
+                string? v4 = null, v6 = null;
                 foreach (var addr in ipProps.UnicastAddresses)
                 {
                     if (addr.Address.AddressFamily == AddressFamily.InterNetwork && v4 == null) v4 = addr.Address.ToString();
@@ -266,7 +268,7 @@ namespace DesktopHtmlHost
             finally
             {
                 if (listPtr != IntPtr.Zero) { try { WlanApi.WlanFreeMemory(listPtr); } catch { } }
-                if (handle != IntPtr.Zero) { try { WlanApi.WlanCloseHandle(handle, IntPtr.Zero); } catch { } }
+                if (handle != IntPtr.Zero) { try { _ = WlanApi.WlanCloseHandle(handle, IntPtr.Zero); } catch { } }
             }
         }
     }

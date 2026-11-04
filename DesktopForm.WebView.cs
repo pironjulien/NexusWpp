@@ -1,18 +1,9 @@
 ﻿using System;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using System.IO;
 using System.Diagnostics;
-using Microsoft.Win32;
-using Microsoft.Web.WebView2.WinForms;
 using Microsoft.Web.WebView2.Core;
-using System.Management;
-using System.Net.NetworkInformation;
-using System.Text;
-using System.Collections.Generic;
-using System.Linq;
 using System.Globalization;
-using System.Threading;
 
 namespace DesktopHtmlHost
 {
@@ -55,7 +46,7 @@ namespace DesktopHtmlHost
                 HardenWebView(webView.CoreWebView2);
 
                 // Configure virtual host mapping to serve files from local directory without HTTP server
-                string directory = Path.GetDirectoryName(htmlPath);
+                string? directory = Path.GetDirectoryName(htmlPath);
                 if (string.IsNullOrEmpty(directory)) directory = AppDomain.CurrentDomain.BaseDirectory;
                 webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                     "nexuswpp.local",
@@ -72,19 +63,19 @@ namespace DesktopHtmlHost
                         if (ev.Source != "http://nexuswpp.local/index.html") return;
 
                         string msg = ev.TryGetWebMessageAsString();
-                        if (msg != null && !msg.StartsWith("BOUNDS:"))
+                        if (msg != null && !msg.StartsWith("BOUNDS:", StringComparison.Ordinal))
                         {
                             Program.LogDebug(msg);
                         }
                         
                         if (msg != null)
                         {
-                            if (msg.StartsWith("BOUNDS:"))
+                            if (msg.StartsWith("BOUNDS:", StringComparison.Ordinal))
                             {
                                 string[] parts = msg.Substring(7).Split(',');
                                 if (parts.Length >= 4)
                                 {
-                                    double scale = activeInstance.GetDpiScale();
+                                    double scale = (activeInstance ?? this).GetDpiScale();
                                     double webViewScale;
                                     if (parts.Length >= 5 &&
                                         double.TryParse(parts[4], NumberStyles.Float, CultureInfo.InvariantCulture, out webViewScale) &&
@@ -101,7 +92,7 @@ namespace DesktopHtmlHost
                                     FindRenderWindow();
                                 }
                             }
-                            else if (msg.StartsWith("SET_POWER:"))
+                            else if (msg.StartsWith("SET_POWER:", StringComparison.Ordinal))
                             {
                                 string guidStr = msg.Substring(10);
                                 SetPowerPlanFromUi(guidStr);
@@ -110,20 +101,20 @@ namespace DesktopHtmlHost
                             {
                                 // The page installs its listener before requesting state.
                                 // Also covers navigation/recovery while the desktop is covered.
-                                FullscreenTimer_Tick(null, null);
+                                FullscreenTimer_Tick(null, EventArgs.Empty);
                                 ApplyWebViewRuntimeState();
                                 PostSettings();
                                 PostLayout();
                             }
                             else if (msg == "REQUEST_TELEMETRY")
                             {
-                                TelemetryTimer_Tick(null, null);
+                                TelemetryTimer_Tick(null, EventArgs.Empty);
                             }
                         }
                     }
                     catch (Exception ex)
                     {
-                        Program.LogDebug(string.Format("WebMessageReceived Error: {0}", ex.ToString()));
+                        Program.LogDebug(string.Format(CultureInfo.InvariantCulture, "WebMessageReceived Error: {0}", ex.ToString()));
                     }
                 };
 
@@ -164,15 +155,19 @@ namespace DesktopHtmlHost
                             // so the first visible frame gets fresh values even after a covered start.
                             try { collector.CollectStats(); }
                             catch (Exception ex) { Program.LogDebug("Telemetry warm-up error: " + ex.Message); }
-                            TryBeginInvoke((MethodInvoker)delegate
+                            // A form closed meanwhile never receives it: its queries are closed here.
+                            if (!TryBeginInvoke((MethodInvoker)delegate
                             {
                                 telemetryCollector = collector;
                                 telemetryReady = true;
                                 if (!runtimeSuspended)
                                 {
-                                    TelemetryTimer_Tick(null, null);
+                                    TelemetryTimer_Tick(null, EventArgs.Empty);
                                 }
-                            });
+                            }))
+                            {
+                                collector.Dispose();
+                            }
                         }
                         catch (Exception ex)
                         {
@@ -182,7 +177,7 @@ namespace DesktopHtmlHost
                 }
                 else if (!runtimeSuspended)
                 {
-                    TelemetryTimer_Tick(null, null);
+                    TelemetryTimer_Tick(null, EventArgs.Empty);
                 }
             }
             catch (Exception ex)
@@ -274,7 +269,7 @@ namespace DesktopHtmlHost
 
         private static bool IsWebView2RuntimeMissing(Exception ex)
         {
-            for (Exception current = ex; current != null; current = current.InnerException)
+            for (Exception? current = ex; current != null; current = current.InnerException)
             {
                 if (current is WebView2RuntimeNotFoundException) return true;
             }
@@ -305,7 +300,7 @@ namespace DesktopHtmlHost
             }
         }
 
-        private void CoreWebView2_ProcessFailed(object sender, CoreWebView2ProcessFailedEventArgs e)
+        private void CoreWebView2_ProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
         {
             if (isClosing || IsDisposed || e == null) return;
             CoreWebView2ProcessFailedKind kind = e.ProcessFailedKind;
@@ -316,7 +311,7 @@ namespace DesktopHtmlHost
             {
                 try
                 {
-                    CoreWebView2 core = sender as CoreWebView2;
+                    CoreWebView2? core = sender as CoreWebView2;
                     if (core == null) { TryGetCoreWebView2(out core); }
                     if (core != null) { core.Reload(); return; }
                 }
