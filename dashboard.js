@@ -1056,7 +1056,8 @@ function updateDiskCard(view, disk, index, track) {
     track(view.card, setGauge(`disk.storage.${index}`, view.ring, view.value, view.container, disk.storagePercent));
     const totalGb = Number(disk.totalGb) || 0;
     const usedGb = Math.max(0, totalGb - (Number(disk.freeGb) || 0));
-    if (view.used) view.used.textContent = totalGb > 0 ? `${num(usedGb, 1)} / ${num(totalGb, 0)} ${GB}` : "—";
+    // One decimal under 1000 Go, none above ("385,2 / 930 Go", "2491 / 3726 Go").
+    if (view.used) view.used.textContent = totalGb > 0 ? `${num(usedGb, usedGb >= 1000 ? 0 : 1)} / ${num(totalGb, 0)} ${GB}` : "—";
     // Throughput text from the host, or the number -1 when the counters could not be read.
     const rate = (text) => {
         const value = parseFloat(text);

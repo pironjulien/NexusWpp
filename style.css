@@ -867,6 +867,14 @@ body {
     text-transform: uppercase;
 }
 
+/* iGPU and NPU side by side (and several disks): half-width cards keep each label on one line
+   with a slightly smaller label font; values keep the size of every other card. */
+.accelerator-row.has-npu:not(.no-igpu) .sub-metric .lbl,
+.disk-row:has(> .gauge-card:nth-child(2):not(.card-hidden)) .sub-metric .lbl {
+    font-size: clamp(8px, calc(0.56 * var(--lvw)), 10px);
+    letter-spacing: 0;
+}
+
 .sub-metric .val {
     font-family: var(--font-heading);
     font-size: clamp(11px, calc(1 * var(--lvw)), 18px);
