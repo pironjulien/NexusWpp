@@ -20,7 +20,7 @@
 ### Une carte par disque
 
 - Chaque disque fixe a sa carte, ajoutée automatiquement (comme la carte NPU) : le disque système d'abord, puis les autres par numéro ; ni USB, ni carte SD, ni disque virtuel ou image montée, ni lecteur réseau. Les cartes se partagent la place d'une carte (côte à côte, deux rangées de deux pour quatre disques) ; dans une fenêtre de moins de 500 × 460 px, seul le disque système reste. Les disques sont relus une fois par minute et leurs compteurs viennent de `PhysicalDisk` (instances « 0 C: », « 1 D: »), un disque par carte.
-- Titre : type (« SSD », ou « HDD » pour un disque à plateaux), modèle et température que le disque donne lui-même (« SSD Samsung 990 PRO 1TB · 48 °C »), lue sans droits administrateur (`IOCTL_STORAGE_QUERY_PROPERTY`, `StorageDeviceTemperatureProperty`, la source du Gestionnaire des tâches) toutes les 10 s sur secteur, 60 s sur batterie. Vérifié sur ce PC : 48 °C au repos, 54 °C après 50 s d'écriture continue, 53 °C 30 s plus tard.
+- Titre : type (« SSD », ou « HDD » pour un disque à plateaux), modèle sans sa capacité (déjà dans la carte) ni sa référence de pièce (« Micron_2400_MTFDKBA512QFM » → « Micron 2400 ») et température que le disque donne lui-même (« SSD Samsung 990 PRO · 48 °C »), lue sans droits administrateur (`IOCTL_STORAGE_QUERY_PROPERTY`, `StorageDeviceTemperatureProperty`, la source du Gestionnaire des tâches) toutes les 10 s sur secteur, 60 s sur batterie. Vérifié sur ce PC : 48 °C au repos, 54 °C après 50 s d'écriture continue, 53 °C 30 s plus tard.
 - Test de disposition : 63 cas de plus, deux, trois et quatre disques simulés sur sept tailles d'écran.
 
 ## 2026-11-04 — 1.0.55.0

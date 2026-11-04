@@ -1009,6 +1009,18 @@ function setDiskCardShown(view, shown) {
     view.card.setAttribute("aria-hidden", shown ? "false" : "true");
 }
 
+// Disk model without what the card already shows or what reads as noise in a title: the size
+// ("1TB", "2000GB", the card gives it) and part numbers ("MTFDKBA512QFM"), with underscores read
+// as spaces: "Micron_2400_MTFDKBA512QFM" -> "Micron 2400", "Samsung SSD 990 PRO 1TB" -> "Samsung
+// SSD 990 PRO". A name made only of a part number ("ST4000DM004-2U9104") is kept whole.
+function diskModelName(name) {
+    const words = String(name).replace(/_/g, " ").split(/\s+/).filter(Boolean);
+    const isSize = word => /^\d+(\.\d+)?\s*(GB|TB|G|T)$/i.test(word);
+    const isPartNumber = word => word.length >= 9 && /\d/.test(word) && /[A-Z]/i.test(word);
+    const kept = words.filter(word => !isSize(word) && !isPartNumber(word));
+    return kept.length ? kept.join(" ") : words.join(" ");
+}
+
 // Ring: space used. Title: kind, model and the temperature the drive reports (as Task Manager),
 // sized for the widest one. Details: space used / size, read, response time, write.
 function updateDiskCard(view, disk, index, track) {
@@ -1026,7 +1038,7 @@ function updateDiskCard(view, disk, index, track) {
     setHeldText(view.read, rate(disk.readMb));
     setHeldText(view.write, rate(disk.writeMb));
     setHeldText(view.response, NexusTelemetry.valid(disk.responseTimeMs) ? `${num(disk.responseTimeMs, 1)} ms` : null);
-    const base = disk.name ? titleWithKind(disk.rotational ? "HDD" : "SSD", disk.name) : "SSD";
+    const base = disk.name ? titleWithKind(disk.rotational ? "HDD" : "SSD", diskModelName(disk.name)) : "SSD";
     const temperature = NexusTelemetry.valid(disk.temp) && disk.temp > 0 ? disk.temp : 0;
     if (temperature) view.title.dataset.hasTemperature = "1";
     const title = base + (temperature ? ` · ${temperature} °C` : "");
