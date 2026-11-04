@@ -5,9 +5,8 @@ $distDir = Join-Path $projectRoot "dist"
 $payloadDir = Join-Path $distDir "payload"
 $payloadZip = Join-Path $distDir "NexusWppPayload.zip"
 $installerExe = Join-Path $distDir "NexusWppSetup.exe"
-$installerSource = Join-Path $projectRoot "installer\NexusWppInstaller.cs"
-$installerManifest = Join-Path $projectRoot "installer\NexusWppInstaller.manifest"
-$cscScript = Join-Path $PSScriptRoot "csc_netfx.ps1"
+$installerProject = Join-Path $projectRoot "installer\NexusWppInstaller.csproj"
+$installerPublishDir = Join-Path $projectRoot "work\installer-publish"
 
 function Get-SignToolPath {
     $command = Get-Command signtool.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source
@@ -68,25 +67,12 @@ foreach ($file in $payloadFiles) {
 
 Compress-Archive -Path (Join-Path $payloadDir "*") -DestinationPath $payloadZip -Force
 
-$compilerArgs = @(
-    "/target:winexe",
-    "/out:$installerExe",
-    "/win32icon:$(Join-Path $projectRoot "icon.ico")",
-    "/win32manifest:$installerManifest",
-    "/resource:$payloadZip,NexusWpp.Payload.zip",
-    "/reference:System.IO.Compression.dll",
-    "/reference:System.IO.Compression.FileSystem.dll",
-    "/reference:System.Drawing.dll",
-    "/reference:System.Management.dll",
-    "/reference:System.Windows.Forms.dll",
-    $installerSource,
-    (Join-Path $projectRoot 'work\obj\ReleaseVersion.cs')
-)
-
-& $cscScript /nologo @compilerArgs
-if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $installerExe)) {
-    throw "Installer compilation failed with exit code $LASTEXITCODE."
+# One self-contained, compressed .NET 10 exe that embeds the payload: it runs on a bare Windows.
+& dotnet publish $installerProject -c Release -o $installerPublishDir "-p:PayloadZip=$payloadZip" --nologo -v quiet -clp:ErrorsOnly
+if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath (Join-Path $installerPublishDir "NexusWppSetup.exe"))) {
+    throw "Installer publication failed with exit code $LASTEXITCODE."
 }
+Copy-Item -LiteralPath (Join-Path $installerPublishDir "NexusWppSetup.exe") -Destination $installerExe -Force
 
 if (!$signToolPath) {
     throw "signtool.exe not found. Install the Windows SDK or add signtool.exe to PATH."

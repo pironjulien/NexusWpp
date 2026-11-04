@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- One self-contained, compressed NexusWppSetup.exe on .NET 10: it runs on a bare Windows
+       with nothing installed. The application payload (NexusWppPayload.zip, made by
+       scripts/build_installer.ps1) is embedded as a resource. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <AssemblyName>NexusWppSetup</AssemblyName>
+    <RootNamespace>NexusWppInstaller</RootNamespace>
+    <ApplicationIcon>..\icon.ico</ApplicationIcon>
+    <ApplicationManifest>NexusWppInstaller.manifest</ApplicationManifest>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <GenerateAssemblyVersionAttribute>false</GenerateAssemblyVersionAttribute>
+    <GenerateAssemblyFileVersionAttribute>false</GenerateAssemblyFileVersionAttribute>
+    <GenerateAssemblyInformationalVersionAttribute>false</GenerateAssemblyInformationalVersionAttribute>
+    <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
+    <GenerateAssemblyProductAttribute>false</GenerateAssemblyProductAttribute>
+    <GenerateAssemblyTitleAttribute>false</GenerateAssemblyTitleAttribute>
+    <DebugType>none</DebugType>
+    <Optimize>true</Optimize>
+    <Deterministic>true</Deterministic>
+    <PayloadZip Condition="'$(PayloadZip)' == ''">..\dist\NexusWppPayload.zip</PayloadZip>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="NexusWppInstaller.cs" />
+    <Compile Include="..\work\obj\ReleaseVersion.cs" />
+    <EmbeddedResource Include="$(PayloadZip)" LogicalName="NexusWpp.Payload.zip" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Management" Version="10.0.14" />
+  </ItemGroup>
+
+</Project>

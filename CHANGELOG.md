@@ -1,5 +1,20 @@
 # Changelog
 
+## Non publié
+
+### Installeur en .NET 10
+
+- `NexusWppSetup.exe` est désormais une seule exe .NET 10 autonome et compressée (`installer/NexusWppInstaller.csproj`) au lieu d'un programme .NET Framework 4.8 : tout le produit est en .NET 10. Elle pèse 102 Mo, runtime compris.
+- Le signataire du programme d'installation WebView2 téléchargé est lu dans la vérification WinTrust elle-même, au lieu de l'API obsolète `CreateFromSignedFile`.
+- En mode `/silent`, un échec ne bloque plus sur une boîte de dialogue : le code de sortie et le journal le signalent.
+- La CI installe et désinstalle l'installeur en silencieux à chaque envoi (`scripts/test_installer.ps1`).
+
+### Sécurité de la CI
+
+- Audit des workflows par zizmor, comme sur les autres produits Nexus (l'entrée du 31/10 le disait présent, il manquait).
+- Badge de version du README lu sur la dernière release au lieu d'être figé à 1.0.49.
+- SDK WebView2 1.0.4314.35 ; Dependabot suit aussi le projet de l'installeur.
+
 ## 2026-11-04 — 1.0.52.0
 
 ### Passage à .NET 10
@@ -7,7 +22,7 @@
 - NexusWpp tourne désormais sur .NET 10, comme les autres produits Nexus, au lieu du .NET Framework 4.8. Le paquet Store et l'installeur embarquent le runtime : rien à installer de plus. Le paquet Store passe de quelques Mo à 57 Mo (138 Mo une fois installé, contre 3 Mo).
 - Démarrage prioritaire : l'API StartupTask du paquet passe par la projection WinRT du SDK Windows au lieu des métadonnées de Windows.
 - La lecture des modes d'alimentation par `powercfg` déclare le jeu de caractères OEM de la console (850 en français), que .NET ne connaît pas sans le fournisseur de pages de code.
-- Les bancs de tests (`scripts/csc.ps1`) compilent sur .NET 10 et le sérialiseur JSON de .NET ; l'installeur seul reste en .NET Framework 4.8 (`scripts/csc_netfx.ps1`) pour se lancer avant toute installation.
+- Les bancs de tests (`scripts/csc.ps1`) compilent sur .NET 10 et le sérialiseur JSON de .NET.
 - `scripts/publish_host.ps1` publie l'hôte autonome pour le MSIX, l'installeur et le déploiement local ; la CI installe le SDK .NET 10. CodeQL et Scorecard restent actifs.
 
 ## 2026-11-01 — 1.0.51.0
@@ -16,9 +31,9 @@
 
 - Lancé avec le bureau, NexusWpp voyait souvent l'Explorateur redémarrer quelques secondes plus tard. Sa fenêtre était alors recréée, mais la nouvelle fenêtre ignorait que WebView2 avait déjà fonctionné : un échec passager de démarrage (l'ancien moteur libérant encore son dossier) était pris pour une absence de WebView2 et NexusWpp se fermait. La fenêtre recréée réessaie maintenant avec la même temporisation que les autres reprises.
 
-## 2026-10-31 — Retrait de Scorecard et CodeQL
+## 2026-10-31 — Scorecard et CodeQL : retrait puis rétablissement
 
-- OpenSSF Scorecard (workflow et badge du README) et l'analyse CodeQL de GitHub retirés, comme sur les autres produits Nexus. Restent gitleaks, zizmor et les tests à chaque envoi.
+- OpenSSF Scorecard et l'analyse CodeQL de GitHub ont été retirés, puis rétablis le soir même : ils restent actifs sur tous les produits Nexus. Seul le badge Scorecard du README n'est pas revenu.
 
 ## 2026-10-28 — 1.0.50.0
 

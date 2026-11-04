@@ -3,7 +3,8 @@
 **Your PC, at a glance. A live hardware dashboard as your Windows wallpaper.**
 
 [![Microsoft Store](https://img.shields.io/badge/Microsoft%20Store-Get%20it%20free-0078D4?logo=microsoft)](https://apps.microsoft.com/detail/9N2VCVDH7QDX)
-[![Version](https://img.shields.io/badge/version-1.0.49-53fff4)](CHANGELOG.md)
+[![Version](https://img.shields.io/github/v/release/pironjulien/NexusWpp?label=version&color=53fff4)](CHANGELOG.md)
+[![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)](NexusWpp.csproj)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4)](#quick-start)
 [![License](https://img.shields.io/github/license/pironjulien/NexusWpp)](LICENSE)
 
@@ -47,7 +48,7 @@ NexusWpp displays a dynamic hardware cockpit directly on the Windows desktop, wi
 Prerequisites:
 
 - Windows 10/11.
-- .NET 10 SDK (free) to compile: `NexusWpp.csproj` targets .NET 10 and is published self-contained, so the Store package and the installer ship the runtime and users have nothing to install. Only the installer bootstrapper (`scripts/csc_netfx.ps1`) still targets the .NET Framework 4.8 built into Windows, so it runs before anything is installed.
+- .NET 10 SDK (free) to compile: `NexusWpp.csproj` targets .NET 10 and is published self-contained, so the Store package and the installer ship the runtime and users have nothing to install. The installer (`installer/NexusWppInstaller.csproj`) is one self-contained, compressed .NET 10 executable that embeds the application.
 - Microsoft Edge WebView2 Runtime.
 - NVIDIA is optional; detailed measurements use the isolated `nvidia-smi` process, with Windows counters when that source is unavailable.
 

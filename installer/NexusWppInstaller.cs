@@ -4,7 +4,6 @@ using System.Drawing;
 using System.IO;
 using System.IO.Compression;
 using System.Management;
-using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
@@ -42,7 +41,6 @@ namespace NexusWppInstaller
             bool uninstall = HasArg(args, "/uninstall") || HasArg(args, "-uninstall");
 
             try { SetProcessDPIAware(); } catch { }
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
             if (!IsAdministrator())
             {
@@ -70,7 +68,8 @@ namespace NexusWppInstaller
             catch (Exception ex)
             {
                 Log("Installation failed: " + ex);
-                Show(false, "NexusWpp installation failed:\r\n\r\n" + ex.Message + "\r\n\r\nLog: " + LogPath);
+                // /silent never blocks on a dialog: the exit code and the log report the failure.
+                Show(silent, "NexusWpp installation failed:\r\n\r\n" + ex.Message + "\r\n\r\nLog: " + LogPath);
                 return 1;
             }
         }
@@ -174,7 +173,7 @@ namespace NexusWppInstaller
             progress.Report(70, "Suppression de l'entree Applications installees...");
             RemoveUninstallEntry();
 
-            string self = Assembly.GetExecutingAssembly().Location;
+            string self = Environment.ProcessPath;
             string installFullPath = Path.GetFullPath(InstallDir);
             string selfFullPath = Path.GetFullPath(self);
             progress.Report(84, "Suppression des fichiers...");
@@ -322,7 +321,7 @@ namespace NexusWppInstaller
                 }
                 if (!IsTrustedInstallDir())
                 {
-                    string self = Path.GetFullPath(Assembly.GetExecutingAssembly().Location);
+                    string self = Path.GetFullPath(Environment.ProcessPath);
                     if (self.StartsWith(Path.GetFullPath(InstallDir) + "\\", StringComparison.OrdinalIgnoreCase))
                     {
                         throw new InvalidOperationException(InstallDir + " is not owned by administrators. Run the installer from another folder.");
@@ -334,11 +333,11 @@ namespace NexusWppInstaller
 
             if (!Directory.Exists(InstallDir))
             {
-                Directory.CreateDirectory(InstallDir, BuildInstallDirSecurity());
+                BuildInstallDirSecurity().CreateDirectory(InstallDir);
             }
             else
             {
-                Directory.SetAccessControl(InstallDir, BuildInstallDirSecurity());
+                new DirectoryInfo(InstallDir).SetAccessControl(BuildInstallDirSecurity());
             }
 
             installDirReady = true;
@@ -347,7 +346,7 @@ namespace NexusWppInstaller
 
         private static void VerifyInstallDirSecurity()
         {
-            DirectorySecurity security = Directory.GetAccessControl(InstallDir);
+            DirectorySecurity security = new DirectoryInfo(InstallDir).GetAccessControl();
             if (!IsTrustedInstallDir() || !security.AreAccessRulesProtected)
             {
                 throw new InvalidOperationException("The security of " + InstallDir + " could not be verified after installation.");
@@ -443,9 +442,11 @@ namespace NexusWppInstaller
             string bootstrapper = Path.Combine(downloadDir, "MicrosoftEdgeWebview2Setup.exe");
             try
             {
-                using (WebClient client = new WebClient())
+                using (var client = new System.Net.Http.HttpClient())
+                using (Stream download = client.GetStreamAsync(WebView2BootstrapperUrl).GetAwaiter().GetResult())
+                using (FileStream file = File.Create(bootstrapper))
                 {
-                    client.DownloadFile(WebView2BootstrapperUrl, bootstrapper);
+                    download.CopyTo(file);
                 }
 
                 string signer;
@@ -724,7 +725,7 @@ namespace NexusWppInstaller
 
         private static void PersistInstallerForUninstall()
         {
-            string source = Assembly.GetExecutingAssembly().Location;
+            string source = Environment.ProcessPath;
             string destination = Path.Combine(InstallDir, "NexusWppSetup.exe");
             if (!string.Equals(Path.GetFullPath(source), Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase))
             {
@@ -845,10 +846,11 @@ namespace NexusWppInstaller
         internal static bool IsSignedByMicrosoft(string path, out string signer)
         {
             signer = "unsigned";
-            if (!WinTrust.Verify(path)) return false;
+            X509Certificate2 verified;
+            if (!WinTrust.Verify(path, out verified)) return false;
             try
             {
-                using (var certificate = new X509Certificate2(X509Certificate.CreateFromSignedFile(path)))
+                using (var certificate = verified)
                 {
                     signer = certificate.Subject;
                     string commonName = certificate.GetNameInfo(X509NameType.SimpleName, false);
@@ -935,8 +937,20 @@ namespace NexusWppInstaller
         [DllImport("wintrust.dll", CharSet = CharSet.Unicode)]
         private static extern int WinVerifyTrust(IntPtr hwnd, [MarshalAs(UnmanagedType.LPStruct)] Guid action, ref WINTRUST_DATA data);
 
-        internal static bool Verify(string path)
+        [DllImport("wintrust.dll")]
+        private static extern IntPtr WTHelperProvDataFromStateData(IntPtr stateData);
+
+        [DllImport("wintrust.dll")]
+        private static extern IntPtr WTHelperGetProvSignerFromChain(IntPtr provData, uint signerIndex, bool counterSigner, uint counterSignerIndex);
+
+        [DllImport("wintrust.dll")]
+        private static extern IntPtr WTHelperGetProvCertFromChain(IntPtr signer, uint certIndex);
+
+        // The signer certificate is read from the verification that just succeeded, so the name
+        // checked afterwards belongs to the very signature WinVerifyTrust accepted.
+        internal static bool Verify(string path, out X509Certificate2 signer)
         {
+            signer = null;
             const uint WTD_UI_NONE = 2, WTD_REVOKE_NONE = 0, WTD_CHOICE_FILE = 1, WTD_STATEACTION_VERIFY = 1, WTD_STATEACTION_CLOSE = 2;
             var file = new WINTRUST_FILE_INFO { cbStruct = (uint)Marshal.SizeOf(typeof(WINTRUST_FILE_INFO)), pcwszFilePath = path };
             IntPtr filePointer = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(WINTRUST_FILE_INFO)));
@@ -953,9 +967,18 @@ namespace NexusWppInstaller
                     dwStateAction = WTD_STATEACTION_VERIFY
                 };
                 int result = WinVerifyTrust(IntPtr.Zero, GenericVerifyV2, ref data);
+                if (result == 0)
+                {
+                    IntPtr provider = WTHelperProvDataFromStateData(data.hWVTStateData);
+                    IntPtr signerData = provider == IntPtr.Zero ? IntPtr.Zero : WTHelperGetProvSignerFromChain(provider, 0, false, 0);
+                    IntPtr leaf = signerData == IntPtr.Zero ? IntPtr.Zero : WTHelperGetProvCertFromChain(signerData, 0);
+                    // CRYPT_PROVIDER_CERT: DWORD cbStruct, then the PCCERT_CONTEXT pointer.
+                    IntPtr context = leaf == IntPtr.Zero ? IntPtr.Zero : Marshal.ReadIntPtr(leaf, IntPtr.Size);
+                    if (context != IntPtr.Zero) signer = new X509Certificate2(context);
+                }
                 data.dwStateAction = WTD_STATEACTION_CLOSE;
                 WinVerifyTrust(IntPtr.Zero, GenericVerifyV2, ref data);
-                return result == 0;
+                return result == 0 && signer != null;
             }
             finally
             {
