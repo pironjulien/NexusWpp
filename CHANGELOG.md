@@ -2,6 +2,8 @@
 
 ## Non publié
 
+## 2026-11-04 — 1.0.54.0
+
 ### Animation plus fluide pour presque rien
 
 - Sur secteur, le radar, ses particules, les anneaux des logos et l'animation des jauges passent de 12 à 20 images par seconde (11,2 → 17,5 images réellement produites, +56 %). Sur batterie et en mode économie d'énergie de Windows, la cadence reste à 12 ; la mise en veille complète au repos, quand le bureau est couvert (plein écran) ou l'écran éteint ne change pas.
