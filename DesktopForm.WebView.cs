@@ -33,6 +33,9 @@ namespace DesktopHtmlHost
                     // cover the whole desktop (two snapped halves) and drop its frame, flashing black when one closes.
                     // NexusWpp pauses its own work for covered desktops; the composed scene must stay.
                     options.AdditionalBrowserArguments = "--disable-features=EdgeSidebar,EdgeTranslate,CalculateNativeWinOcclusion";
+                    // The page speaks the user's Windows display language, like the tray menu and the
+                    // settings window (i18n.js: French for French, English otherwise).
+                    options.Language = CultureInfo.CurrentUICulture.Name;
                     webViewEnvironment = await CoreWebView2Environment.CreateAsync(null, userDataFolder, options);
                 }
 

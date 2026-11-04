@@ -21,6 +21,12 @@
 - Une alerte (« Charge élevée ») qui ne tient pas à côté du titre passe en dessous au lieu de couper le titre ; dans une carte basse, le titre passe sur deux lignes. Dans les plus petites cartes (fenêtres de 800 × 450), l'alerte reste lue par les lecteurs d'écran et l'état se voit à la bordure orange ou aux valeurs grisées. Les valeurs de détail des cartes iGPU et NPU ont la même taille que celles des autres cartes.
 - Test : le test de disposition (741 cas) vérifie qu'aucun titre ne déborde et que tous les titres ont la même taille.
 
+### Textes en français et en anglais
+
+- La page suit la langue d'affichage Windows de l'utilisateur, comme le menu de la zone de notification et la fenêtre de réglages : l'hôte la donne à WebView2 (`CoreWebView2EnvironmentOptions.Language`), et la page passe en français pour le français, en anglais sinon (et non plus en français quand la langue est inconnue).
+- Libellés revus, avec les termes du Gestionnaire des tâches quand il en a : « TOP PROCESSUS » → « PROCESSUS EN TÊTE » (« BUSIEST PROCESS »), « CADENCE » → « VITESSE » (« SPEED »), « PROC / THREADS » → « PROCESSUS / THREADS », « VRAM » → « MÉMOIRE GPU » (« GPU MEMORY »), « PUISSANCE GPU » → « CONSOMMATION » (« POWER DRAW »), « RECEVOIR (DÉBIT) » / « ENVOYER (DÉBIT) » → « RÉCEPTION » / « ENVOI » (« RECEIVE » / « SEND »), « PING RÉSEAU » → « LATENCE » (« LATENCY »), « COMMITTED MEMORY » → « COMMITTED », « Capteurs périmés » → « Capteurs sans réponse » (« Sensors not responding »), « Data expired » → « Data out of date ». Les noms des modes d'alimentation viennent de Windows et ne sont pas traduits par NexusWpp.
+- Test `scripts/tests/i18n.test.js` (lancé par `test_features.ps1`) : il échoue si un texte manque dans une des deux langues, si la page utilise une clé non traduite ou si une clé traduite n'est plus utilisée.
+
 ## 2026-11-04 — 1.0.54.0
 
 ### Animation plus fluide pour presque rien
