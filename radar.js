@@ -364,8 +364,8 @@ class DataPacket {
         this.color = color;
         this.size = 1.5 + Math.random() * 2.5;
     }
-    update() {
-        this.progress += this.speed;
+    update(frameScale) {
+        this.progress += this.speed * frameScale;
         if (this.progress > 1.0) this.progress = 1.0;
         
         // Path linear interpolation with spring curves
@@ -490,6 +490,7 @@ function renderStaticBackground() {
     bgCtx.lineWidth = 1;
     
     // Draw concentric radar lines around the same center used by the telemetry nodes.
+let lastMotionStamp = 0; // time of the last advanced frame; 0 after a sleep or a pause
     const { cx, cy, radarStep, maxRadarRadius } = getTelemetryLayout();
     for (let r = radarStep; r <= maxRadarRadius + 0.01; r += radarStep) {
         bgCtx.beginPath();
@@ -515,16 +516,16 @@ function wakeCanvas() {
     }
 }
 
-// --- One 12 Hz clock for all continuous motion ---
+// --- One shared clock for all continuous motion ---
 // The canvas, the two logo spinner rings and the gauge ring easing share the canvas
-// tick, so the page commits at most 12 animation frames per second instead of a
+// tick, so the page commits at most MOTION_FPS animation frames per second instead of a
 // compositor animation and transitions running at the display refresh rate.
-// Spinner positions match the former CSS steps(): 180 steps per 15 s and 144 steps
-// per 12 s in reverse, i.e. one 2.5 or 2 degree step every 83 ms.
+// Spinners turn once per 15 s and once per 12 s in reverse, one step per tick.
 const logoSpinners = [
-    { element: document.querySelector(".vram-scanner-eye"), node: "igpu", periodMs: 15000, steps: 180, reverse: false },
-    { element: document.querySelector(".npu-scanner-eye"), node: "npuAccel", periodMs: 12000, steps: 144, reverse: true }
+    { element: document.querySelector(".vram-scanner-eye"), node: "igpu", periodMs: 15000, reverse: false },
+    { element: document.querySelector(".npu-scanner-eye"), node: "npuAccel", periodMs: 12000, reverse: true }
 ].filter(spinner => spinner.element);
+        lastMotionStamp = 0;
 let decorativeMotionMs = 0;
 let lastDecorativeStamp = 0;
 let canvasIdle = false; // the canvas shows its final frame; ticks only move the spinners/rings
@@ -542,8 +543,8 @@ function startMotionClock() {
 
 function applySpinner(spinner) {
     const progress = (decorativeMotionMs % spinner.periodMs) / spinner.periodMs;
-    const step = Math.floor((spinner.reverse ? 1 - progress : progress) * spinner.steps) % spinner.steps;
-    const angle = step * 360 / spinner.steps;
+    // Continuous angle (0.1 degree grid): one step per animation tick, whatever the cadence.
+    const angle = (Math.round((spinner.reverse ? 1 - progress : progress) * 3600) % 3600) / 10;
     if (spinner.angle === angle) return;
     spinner.angle = angle;
     spinner.element.style.transform = `rotate(${angle}deg)`;
@@ -551,6 +552,7 @@ function applySpinner(spinner) {
 
 // Advances the spinners and ring easing; returns true while either still moves.
 function stepDecorativeMotion(timestamp) {
+    lastMotionStamp = 0;
     const easing = stepRingTweens(performance.now());
     const spinning = !decorativeMotionHeld() && logoSpinners.some(spinner => telemetryNodes[spinner.node].visible !== false);
     if (spinning && lastDecorativeStamp) decorativeMotionMs += Math.max(0, timestamp - lastDecorativeStamp);
@@ -657,7 +659,18 @@ document.addEventListener("transitionrun", () => {
 
 // Main update physics and rendering loop
 let lastPhysicsTime = 0;
-const physicsFpsInterval = 1000 / 12; // active canvas cadence; sleeps fully when idle
+// Active cadence; the clock sleeps fully when idle, covered or paused. Measured off screen with
+// real telemetry (i7-14700K, UHD 770, 2560x1440 at 125 %): 12 -> 20 Hz is 11.2 -> 17.5 frames/s
+// for +0.4 point of one core and +0.9 point of iGPU 3D; 24 Hz costs +2.1 and +1.6, 60 Hz +7.5
+// and +4.6. On battery or under Windows energy saver the former 12 Hz stays.
+const MOTION_FPS = 20;
+const MOTION_FPS_ECONOMY = 12;
+let physicsFpsInterval = 1000 / MOTION_FPS;
+const PHYSICS_REFERENCE_MS = 1000 / 12; // cadence the per-frame motion constants were tuned at
+
+function setMotionEconomy(economy) {
+    physicsFpsInterval = 1000 / (economy ? MOTION_FPS_ECONOMY : MOTION_FPS);
+}
 function updatePhysics(timestamp, renderOnly = false) {
     if (!renderOnly && (!isCanvasLoopRunning || runtimeSuspended)) return;
     
@@ -682,6 +695,10 @@ function updatePhysics(timestamp, renderOnly = false) {
     }
     
     ctx.clearRect(0, 0, width, height);
+    // Motion per frame was tuned at 12 Hz: scale it by the real time since the previous
+    // frame so speeds stay the same at any cadence (one frame's worth after a wake).
+    const frameScale = renderOnly ? 0 : (lastMotionStamp ? Math.min(timestamp - lastMotionStamp, physicsFpsInterval * 2) : physicsFpsInterval) / PHYSICS_REFERENCE_MS;
+    if (!renderOnly) lastMotionStamp = timestamp;
     
     // 1. Draw sci-fi background target radar/circles (Offscreen Pre-rendered!)
     if (!bgCanvas || bgCanvas.width !== canvas.width || bgCanvas.height !== canvas.height) {
@@ -703,7 +720,7 @@ function updatePhysics(timestamp, renderOnly = false) {
         // Orbit ring rotation angle increment
         const baseRotSpeed = 0.008;
         const loadFactor = (node.value || 0) / 100;
-        if (!renderOnly) node.rotAngle += baseRotSpeed + (loadFactor * 0.06);
+        if (!renderOnly) node.rotAngle += (baseRotSpeed + (loadFactor * 0.06)) * frameScale;
     }
     
     // 3. Neural data flow data packets spawner
@@ -754,7 +771,7 @@ function updatePhysics(timestamp, renderOnly = false) {
     // 5. Update and draw data packet signals traveling
     for (let i = dataPackets.length - 1; i >= 0; i--) {
         const p = dataPackets[i];
-        if (!renderOnly) p.update();
+        if (!renderOnly) p.update(frameScale);
         p.draw();
         
         // When packet reaches center NPU node
@@ -768,7 +785,7 @@ function updatePhysics(timestamp, renderOnly = false) {
     }
     
     // Decay NPU core radius back to base size
-    if (!renderOnly) telemetryNodes.npu.radius = Math.max(50, telemetryNodes.npu.radius - 0.25);
+    if (!renderOnly) telemetryNodes.npu.radius = Math.max(50, telemetryNodes.npu.radius - 0.25 * frameScale);
     
     // 6. Draw component nodes
     for (let i = 0; i < telemetryNodeList.length; i++) {
@@ -889,11 +906,12 @@ function updatePhysics(timestamp, renderOnly = false) {
     for (let i = coreParticles.length - 1; i >= 0; i--) {
         const p = coreParticles[i];
         if (!renderOnly) {
-            p.x += p.vx;
-            p.y += p.vy;
-            p.vx *= 0.95;
-            p.vy *= 0.95;
-            p.life--;
+            p.x += p.vx * frameScale;
+            p.y += p.vy * frameScale;
+            const drag = Math.pow(0.95, frameScale);
+            p.vx *= drag;
+            p.vy *= drag;
+            p.life -= frameScale;
         }
         
         ctx.save();

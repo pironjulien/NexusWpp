@@ -27,7 +27,7 @@
 }
 
 /* Pause any CSS animation as well as the canvas while the desktop is hidden.
-   Continuous decorative motion runs on the 12 Hz script clock (radar.js), which
+   Continuous decorative motion runs on the shared script clock (radar.js), which
    also holds it still under Windows energy saver or reduced motion. */
 .runtime-suspended *,
 .runtime-suspended *::before,
@@ -489,7 +489,7 @@ body {
     stroke-dasharray: 477.5; /* 2 * PI * 76 = 477.5 */
     stroke-dashoffset: 477.5;
     /* No CSS transition: dashboard.js eases the offset over 0.18 s on the shared
-       12 Hz animation clock instead of repainting filtered rings at the display rate. */
+       script animation clock instead of repainting filtered rings at the display rate. */
     
     /* Optimize stroke animation and prepare layer promotion */
     will-change: stroke-dashoffset, filter;
@@ -534,7 +534,7 @@ body {
     border: 1px solid transparent;
     border-top: 1px solid rgba(48, 209, 88, 0.45);
     border-bottom: 1px solid rgba(48, 209, 88, 0.45);
-    /* Turned by radar.js on the shared 12 Hz clock (180 steps per 15 s). */
+    /* Turned by radar.js on the shared animation clock (one turn per 15 s). */
     pointer-events: none;
     will-change: transform;
     transform: translate3d(0, 0, 0);
@@ -548,7 +548,7 @@ body {
     border: 1px solid transparent;
     border-left: 1px solid rgba(0, 199, 190, 0.48);
     border-right: 1px solid rgba(100, 210, 255, 0.48);
-    /* Turned by radar.js on the shared 12 Hz clock (144 steps per 12 s, reversed). */
+    /* Turned by radar.js on the shared animation clock (one turn per 12 s, reversed). */
     pointer-events: none;
     will-change: transform;
     transform: translate3d(0, 0, 0);
@@ -881,11 +881,15 @@ body {
     margin-top: 0;
 }
 
+/* The fill keeps its full width and is scaled on the compositor (transform): a new value
+   animates without a layout or a repaint on each frame, unlike a width transition. */
 .sub-progress-fill {
     height: 100%;
-    width: 0%;
+    width: 100%;
     border-radius: 4px;
-    transition: width 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .igpu-vram-bar {

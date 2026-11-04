@@ -212,7 +212,7 @@ sealed class RuntimePauseRegression : Form
             // The test machine's own "Animation effects" setting must not decide the result
             // (CI runners on Windows Server have it off): pin motion to "allowed" here.
             await view.CoreWebView2.CallDevToolsProtocolMethodAsync("Emulation.setEmulatedMedia", "{\"features\":[{\"name\":\"prefers-reduced-motion\",\"value\":\"no-preference\"}]}");
-            // One 12 Hz clock: the logo rings step every 83 ms from script, with no CSS animation.
+            // One shared clock (20 Hz on mains): the logo rings step once per tick from script, with no CSS animation.
             // The layout fixture freezes the page; release it to observe live motion.
             const string spinnerState = "logoSpinners.map(s => s.element.style.transform).join(',')";
             const string countSpinnerSteps = @"new Promise(resolve => { const seen = []; const start = performance.now();
@@ -224,20 +224,24 @@ sealed class RuntimePauseRegression : Form
                 "{\"expression\":" + System.Text.Json.JsonSerializer.Serialize(countSpinnerSteps) + ",\"awaitPromise\":true,\"returnByValue\":true}");
             Console.WriteLine("SPINNER STEPS IN 2 S " + steps);
             int stepCount = int.Parse(System.Text.RegularExpressions.Regex.Match(steps, "\"value\":(\\d+)").Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
-            if (stepCount < 18 || stepCount > 26) throw new InvalidOperationException("logo rings do not step at 12 Hz (" + stepCount + " steps in 2 s)");
-            Console.WriteLine("PASS logo rings step at 12 Hz on the shared clock");
+            if (stepCount < 28 || stepCount > 42) throw new InvalidOperationException("logo rings do not step at 20 Hz (" + stepCount + " steps in 2 s)");
+            Console.WriteLine("PASS logo rings step at 20 Hz on the shared clock");
             await Check("document.getAnimations().filter(a => a.playState === 'running' && !(a instanceof CSSTransition)).length === 0", "no CSS animation runs at the display refresh rate");
             await view.CoreWebView2.ExecuteScriptAsync(@"window.ringWrites=0;const writeRing=window.writeRingOffset;
                 window.writeRingOffset=function(ring,offset){if(ring===cpuRing)ringWrites++;writeRing(ring,offset);};
                 window.ringStart=cpuRing.style.strokeDashoffset;setCircularProgress(cpuRing,20);");
             await Task.Delay(500);
-            await Check("Math.abs(parseFloat(cpuRing.style.strokeDashoffset)-RING_CIRCUMFERENCE*0.8)<0.01 && ringWrites>=1 && ringWrites<=4 && ringTweens.size===0", "gauge rings ease to new values in at most 4 steps of the 12 Hz clock");
+            await Check("Math.abs(parseFloat(cpuRing.style.strokeDashoffset)-RING_CIRCUMFERENCE*0.8)<0.01 && ringWrites>=1 && ringWrites<=6 && ringTweens.size===0", "gauge rings ease to new values in at most 6 steps of the 20 Hz clock");
+            await Check("physicsFpsInterval === 1000 / MOTION_FPS && MOTION_FPS === 20", "the shared clock runs at 20 Hz on mains");
+            await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal',battery:{present:true,percent:60,ac:false,rateW:-9,minutesLeft:90}});");
+            await Check("physicsFpsInterval === 1000 / MOTION_FPS_ECONOMY && MOTION_FPS_ECONOMY === 12", "the shared clock keeps 12 Hz on battery");
             await view.CoreWebView2.ExecuteScriptAsync("window.writeRingOffset=writeRing;");
 
             // Windows energy saver holds the logo rings still while visible, and releases them when it ends.
             await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal',energySaver:true});setRuntimeSuspended(false);window.spinHeld=" + spinnerState + ";");
             await Task.Delay(600);
             await Check("document.body.classList.contains('energy-saver') && !runtimeSuspended && " + spinnerState + "===spinHeld", "energy saver holds the logo rings still");
+            await Check("physicsFpsInterval === 1000 / MOTION_FPS_ECONOMY", "the shared clock keeps 12 Hz under energy saver");
             await Check("gpuVal.textContent==='73%' && clockTimer !== 0", "energy saver keeps values and clock live");
             await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal'});setRuntimeSuspended(false);window.spinHeld=" + spinnerState + ";");
             await Task.Delay(600);

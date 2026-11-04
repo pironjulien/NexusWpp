@@ -80,8 +80,8 @@ function dimGauges() {
     if (cpuTopProcSub) {
         cpuTopProcSub.textContent = `--`;
     }
-    if (igpuVramBar) igpuVramBar.style.width = "0%";
-    if (gpuVramBar) gpuVramBar.style.width = "0%";
+    setBarFill(igpuVramBar, 0);
+    setBarFill(gpuVramBar, 0);
     
     gpuTempSub.textContent = `-- °C`;
     if (gpuVramSub) gpuVramSub.textContent = `-- ${GB}`;
@@ -96,7 +96,7 @@ function dimGauges() {
     if (npuTopProcSub) npuTopProcSub.textContent = `--`;
     if (npuFreeSub) npuFreeSub.textContent = `0.0 ${GB}`;
     if (npuTotalSub) npuTotalSub.textContent = `0 ${GB}`;
-    if (npuUtilBar) npuUtilBar.style.width = "0%";
+    setBarFill(npuUtilBar, 0);
 
     ramFreeSub.textContent = `0.0 ${GB}`;
     if (ramCachedSub) ramCachedSub.textContent = `0.0 ${GB}`;

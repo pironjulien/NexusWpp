@@ -144,16 +144,19 @@ function setSubMetric(valEl, label, value) {
     }
 }
 
-function setWidthIfChanged(element, value) {
+// Bar fill as a horizontal scale (see .sub-progress-fill): composited, no layout per frame.
+function setBarFill(element, value) {
     if (!element) return;
-    const widthValue = `${NexusTelemetry.valid(value) ? Math.min(100, value) : 0}%`;
-    if (element.style.width !== widthValue) {
-        element.style.width = widthValue;
+    const scale = `scaleX(${(NexusTelemetry.valid(value) ? Math.min(100, value) : 0) / 100})`;
+    if (element.style.transform !== scale) {
+        element.style.transform = scale;
     }
 }
 
-// Ring motion keeps the former 0.18 s ease-out, but it is stepped by the shared 12 Hz
-// animation clock (radar.js) instead of a CSS transition repainted at the display rate.
+// Ring motion keeps the former 0.18 s ease-out, but it is stepped by the shared animation
+// clock (radar.js) instead of a CSS transition repainted at the display rate. A 1 s ease was
+// measured at +2.3 points of one core (stroke-dashoffset under a drop-shadow is repainted,
+// it cannot run on the compositor): more than the whole 12 -> 20 Hz step, so it stays short.
 const RING_TWEEN_MS = 180;
 const ringTweens = new Map();
 
@@ -190,7 +193,7 @@ function ringEase(x) {
     return curve(t, 1, 1);
 }
 
-// Called on each 12 Hz tick; returns true while a ring is still easing.
+// Called on each animation tick; returns true while a ring is still easing.
 function stepRingTweens(now) {
     ringTweens.forEach((tween, ring) => {
         const progress = (now - tween.start) / RING_TWEEN_MS;
@@ -344,7 +347,7 @@ function updateDOM(stats) {
     }
     if (gpuVramBar && dgpuVramUsed.value !== null) {
         const gpuVramPct = stats.vram.totalMb > 0 ? Math.round((dgpuVramUsed.value / stats.vram.totalMb) * 100) : 0;
-        setWidthIfChanged(gpuVramBar, gpuVramPct);
+        setBarFill(gpuVramBar, gpuVramPct);
     }
 
     // 4. Circular telemetry gauges (Right Column - RAM, SSD, Network)
@@ -449,7 +452,7 @@ function updateDOM(stats) {
     }
     if (igpuVramBar && igpuUsed.value !== null) {
         const igpuVramPct = Math.round((igpuUsed.value / stats.igpu.totalMb) * 100) || 0;
-        setWidthIfChanged(igpuVramBar, igpuVramPct);
+        setBarFill(igpuVramBar, igpuVramPct);
     }
     const npuUsed = track(npuCard, lastValues.take("npu.usedMb", npuStats.usedMb));
     const npuUsedFresh = NexusTelemetry.valid(npuStats.usedMb);
@@ -465,7 +468,7 @@ function updateDOM(stats) {
     }
     if (npuUtilBar && npuUsed.value !== null) {
         const npuMemPct = Math.round((npuUsed.value / npuTotalMb) * 100) || 0;
-        setWidthIfChanged(npuUtilBar, npuMemPct);
+        setBarFill(npuUtilBar, npuMemPct);
     }
 
     // 6. Dynamically update specs descriptions in DOM
@@ -513,7 +516,8 @@ function updateDOM(stats) {
             clockBattery.hidden = true;
         }
     }
-    // Windows energy saver: hold decorative motion still; values keep updating.
+    // Windows energy saver: hold decorative motion still; values keep updating. The canvas
+    // keeps its former 12 Hz on battery and under energy saver.
     document.body.classList.toggle("energy-saver", stats.energySaver === true);
     startMotionClock();
     // 7. Update Holographic Neural Telemetry Map live parameters
@@ -532,6 +536,7 @@ function updateDOM(stats) {
         telemetryNodes.igpu.stale = igpuLoad.stale;
         telemetryNodes.igpu.subLabel = `${usedVramGb} ${GB}`;
 
+    setMotionEconomy(stats.energySaver === true || (stats.battery && stats.battery.present === true && stats.battery.ac === false));
         telemetryNodes.npuAccel.value = npuLoad.value;
         telemetryNodes.npuAccel.stale = npuLoad.stale;
         telemetryNodes.npuAccel.subLabel = `${npuUsedGb} ${GB}`;

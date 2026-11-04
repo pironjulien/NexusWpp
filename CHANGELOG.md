@@ -2,6 +2,14 @@
 
 ## Non publié
 
+### Animation plus fluide pour presque rien
+
+- Sur secteur, le radar, ses particules, les anneaux des logos et l'animation des jauges passent de 12 à 20 images par seconde (11,2 → 17,5 images réellement produites, +56 %). Sur batterie et en mode économie d'énergie de Windows, la cadence reste à 12 ; la mise en veille complète au repos, quand le bureau est couvert (plein écran) ou l'écran éteint ne change pas.
+- Mesuré hors écran (fenêtre sans activation, vraie page, télémétrie réelle de l'hôte, 2560 × 1440 à 125 %, i7-14700K et UHD 770, médiane de trois passages de 25 s), en points d'un cœur logique (CPU de l'hôte + processus WebView2) et d'occupation 3D de l'iGPU : 12 i/s 6,9 % et 2,4 % ; 20 i/s 7,4 % et 3,2 % ; 24 i/s 9,1 % et 4,0 % ; 30 i/s 8,8 % et 4,5 % (24,8 images produites) ; 60 i/s 14,5 % et 7,0 % (42,8 images). 20 est le meilleur rapport : +56 % d'images pour +0,4 point de CPU et +0,9 point d'iGPU ; aller au-delà coûte quatre à cinq fois plus de CPU par image gagnée. Aucun capteur d'énergie n'est lisible sur ce PC sans pilote (ni compteur Windows « Energy Meter » ni RAPL).
+- Les mouvements (particules, rotation des orbites, éclats du cœur) suivent le temps réellement écoulé entre deux images au lieu d'avancer d'un pas fixe par image : même vitesse à 12 ou à 20 i/s, et pas de saut au réveil. Les anneaux des logos tournent d'un pas par image au lieu de 180 et 144 crans fixes.
+- Les barres de mémoire (iGPU, GPU, NPU) s'animent par `transform` sur le compositeur au lieu de `width` : mesuré avec trois barres changeant chaque seconde, 73 → 7 calculs de mise en page par seconde, 24,4 → 16,3 % d'un cœur et 12,8 → 7,5 % d'iGPU.
+- Les anneaux des jauges gardent leur animation de 0,18 s : un glissement sur 1 s coûte +2,3 points d'un cœur (le contour d'un anneau sous son halo est repeint à chaque image, il ne peut pas passer par le compositeur), plus que tout le passage de 12 à 20 i/s.
+
 ### Code C# au niveau de .NET 10
 
 - Les 91 appels natifs de l'hôte et de l'installeur passent de `DllImport` à `LibraryImport`, comme NVML : le marshalling est généré à la compilation au lieu d'un stub construit au premier appel. Points d'entrée Unicode explicites (`GetClassNameW`, `FindWindowW`, `PdhGetFormattedCounterArrayW`…, dont dix qui se résolvaient en `…A`), tampons sur la pile au lieu de `StringBuilder`, structures blittables passées par `ref`, `in` ou `out`, `sizeof` au lieu de `Marshal.SizeOf(typeof(…))`, `SetLastError` gardé seulement là où l'erreur est lue (crochet souris). Aucun appel n'est resté en `DllImport`.
