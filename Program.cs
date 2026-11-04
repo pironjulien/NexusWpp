@@ -16,27 +16,29 @@ using System.Threading;
 
 namespace DesktopHtmlHost
 {
-    static class Program
+    static partial class Program
     {
         private static Mutex appMutex;
         private const string AppDataFolderName = "NexusWpp";
         internal const string ShowSettingsEventName = @"Local\NexusWppShowSettings";
         internal static bool QuitRequestedByUser;
 
-        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        private static extern bool SystemParametersInfo(int action, int param, StringBuilder value, int winIni);
+        [LibraryImport("user32.dll", EntryPoint = "SystemParametersInfoW")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static unsafe partial bool SystemParametersInfo(int action, int param, char* value, int winIni);
 
-        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        private static extern int RegisterApplicationRestart(string commandLineArgs, int flags);
+        [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)]
+        private static partial int RegisterApplicationRestart(string commandLineArgs, int flags);
 
-        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-        private static extern int GetCurrentPackageFullName(ref int packageFullNameLength, StringBuilder packageFullName);
+        [LibraryImport("kernel32.dll")]
+        private static unsafe partial int GetCurrentPackageFullName(ref int packageFullNameLength, char* packageFullName);
 
-        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-        private static extern int GetCurrentPackageFamilyName(ref int packageFamilyNameLength, StringBuilder packageFamilyName);
+        [LibraryImport("kernel32.dll")]
+        private static unsafe partial int GetCurrentPackageFamilyName(ref int packageFamilyNameLength, char* packageFamilyName);
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool AllowSetForegroundWindow(int processId);
+        [LibraryImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool AllowSetForegroundWindow(int processId);
 
         private const int ASFW_ANY = -1;
         // Startup already relaunches the app after a reboot (Run key or Store startup task).
@@ -129,7 +131,7 @@ namespace DesktopHtmlHost
         }
 
         // Store (MSIX) build: the process runs with a package identity.
-        internal static bool IsPackaged
+        internal static unsafe bool IsPackaged
         {
             get
             {
@@ -145,7 +147,7 @@ namespace DesktopHtmlHost
 
         // Folder holding webview_debug.log as Explorer sees it. A packaged process writes its
         // AppData into the package's LocalCache, which Explorer does not redirect.
-        internal static string GetLogsFolderForShell()
+        internal static unsafe string GetLogsFolderForShell()
         {
             string folder = GetAppDataFolder();
             try
@@ -153,11 +155,15 @@ namespace DesktopHtmlHost
                 int length = 0;
                 if (GetCurrentPackageFamilyName(ref length, null) == 122 /* ERROR_INSUFFICIENT_BUFFER */ && length > 0)
                 {
-                    var family = new StringBuilder(length);
-                    if (GetCurrentPackageFamilyName(ref length, family) == 0)
+                    string family = null;
+                    fixed (char* name = new char[length])
+                    {
+                        if (GetCurrentPackageFamilyName(ref length, name) == 0) family = new string(name);
+                    }
+                    if (family != null)
                     {
                         string redirected = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                            "Packages", family.ToString(), "LocalCache", "Local", AppDataFolderName);
+                            "Packages", family, "LocalCache", "Local", AppDataFolderName);
                         if (Directory.Exists(redirected)) return redirected;
                     }
                 }
@@ -240,13 +246,14 @@ namespace DesktopHtmlHost
 
         // After quitting, Explorer may keep the last frame of the injected window: repaint the
         // user's own wallpaper with its current path, without writing the setting.
-        private static void RestoreDesktopWallpaper()
+        private static unsafe void RestoreDesktopWallpaper()
         {
             try
             {
                 const int SPI_GETDESKWALLPAPER = 0x0073, SPI_SETDESKWALLPAPER = 0x0014;
-                var current = new StringBuilder(1024);
-                if (SystemParametersInfo(SPI_GETDESKWALLPAPER, current.Capacity, current, 0))
+                // The path read back is null-terminated in the same buffer.
+                char* current = stackalloc char[1024];
+                if (SystemParametersInfo(SPI_GETDESKWALLPAPER, 1024, current, 0))
                 {
                     SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, current, 0);
                 }

@@ -2,6 +2,12 @@
 
 ## Non publié
 
+### Code C# au niveau de .NET 10
+
+- Les 91 appels natifs de l'hôte et de l'installeur passent de `DllImport` à `LibraryImport`, comme NVML : le marshalling est généré à la compilation au lieu d'un stub construit au premier appel. Points d'entrée Unicode explicites (`GetClassNameW`, `FindWindowW`, `PdhGetFormattedCounterArrayW`…, dont dix qui se résolvaient en `…A`), tampons sur la pile au lieu de `StringBuilder`, structures blittables passées par `ref`, `in` ou `out`, `sizeof` au lieu de `Marshal.SizeOf(typeof(…))`, `SetLastError` gardé seulement là où l'erreur est lue (crochet souris). Aucun appel n'est resté en `DllImport`.
+- Les DLL natives de l'hôte et de l'installeur ne sont plus cherchées que dans System32 (`DefaultDllImportSearchPaths`) : un `wintrust.dll` déposé à côté de l'installeur, lancé en administrateur depuis le dossier Téléchargements, n'est plus chargé à la place de celui de Windows.
+- Le crochet souris, les compteurs PDH et les capteurs D3DKMT lisent les structures natives en place, sans boxing ni tampon alloué à chaque événement ou relevé.
+
 ### Mesures alignées sur le Gestionnaire des tâches
 
 Audit sur un i7-14700K, UHD 770 et RTX 4080 SUPER : chaque champ de la télémétrie comparé au même moment aux compteurs Windows (CIM), à `nvidia-smi`, `Get-NetAdapter`, `Get-Volume` et WMI.

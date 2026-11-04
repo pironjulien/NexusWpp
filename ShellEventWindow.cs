@@ -7,21 +7,21 @@ namespace DesktopHtmlHost
     // Hidden top-level window for shell broadcasts that the wallpaper, a WS_CHILD of
     // WorkerW, never receives: "TaskbarCreated" after an Explorer restart, and the
     // console display power state (off, on, dimmed).
-    internal sealed class ShellEventWindow : NativeWindow, IDisposable
+    internal sealed partial class ShellEventWindow : NativeWindow, IDisposable
     {
-        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        private static extern uint RegisterWindowMessage(string message);
+        [LibraryImport("user32.dll", EntryPoint = "RegisterWindowMessageW", StringMarshalling = StringMarshalling.Utf16)]
+        private static partial uint RegisterWindowMessage(string message);
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr RegisterPowerSettingNotification(IntPtr recipient, ref Guid powerSetting, int flags);
+        [LibraryImport("user32.dll")]
+        private static partial IntPtr RegisterPowerSettingNotification(IntPtr recipient, in Guid powerSetting, int flags);
 
-        [DllImport("user32.dll", SetLastError = true)]
+        [LibraryImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool UnregisterPowerSettingNotification(IntPtr handle);
+        private static partial bool UnregisterPowerSettingNotification(IntPtr handle);
 
-        [DllImport("user32.dll", SetLastError = true)]
+        [LibraryImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool ChangeWindowMessageFilterEx(IntPtr window, uint message, uint action, IntPtr filterStatus);
+        private static partial bool ChangeWindowMessageFilterEx(IntPtr window, uint message, uint action, IntPtr filterStatus);
 
         [StructLayout(LayoutKind.Sequential)]
         private struct PowerBroadcastSetting
@@ -51,12 +51,10 @@ namespace DesktopHtmlHost
             if (TaskbarCreatedMessage != 0) ChangeWindowMessageFilterEx(Handle, TaskbarCreatedMessage, 1 /* MSGFLT_ALLOW */, IntPtr.Zero);
 
             // Windows sends the current state right after registration.
-            Guid setting = ConsoleDisplayState;
-            powerNotification = RegisterPowerSettingNotification(Handle, ref setting, 0 /* DEVICE_NOTIFY_WINDOW_HANDLE */);
+            powerNotification = RegisterPowerSettingNotification(Handle, ConsoleDisplayState, 0 /* DEVICE_NOTIFY_WINDOW_HANDLE */);
             if (powerNotification == IntPtr.Zero)
             {
-                setting = MonitorPowerOn;
-                powerNotification = RegisterPowerSettingNotification(Handle, ref setting, 0);
+                powerNotification = RegisterPowerSettingNotification(Handle, MonitorPowerOn, 0);
             }
         }
 
@@ -67,7 +65,7 @@ namespace DesktopHtmlHost
         {
             displayOn = true;
             if (setting == IntPtr.Zero) return false;
-            PowerBroadcastSetting value = (PowerBroadcastSetting)Marshal.PtrToStructure(setting, typeof(PowerBroadcastSetting));
+            PowerBroadcastSetting value = Marshal.PtrToStructure<PowerBroadcastSetting>(setting);
             if ((value.PowerSetting != ConsoleDisplayState && value.PowerSetting != MonitorPowerOn) || value.DataLength < 4) return false;
             displayOn = value.Data != 0;
             return true;
@@ -77,7 +75,7 @@ namespace DesktopHtmlHost
         internal static IntPtr AllocateDisplayPowerSetting(Guid setting, int state)
         {
             PowerBroadcastSetting value = new PowerBroadcastSetting { PowerSetting = setting, DataLength = 4, Data = state };
-            IntPtr memory = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(PowerBroadcastSetting)));
+            IntPtr memory = Marshal.AllocHGlobal(Marshal.SizeOf<PowerBroadcastSetting>());
             Marshal.StructureToPtr(value, memory, false);
             return memory;
         }

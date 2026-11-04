@@ -107,21 +107,22 @@ namespace DesktopHtmlHost
         // neither Chromium nor Explorer is left in the middle of a press or a drag.
         private static IntPtr pairedRenderWindow;
 
-        private static bool RouteLeftButton(uint message, IntPtr lParam)
+        private static unsafe bool RouteLeftButton(uint message, IntPtr lParam)
         {
             if (message == WM_LBUTTONUP)
             {
                 IntPtr paired = pairedRenderWindow;
                 pairedRenderWindow = IntPtr.Zero;
-                if (paired == IntPtr.Zero) return false;
-                MSLLHOOKSTRUCT up = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
+                // Windows always passes the event; a null pointer must not be read.
+                if (paired == IntPtr.Zero || lParam == IntPtr.Zero) return false;
+                MSLLHOOKSTRUCT up = *(MSLLHOOKSTRUCT*)lParam;
                 return IsWindow(paired) && ForwardMouseClick(paired, up.pt.x, up.pt.y, message);
             }
 
             pairedRenderWindow = IntPtr.Zero;
             MouseRoutingSnapshot routing = Volatile.Read(ref mouseRouting);
-            if (routing == null) return false;
-            MSLLHOOKSTRUCT down = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
+            if (routing == null || lParam == IntPtr.Zero) return false;
+            MSLLHOOKSTRUCT down = *(MSLLHOOKSTRUCT*)lParam;
             if (!routing.ScreenBounds.Contains(down.pt.x, down.pt.y) || !IsWindow(routing.RenderWindow)) return false;
             if (!ShouldForwardHit(WindowFromPoint(down.pt), routing.HostWindow, routing.RenderWindow)) return false;
             if (!ForwardMouseClick(routing.RenderWindow, down.pt.x, down.pt.y, message)) return false;
@@ -147,12 +148,12 @@ namespace DesktopHtmlHost
             return clipped.Width > 0 && clipped.Height > 0 ? clipped : System.Drawing.Rectangle.Empty;
         }
 
-        private static string GetWindowClassName(IntPtr hwnd)
+        private static unsafe string GetWindowClassName(IntPtr hwnd)
         {
             if (hwnd == IntPtr.Zero) return "";
-            System.Text.StringBuilder className = new System.Text.StringBuilder(256);
-            GetClassName(hwnd, className, className.Capacity);
-            return className.ToString();
+            char* className = stackalloc char[256];
+            int length = GetClassName(hwnd, className, 256);
+            return length > 0 ? new string(className, 0, length) : "";
         }
 
         private void FindRenderWindow()
@@ -187,9 +188,7 @@ namespace DesktopHtmlHost
 
         private static bool FindRenderWindowCallback(IntPtr hwnd, IntPtr lParam)
         {
-            System.Text.StringBuilder className = new System.Text.StringBuilder(256);
-            GetClassName(hwnd, className, className.Capacity);
-            if (className.ToString() == "Chrome_RenderWidgetHostHWND")
+            if (GetWindowClassName(hwnd) == "Chrome_RenderWidgetHostHWND")
             {
                 renderWindow = hwnd;
                 return false;
@@ -206,8 +205,8 @@ namespace DesktopHtmlHost
             return PostMessage(renderWin, msg, wParam, lParam);
         }
 
-        [DllImport("user32.dll")]
-        private static extern uint GetDpiForWindow(IntPtr hwnd);
+        [LibraryImport("user32.dll")]
+        private static partial uint GetDpiForWindow(IntPtr hwnd);
 
         // Scale of the wallpaper window itself (per-monitor v2): the DPI Windows applies to it below
         // WorkerW, which is also the scale WebView2 rasterizes at. Used only when the page sends no ratio.

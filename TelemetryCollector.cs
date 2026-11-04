@@ -811,7 +811,7 @@ namespace DesktopHtmlHost
                 uint res = Win32.PowerGetActiveScheme(IntPtr.Zero, out activeGuidPtr);
                 if (res == 0 && activeGuidPtr != IntPtr.Zero)
                 {
-                    Guid activeGuid = (Guid)Marshal.PtrToStructure(activeGuidPtr, typeof(Guid));
+                    Guid activeGuid = Marshal.PtrToStructure<Guid>(activeGuidPtr);
                     Win32.LocalFree(activeGuidPtr);
                     return activeGuid.ToString();
                 }
@@ -848,7 +848,7 @@ namespace DesktopHtmlHost
             var plans = PowerPlans;
             var target = plans.FirstOrDefault(p => p.Guid.Equals(guidStr, StringComparison.OrdinalIgnoreCase));
             bool overlay = target != null && target.Overlay;
-            uint result = overlay ? PowerSchemes.SetOverlay(target.Guid) : Win32.PowerSetActiveScheme(IntPtr.Zero, ref requestedGuid);
+            uint result = overlay ? PowerSchemes.SetOverlay(target.Guid) : Win32.PowerSetActiveScheme(IntPtr.Zero, requestedGuid);
             if (result != 0)
             {
                 error = (overlay ? "PowerSetActiveOverlayScheme=" : "PowerSetActiveScheme=") + result.ToString(CultureInfo.InvariantCulture);
@@ -968,12 +968,10 @@ namespace DesktopHtmlHost
         // baselines are retaken and a short fresh window is measured instead.
         private void RebaseRateCounters()
         {
-            System.Runtime.InteropServices.ComTypes.FILETIME idleTime, kernelTime, userTime;
-            if (Win32.GetSystemTimes(out idleTime, out kernelTime, out userTime))
+            if (Win32.GetSystemTimes(out ulong idleTime, out ulong kernelTime, out ulong userTime))
             {
-                prevIdleTime = ((ulong)idleTime.dwHighDateTime << 32) | (uint)idleTime.dwLowDateTime;
-                prevSystemTime = (((ulong)kernelTime.dwHighDateTime << 32) | (uint)kernelTime.dwLowDateTime) +
-                                 (((ulong)userTime.dwHighDateTime << 32) | (uint)userTime.dwLowDateTime);
+                prevIdleTime = idleTime;
+                prevSystemTime = kernelTime + userTime;
             }
             if (perf != null) perf.Collect();
             // The ranking worker only starts from this thread, so no sample is in flight here.
@@ -990,12 +988,8 @@ namespace DesktopHtmlHost
 
             // Gather CPU Load
             int cpuLoad = -1;
-            System.Runtime.InteropServices.ComTypes.FILETIME idleTime, kernelTime, userTime;
-            if (Win32.GetSystemTimes(out idleTime, out kernelTime, out userTime))
+            if (Win32.GetSystemTimes(out ulong idle, out ulong kernel, out ulong user))
             {
-                ulong idle = ((ulong)idleTime.dwHighDateTime << 32) | (uint)idleTime.dwLowDateTime;
-                ulong kernel = ((ulong)kernelTime.dwHighDateTime << 32) | (uint)kernelTime.dwLowDateTime;
-                ulong user = ((ulong)userTime.dwHighDateTime << 32) | (uint)userTime.dwLowDateTime;
                 ulong system = kernel + user;
 
                 if (prevSystemTime > 0)
@@ -1022,7 +1016,7 @@ namespace DesktopHtmlHost
             ulong ramTotalPage = 0;
             ulong ramAvailPage = 0;
             MEMORYSTATUSEX memStatus = new MEMORYSTATUSEX();
-            if (Win32.GlobalMemoryStatusEx(memStatus))
+            if (Win32.GlobalMemoryStatusEx(ref memStatus))
             {
                 ramLoad = (int)memStatus.dwMemoryLoad;
                 ramTotalPhys = memStatus.ullTotalPhys;
@@ -1157,8 +1151,7 @@ namespace DesktopHtmlHost
             bool energySaver = false;
             try
             {
-                SYSTEM_POWER_STATUS sps = new SYSTEM_POWER_STATUS();
-                if (Win32.GetSystemPowerStatus(sps))
+                if (Win32.GetSystemPowerStatus(out SYSTEM_POWER_STATUS sps))
                 {
                     energySaver = sps.SystemStatusFlag == 1;
                     batteryPresent = (sps.BatteryFlag & 128) == 0 && sps.BatteryFlag != 255;

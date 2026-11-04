@@ -44,12 +44,12 @@ namespace DesktopHtmlHost
     // window closes, hides, minimizes, finishes moving or takes the foreground, instead of
     // waiting for the next poll. Created only while paused: out-of-context hooks deliver
     // every matching system event to our UI thread, so they must not run while visible.
-    internal sealed class WindowChangeWatcher : IDisposable
+    internal sealed partial class WindowChangeWatcher : IDisposable
     {
         private delegate void WinEventProc(IntPtr hook, uint evt, IntPtr hwnd, int idObject, int idChild, uint thread, uint time);
-        [DllImport("user32.dll")] private static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr module, WinEventProc proc, uint pid, uint tid, uint flags);
-        [DllImport("user32.dll")] private static extern bool UnhookWinEvent(IntPtr hook);
-        [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
+        [LibraryImport("user32.dll")] private static partial IntPtr SetWinEventHook(uint min, uint max, IntPtr module, WinEventProc proc, uint pid, uint tid, uint flags);
+        [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool UnhookWinEvent(IntPtr hook);
+        [LibraryImport("user32.dll")] private static partial IntPtr GetAncestor(IntPtr hwnd, uint flags);
 
         private const uint ForegroundEvent = 0x0003, MoveSizeEnd = 0x000B, MinimizeStart = 0x0016, MinimizeEnd = 0x0017;
         private const uint ObjectDestroy = 0x8001, ObjectHide = 0x8003;
@@ -91,21 +91,28 @@ namespace DesktopHtmlHost
         }
     }
 
-    internal static class DesktopVisibility
+    internal static partial class DesktopVisibility
     {
         private delegate bool EnumProc(IntPtr hwnd, IntPtr data);
         [StructLayout(LayoutKind.Sequential)]
         private struct Rect { internal int Left, Top, Right, Bottom; }
-        [DllImport("user32.dll")] private static extern bool EnumWindows(EnumProc callback, IntPtr data);
-        [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hwnd);
-        [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr hwnd);
-        [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out Rect rect);
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr hwnd, StringBuilder name, int size);
-        [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
-        [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern IntPtr GetWindowLong64(IntPtr hwnd, int index);
-        [DllImport("user32.dll")] private static extern bool GetLayeredWindowAttributes(IntPtr hwnd, out uint color, out byte alpha, out uint flags);
-        [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")] private static extern int GetFrameBounds(IntPtr hwnd, int attribute, out Rect rect, int size);
-        [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")] private static extern int GetCloaked(IntPtr hwnd, int attribute, out int value, int size);
+        [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool EnumWindows(EnumProc callback, IntPtr data);
+        [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool IsWindowVisible(IntPtr hwnd);
+        [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool IsIconic(IntPtr hwnd);
+        [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool GetWindowRect(IntPtr hwnd, out Rect rect);
+        [LibraryImport("user32.dll", EntryPoint = "GetClassNameW")] private static unsafe partial int GetClassName(IntPtr hwnd, char* name, int size);
+        [LibraryImport("user32.dll")] private static partial uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+        [LibraryImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static partial IntPtr GetWindowLong64(IntPtr hwnd, int index);
+        [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool GetLayeredWindowAttributes(IntPtr hwnd, out uint color, out byte alpha, out uint flags);
+        [LibraryImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")] private static partial int GetFrameBounds(IntPtr hwnd, int attribute, out Rect rect, int size);
+        [LibraryImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")] private static partial int GetCloaked(IntPtr hwnd, int attribute, out int value, int size);
+
+        private static unsafe string ClassName(IntPtr hwnd)
+        {
+            char* name = stackalloc char[256];
+            int length = GetClassName(hwnd, name, 256);
+            return length > 0 ? new string(name, 0, length) : "";
+        }
         private static readonly uint OwnProcessId = (uint)Process.GetCurrentProcess().Id;
         private static readonly Dictionary<uint, string> ProcessNames = new Dictionary<uint, string>();
         private static readonly HashSet<string> NonOpaqueShellProcesses = new HashSet<string>
@@ -143,15 +150,15 @@ namespace DesktopHtmlHost
         private delegate bool MonitorEnumProc(IntPtr monitor, IntPtr hdc, ref Rect clip, IntPtr data);
         [StructLayout(LayoutKind.Sequential)]
         private struct MonitorInfo { internal int Size; internal Rect Monitor, Work; internal uint Flags; }
-        [DllImport("user32.dll")] private static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr clip, MonitorEnumProc callback, IntPtr data);
-        [DllImport("user32.dll")] private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
+        [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool EnumDisplayMonitors(IntPtr hdc, IntPtr clip, MonitorEnumProc callback, IntPtr data);
+        [LibraryImport("user32.dll", EntryPoint = "GetMonitorInfoW")] [return: MarshalAs(UnmanagedType.Bool)] private static partial bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
         // Monitor work areas in physical pixels (the process is per-monitor v2 DPI aware).
         internal static List<Rectangle> GetMonitorWorkAreas()
         {
             var areas = new List<Rectangle>();
             EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, delegate(IntPtr monitor, IntPtr hdc, ref Rect clip, IntPtr data)
             {
-                var info = new MonitorInfo { Size = Marshal.SizeOf(typeof(MonitorInfo)) };
+                var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
                 if (GetMonitorInfo(monitor, ref info))
                     areas.Add(Rectangle.FromLTRB(info.Work.Left, info.Work.Top, info.Work.Right, info.Work.Bottom));
                 return true;
@@ -179,9 +186,7 @@ namespace DesktopHtmlHost
                 uint processId;
                 GetWindowThreadProcessId(hwnd, out processId);
                 if (processId == OwnProcessId) return true;
-                var className = new StringBuilder(256);
-                GetClassName(hwnd, className, className.Capacity);
-                string cls = className.ToString();
+                string cls = ClassName(hwnd);
                 if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" ||
                     cls == "Shell_SecondaryTrayWnd" || cls == "Button") return true;
                 int cloaked;
@@ -196,7 +201,7 @@ namespace DesktopHtmlHost
                         (flags & 1) != 0 || (flags & 2) == 0 || alpha != 255) return true;
                 }
                 Rect bounds;
-                if (GetFrameBounds(hwnd, 9, out bounds, Marshal.SizeOf(typeof(Rect))) != 0 &&
+                if (GetFrameBounds(hwnd, 9, out bounds, Marshal.SizeOf<Rect>()) != 0 &&
                     !GetWindowRect(hwnd, out bounds)) return true;
                 Rectangle window = Rectangle.FromLTRB(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom);
                 if (window.Width <= 0 || window.Height <= 0) return true;

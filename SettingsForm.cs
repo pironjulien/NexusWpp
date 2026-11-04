@@ -9,7 +9,7 @@ using System.Windows.Forms;
 namespace DesktopHtmlHost
 {
     // Settings window, opened from the tray icon or by launching NexusWpp again.
-    public sealed class SettingsForm : Form
+    public sealed partial class SettingsForm : Form
     {
         static readonly Color Back = Color.FromArgb(11, 15, 26);
         static readonly Color Panel = Color.FromArgb(20, 27, 43);
@@ -29,8 +29,8 @@ namespace DesktopHtmlHost
         readonly Button chooseButton, resetButton;
         readonly Label status;
 
-        [DllImport("dwmapi.dll")]
-        static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+        [LibraryImport("dwmapi.dll")]
+        private static partial int DwmSetWindowAttribute(IntPtr hwnd, int attribute, in int value, int size);
 
         const string StoreProductId = "9N2VCVDH7QDX";
 
@@ -263,7 +263,7 @@ namespace DesktopHtmlHost
         {
             base.OnHandleCreated(e);
             int dark = 1; // Windows 10 20H1+ / Windows 11 dark title bar; ignored elsewhere.
-            try { DwmSetWindowAttribute(Handle, 20, ref dark, sizeof(int)); } catch { }
+            try { DwmSetWindowAttribute(Handle, 20, dark, sizeof(int)); } catch { }
         }
 
         static Button MakeButton(string text, Color back, Color fore, int height)

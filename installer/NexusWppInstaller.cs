@@ -17,10 +17,12 @@ using Microsoft.Win32;
 [assembly: AssemblyTitle("NexusWpp Installer")]
 [assembly: AssemblyProduct("NexusWpp")]
 [assembly: AssemblyCompany("JULIENPIRON.FR")]
+// The installer runs elevated from the download folder: native DLLs come from System32 only.
+[assembly: DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
 
 namespace NexusWppInstaller
 {
-    internal static class Program
+    internal static partial class Program
     {
         private const string InstallDir = @"C:\nexuswpp";
         private const string PayloadResourceName = "NexusWpp.Payload.zip";
@@ -762,7 +764,7 @@ namespace NexusWppInstaller
 
         // After the process is stopped, Explorer may still show the wallpaper window's last frame.
         // Repaint the interactive user's own wallpaper (same path, setting not written).
-        private static void RepaintUserWallpaper()
+        private static unsafe void RepaintUserWallpaper()
         {
             try
             {
@@ -776,14 +778,14 @@ namespace NexusWppInstaller
                         if (desktop != null) wallpaper = Convert.ToString(desktop.GetValue("Wallpaper"));
                     }
                 }
-                StringBuilder current = new StringBuilder(1024);
-                if (wallpaper == null && SystemParametersInfo(SPI_GETDESKWALLPAPER, current.Capacity, current, 0))
+                if (wallpaper == null)
                 {
-                    wallpaper = current.ToString();
+                    char* current = stackalloc char[1024];
+                    if (SystemParametersInfo(SPI_GETDESKWALLPAPER, 1024, current, 0)) wallpaper = new string(current);
                 }
                 if (wallpaper != null)
                 {
-                    SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, new StringBuilder(wallpaper), 0);
+                    fixed (char* path = wallpaper) SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, path, 0);
                     Log("Desktop wallpaper repainted.");
                 }
             }
@@ -834,8 +836,9 @@ namespace NexusWppInstaller
             return null;
         }
 
-        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
-        private static extern bool SystemParametersInfo(int action, int param, StringBuilder value, int winIni);
+        [LibraryImport("user32.dll", EntryPoint = "SystemParametersInfoW")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static unsafe partial bool SystemParametersInfo(int action, int param, char* value, int winIni);
 
         // Authenticode check of a downloaded file: a valid, trusted signature (WinVerifyTrust)
         // whose signer certificate belongs to Microsoft Corporation.
@@ -899,15 +902,16 @@ namespace NexusWppInstaller
 
     // WinVerifyTrust with the generic Authenticode policy: the file carries an embedded signature
     // that is intact and chains to a trusted root.
-    internal static class WinTrust
+    internal static partial class WinTrust
     {
         private static readonly Guid GenericVerifyV2 = new Guid("00AAC56B-CD44-11d0-8CC2-00C04FC295EE");
 
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        // Blittable: the path is a pinned UTF-16 string for the duration of the call.
+        [StructLayout(LayoutKind.Sequential)]
         private struct WINTRUST_FILE_INFO
         {
             public uint cbStruct;
-            [MarshalAs(UnmanagedType.LPWStr)] public string pcwszFilePath;
+            public IntPtr pcwszFilePath;
             public IntPtr hFile;
             public IntPtr pgKnownSubject;
         }
@@ -930,36 +934,34 @@ namespace NexusWppInstaller
             public IntPtr pSignatureSettings;
         }
 
-        [DllImport("wintrust.dll", CharSet = CharSet.Unicode)]
-        private static extern int WinVerifyTrust(IntPtr hwnd, [MarshalAs(UnmanagedType.LPStruct)] Guid action, ref WINTRUST_DATA data);
+        [LibraryImport("wintrust.dll")]
+        private static partial int WinVerifyTrust(IntPtr hwnd, in Guid action, ref WINTRUST_DATA data);
 
-        [DllImport("wintrust.dll")]
-        private static extern IntPtr WTHelperProvDataFromStateData(IntPtr stateData);
+        [LibraryImport("wintrust.dll")]
+        private static partial IntPtr WTHelperProvDataFromStateData(IntPtr stateData);
 
-        [DllImport("wintrust.dll")]
-        private static extern IntPtr WTHelperGetProvSignerFromChain(IntPtr provData, uint signerIndex, bool counterSigner, uint counterSignerIndex);
+        [LibraryImport("wintrust.dll")]
+        private static partial IntPtr WTHelperGetProvSignerFromChain(IntPtr provData, uint signerIndex, [MarshalAs(UnmanagedType.Bool)] bool counterSigner, uint counterSignerIndex);
 
-        [DllImport("wintrust.dll")]
-        private static extern IntPtr WTHelperGetProvCertFromChain(IntPtr signer, uint certIndex);
+        [LibraryImport("wintrust.dll")]
+        private static partial IntPtr WTHelperGetProvCertFromChain(IntPtr signer, uint certIndex);
 
         // The signer certificate is read from the verification that just succeeded, so the name
         // checked afterwards belongs to the very signature WinVerifyTrust accepted.
-        internal static bool Verify(string path, out X509Certificate2 signer)
+        internal static unsafe bool Verify(string path, out X509Certificate2 signer)
         {
             signer = null;
             const uint WTD_UI_NONE = 2, WTD_REVOKE_NONE = 0, WTD_CHOICE_FILE = 1, WTD_STATEACTION_VERIFY = 1, WTD_STATEACTION_CLOSE = 2;
-            var file = new WINTRUST_FILE_INFO { cbStruct = (uint)Marshal.SizeOf(typeof(WINTRUST_FILE_INFO)), pcwszFilePath = path };
-            IntPtr filePointer = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(WINTRUST_FILE_INFO)));
-            try
+            fixed (char* filePath = path)
             {
-                Marshal.StructureToPtr(file, filePointer, false);
+                var file = new WINTRUST_FILE_INFO { cbStruct = (uint)sizeof(WINTRUST_FILE_INFO), pcwszFilePath = (IntPtr)filePath };
                 var data = new WINTRUST_DATA
                 {
-                    cbStruct = (uint)Marshal.SizeOf(typeof(WINTRUST_DATA)),
+                    cbStruct = (uint)sizeof(WINTRUST_DATA),
                     dwUIChoice = WTD_UI_NONE,
                     fdwRevocationChecks = WTD_REVOKE_NONE, // offline CRL servers must not block the install
                     dwUnionChoice = WTD_CHOICE_FILE,
-                    pFile = filePointer,
+                    pFile = (IntPtr)(&file),
                     dwStateAction = WTD_STATEACTION_VERIFY
                 };
                 int result = WinVerifyTrust(IntPtr.Zero, GenericVerifyV2, ref data);
@@ -975,11 +977,6 @@ namespace NexusWppInstaller
                 data.dwStateAction = WTD_STATEACTION_CLOSE;
                 WinVerifyTrust(IntPtr.Zero, GenericVerifyV2, ref data);
                 return result == 0 && signer != null;
-            }
-            finally
-            {
-                Marshal.DestroyStructure(filePointer, typeof(WINTRUST_FILE_INFO));
-                Marshal.FreeHGlobal(filePointer);
             }
         }
     }

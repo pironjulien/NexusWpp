@@ -19,7 +19,7 @@ namespace DesktopHtmlHost
     }
 
     // Power plans through powrprof (Unicode names, no child process, no output parsing).
-    internal static class PowerSchemes
+    internal static partial class PowerSchemes
     {
         internal const string SaverPlan = "a1841308-3541-4fab-bc81-f71556f20b4a";
         internal const string BalancedPlan = "381b4222-f694-41f0-9685-ff5bb260df2e";
@@ -31,19 +31,20 @@ namespace DesktopHtmlHost
 
         const uint ACCESS_SCHEME = 16;
         // NO_SUBGROUP_GUID and GUID_POWERSCHEME_PERSONALITY (passed by reference to powrprof).
-        static Guid NoSubgroup = new Guid("fea3413e-7e05-4911-9a71-700331f1c294");
-        static Guid Personality = new Guid("245d8541-3943-4422-b025-13a784f679b7");
+        static readonly Guid NoSubgroup = new Guid("fea3413e-7e05-4911-9a71-700331f1c294");
+        static readonly Guid Personality = new Guid("245d8541-3943-4422-b025-13a784f679b7");
 
-        [DllImport("powrprof.dll")]
-        static extern uint PowerEnumerate(IntPtr rootPowerKey, IntPtr schemeGuid, IntPtr subGroupGuid, uint accessFlags, uint index, byte[] buffer, ref uint bufferSize);
-        [DllImport("powrprof.dll")]
-        static extern uint PowerReadFriendlyName(IntPtr rootPowerKey, ref Guid schemeGuid, IntPtr subGroupGuid, IntPtr settingGuid, byte[] buffer, ref uint bufferSize);
-        [DllImport("powrprof.dll")]
-        static extern uint PowerReadACValueIndex(IntPtr rootPowerKey, ref Guid schemeGuid, ref Guid subGroupGuid, ref Guid settingGuid, out uint value);
-        [DllImport("powrprof.dll")]
-        static extern uint PowerGetEffectiveOverlayScheme(out Guid overlayGuid);
-        [DllImport("powrprof.dll")]
-        static extern uint PowerSetActiveOverlayScheme(ref Guid overlayGuid);
+        // The scheme GUID is written straight into a Guid (16 bytes, the buffer PowerEnumerate fills).
+        [LibraryImport("powrprof.dll")]
+        private static partial uint PowerEnumerate(IntPtr rootPowerKey, IntPtr schemeGuid, IntPtr subGroupGuid, uint accessFlags, uint index, out Guid buffer, ref uint bufferSize);
+        [LibraryImport("powrprof.dll")]
+        private static unsafe partial uint PowerReadFriendlyName(IntPtr rootPowerKey, in Guid schemeGuid, IntPtr subGroupGuid, IntPtr settingGuid, byte* buffer, ref uint bufferSize);
+        [LibraryImport("powrprof.dll")]
+        private static partial uint PowerReadACValueIndex(IntPtr rootPowerKey, in Guid schemeGuid, in Guid subGroupGuid, in Guid settingGuid, out uint value);
+        [LibraryImport("powrprof.dll")]
+        private static partial uint PowerGetEffectiveOverlayScheme(out Guid overlayGuid);
+        [LibraryImport("powrprof.dll")]
+        private static partial uint PowerSetActiveOverlayScheme(in Guid overlayGuid);
 
         internal static string KindFromGuid(string guid)
         {
@@ -107,17 +108,15 @@ namespace DesktopHtmlHost
                 var plans = new List<PowerPlanInfo>();
                 for (uint index = 0; index < 64; index++)
                 {
-                    byte[] guidBytes = new byte[16];
-                    uint size = (uint)guidBytes.Length;
-                    if (PowerEnumerate(IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, ACCESS_SCHEME, index, guidBytes, ref size) != 0) break;
-                    var scheme = new Guid(guidBytes);
+                    uint size = 16;
+                    if (PowerEnumerate(IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, ACCESS_SCHEME, index, out Guid scheme, ref size) != 0) break;
                     string name = ReadFriendlyName(scheme);
                     string guid = scheme.ToString();
                     // OEM plans often keep the Balanced personality whatever their purpose (MSI
                     // "Performances extremes" here), so an explicit name wins over it.
                     uint personality;
                     string kind = KindFromGuid(guid) ?? KindFromName(name);
-                    if (kind == null && PowerReadACValueIndex(IntPtr.Zero, ref scheme, ref NoSubgroup, ref Personality, out personality) == 0)
+                    if (kind == null && PowerReadACValueIndex(IntPtr.Zero, scheme, NoSubgroup, Personality, out personality) == 0)
                         kind = KindFromPersonality(personality);
                     plans.Add(new PowerPlanInfo { Guid = guid, Name = string.IsNullOrEmpty(name) ? guid : name, Kind = kind ?? "balanced" });
                 }
@@ -130,13 +129,16 @@ namespace DesktopHtmlHost
             }
         }
 
-        static string ReadFriendlyName(Guid scheme)
+        static unsafe string ReadFriendlyName(Guid scheme)
         {
             uint size = 0;
-            PowerReadFriendlyName(IntPtr.Zero, ref scheme, IntPtr.Zero, IntPtr.Zero, null, ref size);
+            PowerReadFriendlyName(IntPtr.Zero, scheme, IntPtr.Zero, IntPtr.Zero, null, ref size);
             if (size == 0 || size > 4096) return "";
             byte[] buffer = new byte[size];
-            if (PowerReadFriendlyName(IntPtr.Zero, ref scheme, IntPtr.Zero, IntPtr.Zero, buffer, ref size) != 0) return "";
+            fixed (byte* data = buffer)
+            {
+                if (PowerReadFriendlyName(IntPtr.Zero, scheme, IntPtr.Zero, IntPtr.Zero, data, ref size) != 0) return "";
+            }
             return Encoding.Unicode.GetString(buffer, 0, (int)size).TrimEnd('\0').Trim();
         }
 
@@ -154,7 +156,7 @@ namespace DesktopHtmlHost
         internal static uint SetOverlay(string guid)
         {
             Guid overlay = new Guid(guid);
-            try { return PowerSetActiveOverlayScheme(ref overlay); }
+            try { return PowerSetActiveOverlayScheme(overlay); }
             catch (Exception) { return uint.MaxValue; }
         }
 

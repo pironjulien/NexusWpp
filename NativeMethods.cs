@@ -1,23 +1,13 @@
 ﻿using System;
 using System.Runtime.InteropServices;
-using System.Windows.Forms;
-using System.IO;
-using System.Diagnostics;
-using Microsoft.Win32;
-using Microsoft.Web.WebView2.WinForms;
-using Microsoft.Web.WebView2.Core;
-using System.Management;
-using System.Net.NetworkInformation;
-using System.Text;
-using System.Collections.Generic;
-using System.Linq;
-using System.Globalization;
-using System.Threading;
+
+// Every native library of the host is a Windows system DLL: never search the application folder or PATH.
+[assembly: DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
 
 namespace DesktopHtmlHost
 {
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
-    public class MEMORYSTATUSEX
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct MEMORYSTATUSEX
     {
         public uint dwLength;
         public uint dwMemoryLoad;
@@ -28,44 +18,42 @@ namespace DesktopHtmlHost
         public ulong ullTotalVirtual;
         public ulong ullAvailVirtual;
         public ulong ullAvailExtendedVirtual;
-        public MEMORYSTATUSEX()
+        public unsafe MEMORYSTATUSEX()
         {
-            this.dwLength = (uint)Marshal.SizeOf(typeof(MEMORYSTATUSEX));
+            dwLength = (uint)sizeof(MEMORYSTATUSEX);
         }
     }
 
-    public static class Win32
+    internal static partial class Win32
     {
-        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        [LibraryImport("kernel32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
-        public static extern bool GlobalMemoryStatusEx([In, Out] MEMORYSTATUSEX lpBuffer);
+        public static partial bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool GetSystemTimes(
-            out System.Runtime.InteropServices.ComTypes.FILETIME lpIdleTime,
-            out System.Runtime.InteropServices.ComTypes.FILETIME lpKernelTime,
-            out System.Runtime.InteropServices.ComTypes.FILETIME lpUserTime
-        );
-
-        [DllImport("powrprof.dll", EntryPoint = "PowerGetActiveScheme", SetLastError = true)]
-        public static extern uint PowerGetActiveScheme(IntPtr UserRootPowerKey, out IntPtr ActivePolicyGuid);
-
-        [DllImport("powrprof.dll", EntryPoint = "PowerSetActiveScheme", SetLastError = true)]
-        public static extern uint PowerSetActiveScheme(IntPtr UserRootPowerKey, ref Guid ActiveSchemeGuid);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern IntPtr LocalFree(IntPtr hMem);
-
-        [DllImport("kernel32.dll")]
-        public static extern ulong GetTickCount64();
-
-        [DllImport("kernel32.dll")]
+        // Each FILETIME is read as one 64-bit count of 100 ns intervals (low part first).
+        [LibraryImport("kernel32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
-        public static extern bool GetSystemPowerStatus([In, Out] SYSTEM_POWER_STATUS lpSystemPowerStatus);
+        public static partial bool GetSystemTimes(out ulong lpIdleTime, out ulong lpKernelTime, out ulong lpUserTime);
+
+        [LibraryImport("powrprof.dll")]
+        public static partial uint PowerGetActiveScheme(IntPtr UserRootPowerKey, out IntPtr ActivePolicyGuid);
+
+        [LibraryImport("powrprof.dll")]
+        public static partial uint PowerSetActiveScheme(IntPtr UserRootPowerKey, in Guid ActiveSchemeGuid);
+
+        [LibraryImport("kernel32.dll")]
+        public static partial IntPtr LocalFree(IntPtr hMem);
+
+        [LibraryImport("kernel32.dll")]
+        public static partial ulong GetTickCount64();
+
+        [LibraryImport("kernel32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static partial bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS lpSystemPowerStatus);
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    public class SYSTEM_POWER_STATUS
+    internal struct SYSTEM_POWER_STATUS
     {
         public byte ACLineStatus;
         public byte BatteryFlag;

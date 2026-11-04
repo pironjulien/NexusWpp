@@ -233,10 +233,10 @@ namespace DesktopHtmlHost
                     IntPtr infoPtr = new IntPtr(listPtr.ToInt64() + 8 + ((long)i * 532));
                     if (Marshal.ReadInt32(infoPtr, 528) != 1) continue; // wlan_interface_state_connected
 
-                    Guid ifaceGuid = (Guid)Marshal.PtrToStructure(infoPtr, typeof(Guid));
+                    Guid ifaceGuid = Marshal.PtrToStructure<Guid>(infoPtr);
                     uint dataSize;
                     IntPtr dataPtr;
-                    int status = WlanApi.WlanQueryInterface(handle, ref ifaceGuid, WlanOpcodeRssi, IntPtr.Zero, out dataSize, out dataPtr, IntPtr.Zero);
+                    int status = WlanApi.WlanQueryInterface(handle, ifaceGuid, WlanOpcodeRssi, IntPtr.Zero, out dataSize, out dataPtr, IntPtr.Zero);
                     if (status == ERROR_ACCESS_DENIED)
                     {
                         // Never ask for more: the signal stays unavailable for this session.
@@ -271,21 +271,21 @@ namespace DesktopHtmlHost
         }
     }
 
-    internal static class WlanApi
+    internal static partial class WlanApi
     {
-        [DllImport("wlanapi.dll")]
-        internal static extern int WlanOpenHandle(uint dwClientVersion, IntPtr pReserved, out uint pdwNegotiatedVersion, out IntPtr phClientHandle);
+        [LibraryImport("wlanapi.dll")]
+        internal static partial int WlanOpenHandle(uint dwClientVersion, IntPtr pReserved, out uint pdwNegotiatedVersion, out IntPtr phClientHandle);
 
-        [DllImport("wlanapi.dll")]
-        internal static extern int WlanCloseHandle(IntPtr hClientHandle, IntPtr pReserved);
+        [LibraryImport("wlanapi.dll")]
+        internal static partial int WlanCloseHandle(IntPtr hClientHandle, IntPtr pReserved);
 
-        [DllImport("wlanapi.dll")]
-        internal static extern int WlanEnumInterfaces(IntPtr hClientHandle, IntPtr pReserved, out IntPtr ppInterfaceList);
+        [LibraryImport("wlanapi.dll")]
+        internal static partial int WlanEnumInterfaces(IntPtr hClientHandle, IntPtr pReserved, out IntPtr ppInterfaceList);
 
-        [DllImport("wlanapi.dll")]
-        internal static extern int WlanQueryInterface(IntPtr hClientHandle, ref Guid pInterfaceGuid, int opCode, IntPtr pReserved, out uint pdwDataSize, out IntPtr ppData, IntPtr pWlanOpcodeValueType);
+        [LibraryImport("wlanapi.dll")]
+        internal static partial int WlanQueryInterface(IntPtr hClientHandle, in Guid pInterfaceGuid, int opCode, IntPtr pReserved, out uint pdwDataSize, out IntPtr ppData, IntPtr pWlanOpcodeValueType);
 
-        [DllImport("wlanapi.dll")]
-        internal static extern void WlanFreeMemory(IntPtr pMemory);
+        [LibraryImport("wlanapi.dll")]
+        internal static partial void WlanFreeMemory(IntPtr pMemory);
     }
 }

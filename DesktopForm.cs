@@ -87,74 +87,78 @@ namespace DesktopHtmlHost
         }
 
         // --- Win32 P/Invoke API Definitions ---
+        // Marshalling stubs generated at compile time (LibraryImport); Unicode entry points,
+        // last error kept only where it is read.
 
-        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
+        [LibraryImport("user32.dll", EntryPoint = "SetWindowsHookExW", SetLastError = true)]
+        private static partial IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
 
-        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        [LibraryImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+        private static partial bool UnhookWindowsHookEx(IntPtr hhk);
 
-        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+        [LibraryImport("user32.dll")]
+        private static partial IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
 
-        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        private static extern IntPtr GetModuleHandle(string lpModuleName);
+        [LibraryImport("kernel32.dll", EntryPoint = "GetModuleHandleW", StringMarshalling = StringMarshalling.Utf16)]
+        private static partial IntPtr GetModuleHandle(string lpModuleName);
 
-        [DllImport("kernel32.dll")]
-        private static extern uint GetCurrentThreadId();
+        [LibraryImport("kernel32.dll")]
+        private static partial uint GetCurrentThreadId();
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern int GetMessage(out NativeMessage message, IntPtr window, uint min, uint max);
+        [LibraryImport("user32.dll", EntryPoint = "GetMessageW", SetLastError = true)]
+        private static partial int GetMessage(out NativeMessage message, IntPtr window, uint min, uint max);
 
-        [DllImport("user32.dll")]
+        [LibraryImport("user32.dll", EntryPoint = "PeekMessageW")]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool PeekMessage(out NativeMessage message, IntPtr window, uint min, uint max, uint remove);
+        private static partial bool PeekMessage(out NativeMessage message, IntPtr window, uint min, uint max, uint remove);
 
-        [DllImport("user32.dll", SetLastError = true)]
+        [LibraryImport("user32.dll", EntryPoint = "PostThreadMessageW")]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool PostThreadMessage(uint threadId, uint message, IntPtr wParam, IntPtr lParam);
+        private static partial bool PostThreadMessage(uint threadId, uint message, IntPtr wParam, IntPtr lParam);
 
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
+        [LibraryImport("user32.dll", EntryPoint = "GetClassNameW")]
+        private static unsafe partial int GetClassName(IntPtr hWnd, char* lpClassName, int nMaxCount);
 
-        [DllImport("user32.dll")]
-        private static extern bool ScreenToClient(IntPtr hWnd, ref POINT lpPoint);
-
-        [DllImport("user32.dll")]
-        private static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
-
-        [DllImport("user32.dll")]
+        [LibraryImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool EnumChildWindows(IntPtr hwndParent, EnumChildProc lpEnumFunc, IntPtr lParam);
+        private static partial bool ScreenToClient(IntPtr hWnd, ref POINT lpPoint);
 
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetForegroundWindow();
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr WindowFromPoint(POINT point);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetParent(IntPtr hWnd);
-
-        [DllImport("user32.dll")]
+        [LibraryImport("user32.dll", EntryPoint = "PostMessageW")]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool IsWindow(IntPtr hWnd);
+        private static partial bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
-        [DllImport("user32.dll")]
+        [LibraryImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool IsIconic(IntPtr hWnd);
+        private static partial bool EnumChildWindows(IntPtr hwndParent, EnumChildProc lpEnumFunc, IntPtr lParam);
 
-        [DllImport("user32.dll")]
+        [LibraryImport("user32.dll")]
+        private static partial IntPtr GetForegroundWindow();
+
+        [LibraryImport("user32.dll")]
+        private static partial IntPtr WindowFromPoint(POINT point);
+
+        [LibraryImport("user32.dll")]
+        private static partial IntPtr GetParent(IntPtr hWnd);
+
+        [LibraryImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool IsWindowVisible(IntPtr hWnd);
+        private static partial bool IsWindow(IntPtr hWnd);
 
-        [DllImport("user32.dll")]
-        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
-
-        [DllImport("user32.dll")]
+        [LibraryImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+        private static partial bool IsIconic(IntPtr hWnd);
+
+        [LibraryImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool IsWindowVisible(IntPtr hWnd);
+
+        [LibraryImport("user32.dll")]
+        private static partial uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+        [LibraryImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
         private delegate bool EnumChildProc(IntPtr hwnd, IntPtr lParam);
         private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
@@ -201,50 +205,52 @@ namespace DesktopHtmlHost
         private const int WM_LBUTTONDOWN = 0x0201;
         private const int WM_LBUTTONUP = 0x0202;
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+        [LibraryImport("user32.dll", EntryPoint = "FindWindowW", StringMarshalling = StringMarshalling.Utf16)]
+        private static partial IntPtr FindWindow(string lpClassName, string lpWindowName);
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr SendMessageTimeout(
-            IntPtr hWnd, 
-            uint Msg, 
-            IntPtr wParam, 
-            IntPtr lParam, 
-            uint fuFlags, 
-            uint uTimeout, 
+        [LibraryImport("user32.dll", EntryPoint = "SendMessageTimeoutW")]
+        private static partial IntPtr SendMessageTimeout(
+            IntPtr hWnd,
+            uint Msg,
+            IntPtr wParam,
+            IntPtr lParam,
+            uint fuFlags,
+            uint uTimeout,
             out IntPtr lpdwResult
         );
 
-        [DllImport("user32.dll")]
+        [LibraryImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+        private static partial bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
         private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string lpszClass, string lpszWindow);
+        [LibraryImport("user32.dll", EntryPoint = "FindWindowExW", StringMarshalling = StringMarshalling.Utf16)]
+        private static partial IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string lpszClass, string lpszWindow);
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
+        [LibraryImport("user32.dll")]
+        private static partial IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+        [LibraryImport("user32.dll", EntryPoint = "GetWindowLongW")]
+        private static partial int GetWindowLong(IntPtr hWnd, int nIndex);
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+        [LibraryImport("user32.dll", EntryPoint = "SetWindowLongW")]
+        private static partial int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern int MapWindowPoints(IntPtr hWndFrom, IntPtr hWndTo, ref POINT lpPoints, int cPoints);
-
-        [DllImport("user32.dll")]
+        [LibraryImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool IsChild(IntPtr hWndParent, IntPtr hWnd);
+        private static partial bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        [LibraryImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [LibraryImport("user32.dll")]
+        private static partial int MapWindowPoints(IntPtr hWndFrom, IntPtr hWndTo, ref POINT lpPoints, int cPoints);
+
+        [LibraryImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool IsChild(IntPtr hWndParent, IntPtr hWnd);
 
         // Win32 Constants
         private const int GWL_STYLE = -16;

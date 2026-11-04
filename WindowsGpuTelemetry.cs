@@ -163,7 +163,7 @@ namespace DesktopHtmlHost
         }
     }
 
-    internal static class WddmGpuSensors
+    internal static partial class WddmGpuSensors
     {
         const int KMTQAITYPE_ADAPTERPERFDATA = 62;
         const int KMTQAITYPE_ADAPTERPERFDATA_CAPS = 63;
@@ -192,13 +192,13 @@ namespace DesktopHtmlHost
             public uint MaxFanRPM, TemperatureMax, TemperatureWarning;
         }
 
-        [DllImport("gdi32.dll")] static extern int D3DKMTOpenAdapterFromLuid(ref D3DKMT_OPENADAPTERFROMLUID args);
-        [DllImport("gdi32.dll")] static extern int D3DKMTQueryAdapterInfo(ref D3DKMT_QUERYADAPTERINFO args);
-        [DllImport("gdi32.dll")] static extern int D3DKMTCloseAdapter(ref D3DKMT_CLOSEADAPTER args);
+        [LibraryImport("gdi32.dll")] private static partial int D3DKMTOpenAdapterFromLuid(ref D3DKMT_OPENADAPTERFROMLUID args);
+        [LibraryImport("gdi32.dll")] private static partial int D3DKMTQueryAdapterInfo(in D3DKMT_QUERYADAPTERINFO args);
+        [LibraryImport("gdi32.dll")] private static partial int D3DKMTCloseAdapter(in D3DKMT_CLOSEADAPTER args);
 
-        internal static int PerfDataSize { get { return Marshal.SizeOf(typeof(ADAPTER_PERFDATA)); } }
-        internal static int PerfCapsSize { get { return Marshal.SizeOf(typeof(ADAPTER_PERFDATACAPS)); } }
-        internal static int QueryInfoSize { get { return Marshal.SizeOf(typeof(D3DKMT_QUERYADAPTERINFO)); } }
+        internal static unsafe int PerfDataSize { get { return sizeof(ADAPTER_PERFDATA); } }
+        internal static unsafe int PerfCapsSize { get { return sizeof(ADAPTER_PERFDATACAPS); } }
+        internal static unsafe int QueryInfoSize { get { return sizeof(D3DKMT_QUERYADAPTERINFO); } }
 
         static volatile bool unsupported;
 
@@ -246,38 +246,33 @@ namespace DesktopHtmlHost
 
         static void Close(uint handle)
         {
-            try { var close = new D3DKMT_CLOSEADAPTER { hAdapter = handle }; D3DKMTCloseAdapter(ref close); } catch { }
+            try { var close = new D3DKMT_CLOSEADAPTER { hAdapter = handle }; D3DKMTCloseAdapter(close); } catch { }
         }
 
-        static bool Query<T>(uint adapter, int type, ref T value) where T : struct
+        // The driver fills a copy on the stack; the caller's value changes only on success.
+        static unsafe bool Query<T>(uint adapter, int type, ref T value) where T : unmanaged
         {
-            int size = Marshal.SizeOf(typeof(T));
-            IntPtr buffer = Marshal.AllocHGlobal(size);
-            try
-            {
-                Marshal.StructureToPtr(value, buffer, false);
-                var query = new D3DKMT_QUERYADAPTERINFO { hAdapter = adapter, Type = type, pPrivateDriverData = buffer, PrivateDriverDataSize = (uint)size };
-                if (D3DKMTQueryAdapterInfo(ref query) != 0) return false;
-                value = (T)Marshal.PtrToStructure(buffer, typeof(T));
-                return true;
-            }
-            finally { Marshal.FreeHGlobal(buffer); }
+            T buffer = value;
+            var query = new D3DKMT_QUERYADAPTERINFO { hAdapter = adapter, Type = type, pPrivateDriverData = (IntPtr)(&buffer), PrivateDriverDataSize = (uint)sizeof(T) };
+            if (D3DKMTQueryAdapterInfo(query) != 0) return false;
+            value = buffer;
+            return true;
         }
     }
 
     // Current device power state from Plug and Play. A discrete GPU in D3 is runtime-suspended:
     // polling it can wake it up and drain the battery.
-    internal static class DevicePower
+    internal static partial class DevicePower
     {
         [StructLayout(LayoutKind.Sequential)]
         struct DEVPROPKEY { public Guid fmtid; public uint pid; }
-        [DllImport("cfgmgr32.dll", CharSet = CharSet.Unicode)]
-        static extern int CM_Locate_DevNodeW(out uint devInst, string deviceId, uint flags);
-        [DllImport("cfgmgr32.dll", CharSet = CharSet.Unicode)]
-        static extern int CM_Get_DevNode_PropertyW(uint devInst, ref DEVPROPKEY key, out uint type, byte[] buffer, ref uint size, uint flags);
+        [LibraryImport("cfgmgr32.dll", StringMarshalling = StringMarshalling.Utf16)]
+        private static partial int CM_Locate_DevNodeW(out uint devInst, string deviceId, uint flags);
+        [LibraryImport("cfgmgr32.dll")]
+        private static unsafe partial int CM_Get_DevNode_PropertyW(uint devInst, in DEVPROPKEY key, out uint type, byte* buffer, ref uint size, uint flags);
 
         // 0 = unknown, 1 = D0 (on) ... 4 = D3 (off).
-        internal static int State(string instanceId)
+        internal static unsafe int State(string instanceId)
         {
             if (string.IsNullOrEmpty(instanceId)) return 0;
             try
@@ -286,10 +281,13 @@ namespace DesktopHtmlHost
                 if (CM_Locate_DevNodeW(out devInst, instanceId, 0) != 0) return 0;
                 // DEVPKEY_Device_PowerData -> CM_POWER_DATA.PD_MostRecentPowerState
                 var key = new DEVPROPKEY { fmtid = new Guid("a45c254e-df1c-4efd-8020-67d146a850e0"), pid = 32 };
-                byte[] buffer = new byte[64];
+                Span<byte> buffer = stackalloc byte[64];
                 uint size = (uint)buffer.Length, type;
-                if (CM_Get_DevNode_PropertyW(devInst, ref key, out type, buffer, ref size, 0) != 0 || size < 8) return 0;
-                int state = BitConverter.ToInt32(buffer, 4);
+                fixed (byte* data = buffer)
+                {
+                    if (CM_Get_DevNode_PropertyW(devInst, key, out type, data, ref size, 0) != 0 || size < 8) return 0;
+                }
+                int state = BitConverter.ToInt32(buffer.Slice(4));
                 return state >= 1 && state <= 4 ? state : 0;
             }
             catch (Exception) { return 0; }
