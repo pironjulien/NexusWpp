@@ -170,6 +170,22 @@ The old version waited to find `WorkerW` before initializing WebView2. At Window
 - To find the actual MSIX path: `(Get-AppxPackage julienpiron.fr.NexusWpp).InstallLocation`.
 - The network ring is calibrated to the actual Windows link speed, for example `2.5 Gb/s` for the Intel I226-V.
 
+## Open research: live RAM traffic
+
+The RAM node shows memory in use, the same value as the RAM card, while the other nodes show live activity (load, active time, link use). A live share of the memory bandwidth would fit the node better, but we have not found a way to measure it that is reliable, works on every PC and needs neither administrator rights nor a driver (NexusWpp runs unelevated, also from the Microsoft Store). Help is welcome: open an issue if you know a way.
+
+What we tested (November 2026, Intel Core i7-14700K, dual-channel DDR5-6400, about 102 GB/s theoretical peak, Windows 11):
+
+| Approach | Result | Why it was not kept |
+|---|---|---|
+| CPU hardware counter `LLCMisses` (profile source 29) through a private ETW system logger session, × 64 bytes | Follows real read traffic within about 10-20 % on P- and E-cores | Needs administrator rights and `SeSystemProfilePrivilege`; does not count writebacks. An elevated service would be needed, and the Store build cannot rely on one |
+| Loaded-latency probe (dependent random reads over 64 MB, twice the L3) | No rights needed, costs about 0.2 ms per second | 21 points of error on average against the hardware counter; latency barely moves below 60 % load and stays high after a load (core clock) |
+| RAPL power through the Windows `Energy Meter` counters | Readable without rights | `RAPL_Package0_DRAM` reads 0 on this CPU. Uncore power (package − cores − graphics) tracks traffic, but with 8 points of error on average, up to 30 % false traffic under pure compute, and a calibration that only holds for one machine |
+| Intel Platform Monitoring Technology (inbox `IntelPMT.sys`, PCI 8086:A77D) | Its device interface opens without rights | Plain reads fail and the driver exposes no IOCTL: it samples for Windows' own telemetry and only serves kernel clients. Intel publishes DDR bandwidth samples ([Intel-PMT](https://github.com/intel/Intel-PMT)) for Meteor Lake and later, none for Alder or Raptor Lake |
+| CPU load, page faults, memory speed and other Windows counters | — | None measures bus traffic: at 100 % CPU the traffic went from 5 GB/s (in-cache compute) to 90 GB/s (memory scan) |
+
+Leads still open: PMT telemetry on Core Ultra (Meteor Lake and later), if Windows ever exposes it to applications; AMD equivalents; any Windows counter we missed.
+
 ## Useful measurements
 
 ```powershell
