@@ -150,10 +150,10 @@ static class HostRegression
     }
 
     // Stand-in for DesktopForm: same contract, no WebView2, tray icon or desktop attach.
-    sealed class FakeWallpaper : Form, IDesktopHostWindow
+    sealed class FakeWallpaper : DesktopHostForm
     {
-        bool closing;
-        public bool HandleLost { get; private set; }
+        bool closing, lost;
+        public override bool HandleLost { get { return lost; } }
         public FakeWallpaper()
         {
             FormBorderStyle = FormBorderStyle.None;
@@ -177,7 +177,7 @@ static class HostRegression
         protected override void OnFormClosing(FormClosingEventArgs e) { closing = true; base.OnFormClosing(e); }
         protected override void OnHandleDestroyed(EventArgs e)
         {
-            if (!closing && !RecreatingHandle) HandleLost = true;
+            if (!closing && !RecreatingHandle) lost = true;
             base.OnHandleDestroyed(e);
         }
     }
@@ -221,6 +221,63 @@ static class HostRegression
         Application.Run(context);
         Check(exitedByClose && forms.Count == 2, "a requested close ends the message loop");
         context.Dispose();
+    }
+
+    const string ParentHelperArgument = "--parent-helper";
+
+    // Child process standing in for Explorer: one hidden popup, killed without any cleanup.
+    static int RunParentHelper()
+    {
+        var parent = new Popup(new Rectangle(-32000, -32000, 100, 100));
+        Console.WriteLine(parent.Handle.ToInt64());
+        Console.Out.Flush();
+        Application.Run();
+        return 0;
+    }
+
+    // Explorer crashed or killed: Windows sends the attached window WM_NCDESTROY without WM_DESTROY.
+    static void ParentProcessKilled()
+    {
+        var info = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!, ParentHelperArgument)
+        {
+            UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true
+        };
+        using var helper = System.Diagnostics.Process.Start(info)!;
+        var parentHandle = new IntPtr(long.Parse(helper.StandardOutput.ReadLine() ?? "0", System.Globalization.CultureInfo.InvariantCulture));
+        var forms = new List<FakeWallpaper>();
+        var context = new DesktopHostContext(() => { var form = new FakeWallpaper(); forms.Add(form); return form; });
+        int step = 0;
+        var timer = new Timer { Interval = 100 };
+        var started = DateTime.Now;
+        timer.Tick += delegate
+        {
+            if (step == 0)
+            {
+                step = 1;
+                Reparent(forms[0].Handle, parentHandle);
+                helper.Kill();
+                helper.WaitForExit();
+            }
+            else if (step == 1 && forms.Count == 2)
+            {
+                step = 2;
+                Check(forms[0].HandleLost && forms[0].IsDisposed, "a parent killed in another process is noticed and the lost form disposed");
+                Check(ReferenceEquals(context.CurrentForm, forms[1]) && forms[1].Visible, "a new wallpaper form is created after the parent process dies");
+                forms[1].Close();
+            }
+            else if ((DateTime.Now - started).TotalMilliseconds > 10000)
+            {
+                timer.Stop();
+                Check(false, "host context reacts to a killed parent process within 10 s");
+                context.ExitThread();
+            }
+        };
+        context.ThreadExit += delegate { timer.Stop(); };
+        timer.Start();
+        Application.Run(context);
+        Check(step == 2, "the killed-parent scenario completes");
+        context.Dispose();
+        if (!helper.HasExited) helper.Kill();
     }
 
     // Telemetry semantics matched to Task Manager, then one real collection of this machine.
@@ -286,6 +343,7 @@ static class HostRegression
     [STAThread]
     static int Main(string[] args)
     {
+        if (args.Length > 0 && args[0] == ParentHelperArgument) return RunParentHelper();
         string output = args.Length > 0 ? args[0] : Path.GetTempPath();
         Directory.CreateDirectory(output);
         Program.LogPathOverride = Path.Combine(output, "host-regression.log");
@@ -300,6 +358,7 @@ static class HostRegression
             ShellEvents();
             Visibility();
             ParentDestroyed();
+            ParentProcessKilled();
             Telemetry();
         }
         catch (Exception error)

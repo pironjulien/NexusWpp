@@ -2,6 +2,13 @@
 
 ## Non publié
 
+## 2026-11-05 — 1.0.58.0
+
+### Fond d'écran rétabli après un plantage d'Explorer
+
+- Quand Explorer plante ou est tué net, Windows détruit la fenêtre du fond d'écran (enfant de WorkerW) par le seul `WM_NCDESTROY`, sans `WM_DESTROY` : WinForms ne signalait pas la perte, NexusWpp restait dans la zone de notification avec un bureau noir. La fenêtre perdue est désormais reconnue à `WM_NCDESTROY` et recréée comme après un redémarrage normal d'Explorer.
+- Test de non-régression : le parent du fond d'écran vit dans un autre processus, tué sans nettoyage ; le test échoue sans la correction.
+
 ## 2026-11-04 — 1.0.57.0
 
 ### Petite icône : le médaillon du site sans son inscription

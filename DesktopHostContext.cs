@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows.Forms;
 
 namespace DesktopHtmlHost
@@ -7,6 +7,38 @@ namespace DesktopHtmlHost
     internal interface IDesktopHostWindow
     {
         bool HandleLost { get; }
+    }
+
+    // When Explorer is killed or crashes, Windows tears down our WS_CHILD of WorkerW with
+    // WM_NCDESTROY alone. WinForms raises OnHandleDestroyed / HandleDestroyed only on
+    // WM_DESTROY, so the lost window went unnoticed: no recreation, a black desktop.
+    public abstract class DesktopHostForm : Form, IDesktopHostWindow
+    {
+        private const int WM_NCDESTROY = 0x0082;
+        private bool handleDestroyedRaised;
+
+        public abstract bool HandleLost { get; }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            handleDestroyedRaised = false;
+            base.OnHandleCreated(e);
+        }
+
+        protected override void OnHandleDestroyed(EventArgs e)
+        {
+            handleDestroyedRaised = true;
+            base.OnHandleDestroyed(e);
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == WM_NCDESTROY && !handleDestroyedRaised && !RecreatingHandle)
+            {
+                OnHandleDestroyed(EventArgs.Empty);
+            }
+            base.WndProc(ref m);
+        }
     }
 
     // Message loop owner. Not bound to the wallpaper form: when Explorer exits it destroys

@@ -10,7 +10,7 @@ using System.Threading;
 
 namespace DesktopHtmlHost
 {
-    public partial class DesktopForm : Form, IDesktopHostWindow
+    public partial class DesktopForm : DesktopHostForm
     {
         private WebView2? webView;
         private readonly string htmlPath;
@@ -334,7 +334,7 @@ namespace DesktopHtmlHost
         }
 
         // The native window was destroyed by someone else (Explorer exiting).
-        public bool HandleLost { get { return handleLost; } }
+        public override bool HandleLost { get { return handleLost; } }
         private bool handleLost;
 
         // Explorer destroys its child windows when it exits: our handle goes with WorkerW.
