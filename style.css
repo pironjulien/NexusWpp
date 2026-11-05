@@ -387,6 +387,8 @@ body {
     width: calc(100% * 60 / 59);
     height: 100%;
     z-index: -1;
+    /* The oldest sample sits left of the viewBox; the card clips it, not the svg. */
+    overflow: visible;
     will-change: transform;
     pointer-events: none;
 }

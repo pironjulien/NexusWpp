@@ -2,6 +2,13 @@
 
 ## Non publié
 
+## 2026-11-05 — 1.0.59.0
+
+### Courbes d'historique fluides, sans bout coupé
+
+- Le bout gauche (le plus ancien) de la courbe de fond de chaque carte ne disparaît plus à chaque seconde pour revenir ensuite : un échantillon de plus est tracé hors de la carte et en sort en glissant.
+- Sur secteur, la courbe avance à chaque image de l'horloge à 24 Hz au lieu de six pas par seconde : défilement continu, pour +0,7 point d'iGPU mesuré (`profile_graphics.ps1`). Sur batterie, en économiseur d'énergie ou animations Windows coupées, elle saute toujours une fois par seconde.
+
 ## 2026-11-05 — 1.0.58.0
 
 ### Fond d'écran rétabli après un plantage d'Explorer

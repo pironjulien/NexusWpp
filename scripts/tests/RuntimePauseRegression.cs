@@ -235,7 +235,7 @@ sealed class RuntimePauseRegression : Form
             await Check("physicsFpsInterval === 1000 / MOTION_FPS && MOTION_FPS === 24", "the shared clock runs at 24 Hz on mains");
             await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal',battery:{present:true,percent:60,ac:false,rateW:-9,minutesLeft:90}});");
             await Check("physicsFpsInterval === 1000 / MOTION_FPS_ECONOMY && MOTION_FPS_ECONOMY === 12", "the shared clock keeps 12 Hz on battery");
-            await Check("HISTORY_STEPS === 6 && cardHistories.filter(h => !document.getElementById(h.id).classList.contains('card-hidden')).every(h => parseFloat(h.svg.style.transform.slice(11)) === 0)", "on battery the history lines jump once a second, without steps");
+            await Check("HISTORY_STEPS === 24 && cardHistories.filter(h => !document.getElementById(h.id).classList.contains('card-hidden')).every(h => parseFloat(h.svg.style.transform.slice(11)) === 0)", "on battery the history lines jump once a second, without steps");
             await view.CoreWebView2.ExecuteScriptAsync("window.writeRingOffset=writeRing;");
 
             // Windows energy saver holds the logo rings still while visible, and releases them when it ends.
@@ -300,7 +300,7 @@ sealed class RuntimePauseRegression : Form
             await Check("JSON.stringify(document.querySelector('.dashboard').getBoundingClientRect()) === singleRect && document.querySelector('.layout-frame').style.width === ''", "single monitor layout is the unchanged full-window layout");
             // 60 s history behind each card: drawn under the content, gaps for missing readings, clamped values.
             await Check("document.querySelectorAll('.gauge-card > svg.history-line').length === 7 && [...document.querySelectorAll('.history-line')].every(s => getComputedStyle(s).zIndex === '-1' && getComputedStyle(s).pointerEvents === 'none')", "every card has a history line behind its content");
-            await Check("cardHistories.every(h => h.values.length > 0 && h.values.length <= HISTORY_LENGTH)", "history keeps at most 60 samples");
+            await Check("cardHistories.every(h => h.values.length > 0 && h.values.length <= HISTORY_LENGTH + 1)", "history keeps 60 samples shown plus the one sliding out");
             await Check("historyPaths([10, null, 20, 30]).line.split('M').length - 1 === 2 && historyPaths([null, null]).line === ''", "missing readings break the line instead of drawing zero");
             await Check("historyPaths([150]).line === 'M59 8.0' && historyPaths([-5]).line === 'M59 100.0'", "history values are clamped to the card");
             await Check("cspViolations.length === 0", "page runs under its Content-Security-Policy without blocked content");

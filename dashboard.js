@@ -1118,11 +1118,11 @@ function historyPaths(values) {
 
 // History lines advance in small steps between two samples: each sample is drawn once, one
 // sample-width to the right of its place, and the line moves back to it by HISTORY_STEPS shifts of
-// a compositor transform over the next second, on ticks of the map clock (radar.js), so no layout
-// and no new drawing. A continuous glide at the display refresh rate cost +23 points of iGPU 3D
-// (seven card-wide layers composed 60 times a second). On battery, under energy saver or with
-// Windows animations off the lines jump once a second.
-const HISTORY_STEPS = 6;
+// a compositor transform over the next second, on every tick of the 24 Hz map clock (radar.js), so
+// no layout and no new drawing. A continuous glide at the display refresh rate cost +23 points of
+// iGPU 3D (seven card-wide layers composed 60 times a second); six steps read as jerky. On battery,
+// under energy saver or with Windows animations off the lines jump once a second.
+const HISTORY_STEPS = 24;
 function historyStepsActive() {
     return HISTORY_STEPS > 0 && physicsFpsInterval === 1000 / MOTION_FPS && !reducedMotionQuery.matches && !runtimeSuspended;
 }
@@ -1146,7 +1146,9 @@ function pushCardHistory(id, value) {
     const history = cardHistories.find(h => h.id === id);
     if (!history) return;
     history.values.push(NexusTelemetry.valid(value) ? value : null);
-    if (history.values.length > HISTORY_LENGTH) history.values.shift();
+    // One sample more than shown, drawn left of the card: while the line steps in, its oldest end
+    // slides out of the card instead of being cut off and growing back each second.
+    if (history.values.length > HISTORY_LENGTH + 1) history.values.shift();
     const paths = historyPaths(history.values);
     history.stroke.setAttribute("d", paths.line);
     history.sampleTime = performance.now();
