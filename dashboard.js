@@ -1103,13 +1103,14 @@ function updateDiskCard(view, disk, index, track) {
 // Builds the line and filled area from the samples; missing readings break the line instead of faking zero.
 function historyPaths(values) {
     const offset = HISTORY_LENGTH - values.length;
-    let line = "", area = "", runStart = -1, last = -1;
-    const closeRun = () => { if (runStart >= 0) area += `L${last} 100 L${runStart} 100 Z`; runStart = -1; };
+    // No run is null, not -1: the oldest sample sits at x = -1, left of the card, while it slides out.
+    let line = "", area = "", runStart = null, last = null;
+    const closeRun = () => { if (runStart !== null) area += `L${last} 100 L${runStart} 100 Z`; runStart = null; };
     values.forEach((value, index) => {
         const x = offset + index;
         if (value === null) { closeRun(); return; }
         const y = (100 - Math.max(0, Math.min(100, value)) * 0.92).toFixed(1);
-        if (runStart < 0) { line += `M${x} ${y}`; area += `M${x} 100 L${x} ${y}`; runStart = x; }
+        if (runStart === null) { line += `M${x} ${y}`; area += `M${x} 100 L${x} ${y}`; runStart = x; }
         else { line += `L${x} ${y}`; area += `L${x} ${y}`; }
         last = x;
     });

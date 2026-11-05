@@ -2,6 +2,13 @@
 
 ## Non publié
 
+## 2026-11-05 — 1.0.61.0
+
+### Courbes d'historique : plus de saut au bord gauche
+
+- Le bout gauche de la courbe de fond ne se coupe plus en sautant d'un échantillon vers l'intérieur à chaque seconde. Le point le plus ancien, placé à x = -1 hors de la carte, était pris pour « aucun tracé en cours » (même valeur -1 que le marqueur interne) : il restait détaché du reste, si bien que la courbe et son aire commençaient un échantillon plus loin. Le marqueur est désormais `null`.
+- Test de non-régression : avec 61 échantillons, la courbe est un seul tracé qui part de x = -1.
+
 ## 2026-11-05 — 1.0.60.0
 
 ### Réseau en pourcentage entier
