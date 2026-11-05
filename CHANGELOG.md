@@ -2,6 +2,12 @@
 
 ## Non publié
 
+## 2026-11-05 — 1.0.60.0
+
+### Réseau en pourcentage entier
+
+- Le nœud Réseau affiche l'utilisation du lien en pourcentage entier, comme les autres : un trafic inférieur à 1 % du lien s'affiche « 1 % » (au lieu de « 0,01 % »), seul un lien inactif affiche « 0 % ».
+
 ## 2026-11-05 — 1.0.59.0
 
 ### Courbes d'historique fluides, sans bout coupé

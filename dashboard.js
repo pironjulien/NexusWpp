@@ -643,7 +643,8 @@ function updateDOM(stats) {
         const linkKb = getNetworkLinkSpeedKb(stats);
         const linkPct = netRatesValid && linkKb > 0 ? Math.min(100, (totalNetKb / linkKb) * 100) : null;
         // One decimal under 1 % ("0,02 %"), a whole number above, as Task Manager rounds.
-        telemetryNodes.net.value = linkPct !== null ? (linkPct < 1 ? Number(linkPct.toFixed(2)) : Math.round(linkPct)) : null;
+        // Whole percents: any traffic below 1 % of the link reads 1 %, only an idle link reads 0 %.
+        telemetryNodes.net.value = linkPct !== null ? (linkPct > 0 ? Math.max(1, Math.round(linkPct)) : 0) : null;
         telemetryNodes.net.activity = linkPct > 0 ? Math.min(100, Math.max(1, Math.round(Math.sqrt(linkPct / 100) * 100))) : 0;
         pushCardHistory("net-card", telemetryNodes.net.activity);
     }

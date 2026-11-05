@@ -339,7 +339,7 @@ sealed class RuntimePauseRegression : Form
             await Check("telemetryNodes.ssd2.visible !== false && telemetryNodes.ssd2.label === 'SSD D:' && telemetryNodes.ssd2.value === 12 && telemetryNodes.ssd3.label === 'HDD E:' && telemetryNodes.ssd3.value === 3", "every disk card has its node in the map, with its active time");
             await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal'});");
             await Check("document.querySelectorAll('.gauge-card[id^=ssd-card]:not(.card-hidden)').length===1 && telemetryNodes.ssd2.visible === false && telemetryNodes.ssd3.visible === false", "a disk that goes away hides its card and its node");
-            await Check("(() => { const s = JSON.parse(JSON.stringify(lastTelemetry)); s.network.lan = 40; s.network.wifi = 21; updateDOM(s); return telemetryNodes.net.value === 0.02; })()", "network link utilization keeps one decimal under 1 % (61 KB/s on 2.5 Gb/s)");
+            await Check("(() => { const s = JSON.parse(JSON.stringify(lastTelemetry)); s.network.lan = 40; s.network.wifi = 21; updateDOM(s); return telemetryNodes.net.value === 1; })()", "network link utilization below 1 % reads 1 % (61 KB/s on 2.5 Gb/s)");
             await Check("new Set([...document.querySelectorAll('.gauge-card .gauge-label')].filter(e=>e.getClientRects().length).map(e=>getComputedStyle(e).fontSize)).size===1", "every card title has the same size");
             await Check("formatCacheSize('24.0 Mo') === (NexusI18n.lang === 'fr' ? '24,0 Mo' : '24.0 MB') && formatCacheSize('2.5 Mo') === (NexusI18n.lang === 'fr' ? '2,5 Mo' : '2.5 MB')",
                 "CPU cache sizes follow the interface language");
