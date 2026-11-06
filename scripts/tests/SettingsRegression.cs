@@ -155,8 +155,10 @@ static class SettingsRegression
                   taskXml.SelectSingleNode("//t:Exec/t:Command", ns)?.InnerText.EndsWith(@"A&B\AppData\Local\Microsoft\WindowsApps\nexuswpp.exe", StringComparison.Ordinal) == true &&
                   taskXml.SelectSingleNode("//t:Principal/t:RunLevel", ns)?.InnerText == "LeastPrivilege" &&
                   taskXml.SelectSingleNode("//t:Settings/t:Priority", ns)?.InnerText == "4" &&
-                  taskXml.SelectSingleNode("//t:Settings/t:ExecutionTimeLimit", ns)?.InnerText == "PT0S",
-                  "priority startup task: this user's logon, alias, no elevation, normal priority, no time limit");
+                  taskXml.SelectSingleNode("//t:Settings/t:ExecutionTimeLimit", ns)?.InnerText == "PT0S" &&
+                  taskXml.SelectSingleNode("//t:Settings/t:RestartOnFailure/t:Interval", ns)?.InnerText == "PT1M" &&
+                  taskXml.SelectSingleNode("//t:Settings/t:RestartOnFailure/t:Count", ns)?.InnerText == "3",
+                  "priority startup task: this user's logon, alias, no elevation, normal priority, no time limit, retried on a failed launch");
             Check(AllControls(form).Where(c => c.GetType().Name == "LogoPreview").All(c => !c.CanSelect && !c.TabStop), "logo preview takes no keyboard focus");
             Check(((Label)named["status"]).LiveSetting == System.Windows.Forms.Automation.AutomationLiveSetting.Polite, "status is a polite live region");
             form.Close();

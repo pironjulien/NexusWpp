@@ -2,6 +2,14 @@
 
 ## Non publié
 
+## 2026-11-06 — 1.0.67.0
+
+### Démarrage prioritaire : nouvel essai si Windows refuse le lancement
+
+- Au redémarrage du 6 novembre, la tâche de démarrage prioritaire s'est lancée à la seconde même de l'ouverture de session et Windows a refusé d'activer le paquet (erreur 0xD0004001) : NexusWpp ne démarrait pas du tout, et le démarrage du Store, coupé tant que cette tâche existe, ne prenait pas le relais. Le Planificateur de tâches relance maintenant NexusWpp toutes les minutes, trois fois au plus, si le lancement échoue. Un lancement en trop est sans effet : l'instance déjà ouverte le fait quitter aussitôt.
+- La tâche est réécrite à chaque lancement de NexusWpp, pour qu'une tâche créée par une version précédente reçoive ce réglage.
+- Test de non-régression : la tâche créée contient la relance (toutes les minutes, trois fois).
+
 ## 2026-11-06 — 1.0.66.0
 
 ### Courbes de fond à vitesse constante à l'écran
