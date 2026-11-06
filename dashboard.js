@@ -176,36 +176,52 @@ function setSubMetric(valEl, label, value) {
     }
 }
 
-// Bar fill as a horizontal scale (see .sub-progress-fill): composited, no layout per frame.
+// Bar fill as a horizontal scale (see .sub-progress-fill): composited, no layout per frame. It
+// eases like the gauge rings, on the same shared clock and over the same time (VALUE_TWEEN_MS).
 function setBarFill(element, value) {
     if (!element) return;
-    const scale = `scaleX(${(NexusTelemetry.valid(value) ? Math.min(100, value) : 0) / 100})`;
-    if (element.style.transform !== scale) {
-        element.style.transform = scale;
+    const target = (NexusTelemetry.valid(value) ? Math.min(100, value) : 0) / 100;
+    if (element._nexusScaleTarget === target) return;
+    element._nexusScaleTarget = target;
+    if (!valueMotionAllowed(element._nexusScale)) {
+        ringTweens.delete(element);
+        writeBarScale(element, target);
+        return;
     }
+    ringTweens.set(element, { from: element._nexusScale, to: target, start: performance.now(), write: writeBarScale });
+    startMotionClock();
 }
 
-// Ring motion keeps the former 0.18 s ease-out, but it is stepped by the shared animation
-// clock (radar.js) instead of a CSS transition repainted at the display rate. A 1 s ease was
-// measured at +2.3 points of one core (stroke-dashoffset under a drop-shadow is repainted,
-// it cannot run on the compositor): more than the whole 12 -> 20 Hz step, so it stays short.
-const RING_TWEEN_MS = 180;
-const ringTweens = new Map();
+function writeBarScale(element, scale) {
+    element._nexusScale = scale;
+    const transform = `scaleX(${scale.toFixed(4)})`;
+    if (element.style.transform !== transform) element.style.transform = transform;
+}
+
+// Gauge rings and card bars ease to a new value over the same time, stepped by the shared
+// animation clock (radar.js) like every other motion of the page, instead of CSS transitions
+// run at the display rate. At 12 Hz the former 0.18 s ring ease was two steps (a visible jump)
+// while the bars glided apart at 60 Hz for 0.618 s: VALUE_TWEEN_MS gives both six steps.
+const VALUE_TWEEN_MS = 500;
+const ringTweens = new Map(); // element -> { from, to, start, write }: rings and bars
+
+function valueMotionAllowed(shown) {
+    return shown !== undefined && !runtimeSuspended && !reducedMotionQuery.matches
+        && !document.body.classList.contains("runtime-resuming");
+}
 
 function setCircularProgress(ring, value) {
     if (!ring) return;
     const offset = RING_CIRCUMFERENCE - ((NexusTelemetry.valid(value) ? Math.min(100, value) : 0) / 100) * RING_CIRCUMFERENCE;
     const offsetValue = offset.toFixed(3);
     if (ring._nexusOffset === offsetValue) return;
-    const animate = ring._nexusShown !== undefined && !runtimeSuspended && !reducedMotionQuery.matches
-        && !document.body.classList.contains("runtime-resuming");
     ring._nexusOffset = offsetValue;
-    if (!animate) {
+    if (!valueMotionAllowed(ring._nexusShown)) {
         ringTweens.delete(ring);
         writeRingOffset(ring, offset);
         return;
     }
-    ringTweens.set(ring, { from: ring._nexusShown, to: offset, start: performance.now() });
+    ringTweens.set(ring, { from: ring._nexusShown, to: offset, start: performance.now(), write: (r, o) => writeRingOffset(r, o) });
     startMotionClock();
 }
 
@@ -225,15 +241,15 @@ function ringEase(x) {
     return curve(t, 1, 1);
 }
 
-// Called on each animation tick; returns true while a ring is still easing.
+// Called on each animation tick; returns true while a ring or a bar is still easing.
 function stepRingTweens(now) {
-    ringTweens.forEach((tween, ring) => {
-        const progress = (now - tween.start) / RING_TWEEN_MS;
+    ringTweens.forEach((tween, element) => {
+        const progress = (now - tween.start) / VALUE_TWEEN_MS;
         if (progress >= 1) {
-            ringTweens.delete(ring);
-            writeRingOffset(ring, tween.to);
+            ringTweens.delete(element);
+            tween.write(element, tween.to);
         } else if (progress > 0) {
-            writeRingOffset(ring, tween.from + (tween.to - tween.from) * ringEase(progress));
+            tween.write(element, tween.from + (tween.to - tween.from) * ringEase(progress));
         }
     });
     return ringTweens.size > 0;
@@ -241,7 +257,7 @@ function stepRingTweens(now) {
 
 // Shows the target values at once (resume snap, static test snapshots).
 function finishRingTweens() {
-    ringTweens.forEach((tween, ring) => writeRingOffset(ring, tween.to));
+    ringTweens.forEach((tween, element) => tween.write(element, tween.to));
     ringTweens.clear();
 }
 

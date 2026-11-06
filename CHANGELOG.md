@@ -2,6 +2,15 @@
 
 ## Non publié
 
+## 2026-11-06 — 1.0.64.0
+
+### Cercles et barres harmonisés sur l'horloge commune
+
+- Les cercles des jauges sautaient à chaque nouvelle valeur : leur glissement de 0,18 s ne faisait plus que deux pas depuis le passage à 12 images par seconde. Ils glissent maintenant sur 0,5 s, soit six pas de l'horloge commune.
+- Les barres du bas des cartes glissaient à part, par une transition CSS à la fréquence de l'écran (60 images par seconde pendant 0,618 s à chaque mesure). Elles suivent maintenant la même horloge, la même durée et la même courbe que les cercles. Carte centrale, logos, cercles, barres et courbes de fond avancent ensemble, 12 fois par seconde.
+- Mesuré hors écran à 5120 × 1440 (une mesure par seconde, médianes de six passages de 10 s) : GPU 3D 3,4 % → 2,6 %, CPU inchangé (20 % d'un cœur). Les courbes de fond avancent régulièrement (un pas toutes les 79 à 97 ms, aucun retard au moment des mises à jour, mise à jour des cartes en moins de 2 ms).
+- Tests : cercles et barres encore en mouvement un quart de seconde après une nouvelle valeur, arrivés en 4 à 8 pas, sans transition CSS.
+
 ## 2026-11-06 — 1.0.63.0
 
 ### Plus de plantage quand le pilote NVIDIA est mis à jour

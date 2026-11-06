@@ -915,7 +915,7 @@ body {
     border-radius: 4px;
     transform: scaleX(0);
     transform-origin: left center;
-    transition: transform 0.618s cubic-bezier(0.22, 1, 0.36, 1); /* 1 / φ s */
+    /* No CSS transition: dashboard.js eases the scale on the shared animation clock, with the rings. */
 }
 
 .igpu-vram-bar {
@@ -1036,8 +1036,5 @@ body {
     .gauge-card { padding: 4px 6px; gap: 2px; }
 }
 
-/* Windows "Animation effects" off: bars take their new size at once. The spinners and
-   the gauge rings are held or snapped by script (see decorativeMotionHeld). */
-@media (prefers-reduced-motion: reduce) {
-    .sub-progress-fill { transition: none; }
-}
+/* Windows "Animation effects" off: the bars, the gauge rings and the spinners are held or
+   snapped by script (see decorativeMotionHeld and valueMotionAllowed). */
