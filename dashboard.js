@@ -1120,13 +1120,13 @@ function historyPaths(values) {
 
 // History lines advance in small steps between two samples: each sample is drawn once, one
 // sample-width to the right of its place, and the line moves back to it by HISTORY_STEPS shifts of
-// a compositor transform over the next second, on every tick of the 24 Hz map clock (radar.js), so
+// a compositor transform over the next second, on every tick of the 12 Hz map clock (radar.js), so
 // no layout and no new drawing. A continuous glide at the display refresh rate cost +23 points of
-// iGPU 3D (seven card-wide layers composed 60 times a second); six steps read as jerky. On battery,
+// GPU 3D (seven card-wide layers composed 60 times a second); six steps read as jerky. On battery,
 // under energy saver or with Windows animations off the lines jump once a second.
-const HISTORY_STEPS = 24;
+const HISTORY_STEPS = 12;
 function historyStepsActive() {
-    return HISTORY_STEPS > 0 && physicsFpsInterval === 1000 / MOTION_FPS && !reducedMotionQuery.matches && !runtimeSuspended;
+    return HISTORY_STEPS > 0 && !motionEconomy && !reducedMotionQuery.matches && !runtimeSuspended;
 }
 function setHistoryShift(history, fraction) {
     const shift = `translateX(${((1 - fraction) * 100 / HISTORY_LENGTH).toFixed(3)}%)`;

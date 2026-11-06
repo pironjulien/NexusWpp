@@ -2,6 +2,14 @@
 
 ## Non publié
 
+## 2026-11-06 — 1.0.62.0
+
+### Deux fois moins de GPU pour la même animation
+
+- Sur secteur, l'horloge commune (carte centrale, logos, anneaux, courbes d'historique) passe de 24 à 12 images par seconde. Les courbes de fond continuent de glisser, en 12 petits pas par seconde au lieu de 24 ; sur batterie et en économiseur d'énergie, elles sautent toujours une fois par seconde.
+- Mesuré hors écran à la taille d'un écran 5120 × 1440 (vraie page, médianes de quatre passages de 10 s, GPU 3D du groupe WebView2 / CPU en part d'un cœur) : 24 i/s avec courbes glissantes 6,8 % / 28 % ; 18 i/s 4,5 % / 27 % ; 12 i/s 4,0 % / 21 % ; 12 i/s avec courbes qui sautent 2,6 % / 21 % ; 8 i/s 2,0 % / 16 % ; sans animation 0 % / 10 %. Les halos des anneaux ne coûtent rien de mesurable. Le défilement continu des courbes coûtait à lui seul +3,1 points à 24 i/s (+0,7 mesuré sur 2560 × 1440).
+- En watts, l'écart reste dans le bruit : la carte graphique reste à sa fréquence minimale (environ 1,2 W pour l'animation, à toute cadence).
+
 ## 2026-11-05 — 1.0.61.0
 
 ### Courbes d'historique : plus de saut au bord gauche

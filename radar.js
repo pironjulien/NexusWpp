@@ -719,15 +719,18 @@ document.addEventListener("transitionrun", () => {
 
 // Main update physics and rendering loop
 let lastPhysicsTime = 0;
-// Active cadence; the clock sleeps fully when idle, covered or paused. 24 frames/s really drawn on
-// mains (measured off screen with real telemetry, see CHANGELOG); on battery or under Windows
-// energy saver 12.
-const MOTION_FPS = 24;
+// Active cadence; the clock sleeps fully when idle, covered or paused. 12 frames/s on mains and in
+// economy: at 5120 × 1440, 24 frames/s with gliding history lines took 6.8 % of GPU 3D and 28 % of
+// a core, 12 frames/s 4.0 % and 21 % (see CHANGELOG). Economy (battery, Windows energy saver) only
+// differs by history lines that jump once a second.
+const MOTION_FPS = 12;
 const MOTION_FPS_ECONOMY = 12;
 let physicsFpsInterval = 1000 / MOTION_FPS;
+let motionEconomy = false;
 const PHYSICS_REFERENCE_MS = 1000 / 12; // cadence the per-frame motion constants were tuned at
 
 function setMotionEconomy(economy) {
+    motionEconomy = economy;
     physicsFpsInterval = 1000 / (economy ? MOTION_FPS_ECONOMY : MOTION_FPS);
 }
 function updatePhysics(timestamp, renderOnly = false) {
