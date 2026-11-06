@@ -240,6 +240,16 @@ sealed class RuntimePauseRegression : Form
             await Check("barSteps.length>=4 && barSteps.length<=8 && barSteps[barSteps.length-1]===0.9 && getComputedStyle(testBar).transitionDuration.split(',').every(d=>parseFloat(d)===0)", "bars ease on the same clock and over the same time as the rings, without a CSS transition");
             await view.CoreWebView2.ExecuteScriptAsync("window.writeBarScale=writeBar;");
             await Check("physicsFpsInterval === 1000 / MOTION_FPS && MOTION_FPS === 12 && historyStepsActive()", "the shared clock runs at 12 Hz on mains, history lines glide");
+            // Real samples arrive 905 to 1105 ms apart (host timer + collection): the line must keep
+            // moving about one step per tick, never stopping on a late sample nor skipping on an early one.
+            await Check(@"(()=>{const h=cardHistories.find(x=>x.id==='cpu-card');h.pending=0;h.speed=1;
+                const gaps=[905,1105,1000,912,1097,950,1060,921,1083,1000,905,1105,1000,1040,960,905,1105];
+                let t=0,next=0,arrived=0,prev=null,bad=0,ticks=0;
+                for(let tick=0;tick<220;tick++){const now=tick*1000/12;
+                    while(arrived<gaps.length&&next<=now){pushCardHistory('cpu-card',50);arrived++;next+=gaps[arrived-1];}
+                    if(arrived>=gaps.length)break;stepHistories();const shown=arrived*HISTORY_STEPS-h.pending;
+                    if(prev!==null&&tick>24){ticks++;const move=shown-prev;if(move<0.5||move>1.5)bad++;}prev=shown;}
+                return ticks>150&&bad===0&&h.pending<=2*HISTORY_STEPS;})()", "history lines keep a steady pace when samples arrive 905 to 1105 ms apart");
             await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal',battery:{present:true,percent:60,ac:false,rateW:-9,minutesLeft:90}});");
             await Check("physicsFpsInterval === 1000 / MOTION_FPS_ECONOMY && MOTION_FPS_ECONOMY === 12", "the shared clock keeps 12 Hz on battery");
             await Check("HISTORY_STEPS === 12 && !historyStepsActive() && cardHistories.filter(h => !document.getElementById(h.id).classList.contains('card-hidden')).every(h => parseFloat(h.svg.style.transform.slice(11)) === 0)", "on battery the history lines jump once a second, without steps");
@@ -307,10 +317,10 @@ sealed class RuntimePauseRegression : Form
             await Check("JSON.stringify(document.querySelector('.dashboard').getBoundingClientRect()) === singleRect && document.querySelector('.layout-frame').style.width === ''", "single monitor layout is the unchanged full-window layout");
             // 60 s history behind each card: drawn under the content, gaps for missing readings, clamped values.
             await Check("document.querySelectorAll('.gauge-card > svg.history-line').length === 7 && [...document.querySelectorAll('.history-line')].every(s => getComputedStyle(s).zIndex === '-1' && getComputedStyle(s).pointerEvents === 'none')", "every card has a history line behind its content");
-            await Check("cardHistories.every(h => h.values.length > 0 && h.values.length <= HISTORY_LENGTH + 1)", "history keeps 60 samples shown plus the one sliding out");
+            await Check("cardHistories.every(h => h.values.length > 0 && h.values.length <= HISTORY_LENGTH + 2)", "history keeps 60 samples shown plus the two sliding out");
             await Check("historyPaths([10, null, 20, 30]).line.split('M').length - 1 === 2 && historyPaths([null, null]).line === ''", "missing readings break the line instead of drawing zero");
             await Check("historyPaths([150]).line === 'M59 8.0' && historyPaths([-5]).line === 'M59 100.0'", "history values are clamped to the card");
-            await Check("historyPaths(Array(HISTORY_LENGTH + 1).fill(50)).line.split('M').length - 1 === 1 && historyPaths(Array(HISTORY_LENGTH + 1).fill(50)).line.startsWith('M-1 54.0L0 ')", "the oldest sample, left of the card, stays joined to the line");
+            await Check("historyPaths(Array(HISTORY_LENGTH + 2).fill(50)).line.split('M').length - 1 === 1 && historyPaths(Array(HISTORY_LENGTH + 2).fill(50)).line.startsWith('M-2 54.0L-1 54.0L0 ')", "the oldest samples, left of the card, stay joined to the line");
             await Check("cspViolations.length === 0", "page runs under its Content-Security-Policy without blocked content");
             // Battery line and NPU client (real fields from the host).
             await Check("formatBattery({present:true,percent:73,ac:false,rateW:-12.4,minutesLeft:135}) === t('battery.status',{pct:73,source:t('battery.dc')}) + ' · ' + num(12.4,1) + ' W · ' + t('battery.left',{time:'2 H 15'})", "battery on discharge shows power and time left");

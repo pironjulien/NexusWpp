@@ -2,6 +2,14 @@
 
 ## Non publié
 
+## 2026-11-06 — 1.0.65.0
+
+### Courbes de fond : plus d'à-coups de temps en temps
+
+- Les courbes d'historique s'arrêtaient ou sautaient de temps en temps : leur défilement supposait une mesure toutes les 1000 ms pile, alors que les mesures réelles arrivent de 905 à 1105 ms d'écart (minuteur de l'hôte plus 10 à 112 ms de collecte, mesuré sur le vrai collecteur pendant 2 minutes). Une mesure en retard figeait la courbe, une mesure en avance lui faisait sauter des pas. Le banc ne le voyait pas : il envoyait des mesures parfaitement régulières.
+- Chaque courbe garde maintenant le chemin qui lui reste à parcourir et avance d'environ un pas par image de l'horloge commune : une nouvelle mesure allonge ce chemin sans déplacer la courbe, et la vitesse est ajustée à chaque mesure (± 25 % au plus) pour garder un quart de seconde d'avance. Simulé sur les écarts mesurés : 78 arrêts et 76 sauts doubles en 2 minutes avant, aucun après. Même cadence (12 i/s), même coût.
+- Test de non-régression : mesures arrivant de 905 à 1105 ms d'écart, chaque image avance la courbe de 0,5 à 1,5 pas.
+
 ## 2026-11-06 — 1.0.64.0
 
 ### Cercles et barres harmonisés sur l'horloge commune

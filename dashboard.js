@@ -1030,7 +1030,7 @@ function makeCardHistory(card, color) {
         `<stop offset="0%" stop-color="${color}" stop-opacity="0.12"/><stop offset="100%" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>` +
         `<path class="history-area" fill="url(#${gradientId})"/><path class="history-stroke" stroke="${color}"/>`;
     card.insertBefore(svg, card.firstChild);
-    return { id, svg, values: [], area: svg.querySelector(".history-area"), stroke: svg.querySelector(".history-stroke"), sampleTime: 0, shift: "" };
+    return { id, svg, values: [], area: svg.querySelector(".history-area"), stroke: svg.querySelector(".history-stroke"), pending: 0, speed: 1, shift: "" };
 }
 const cardHistories = [
     ["cpu-card", "#bf5aff"], ["vram-card", "#30d158"], ["npu-card", "#00c7be"], ["gpu-card", "#ff375f"],
@@ -1119,7 +1119,7 @@ function updateDiskCard(view, disk, index, track) {
 // Builds the line and filled area from the samples; missing readings break the line instead of faking zero.
 function historyPaths(values) {
     const offset = HISTORY_LENGTH - values.length;
-    // No run is null, not -1: the oldest sample sits at x = -1, left of the card, while it slides out.
+    // No run is null, not -1: the oldest samples sit at x = -2 and -1, left of the card, while they slide out.
     let line = "", area = "", runStart = null, last = null;
     const closeRun = () => { if (runStart !== null) area += `L${last} 100 L${runStart} 100 Z`; runStart = null; };
     values.forEach((value, index) => {
@@ -1135,27 +1135,38 @@ function historyPaths(values) {
 }
 
 // History lines advance in small steps between two samples: each sample is drawn once, one
-// sample-width to the right of its place, and the line moves back to it by HISTORY_STEPS shifts of
-// a compositor transform over the next second, on every tick of the 12 Hz map clock (radar.js), so
-// no layout and no new drawing. A continuous glide at the display refresh rate cost +23 points of
-// GPU 3D (seven card-wide layers composed 60 times a second); six steps read as jerky. On battery,
-// under energy saver or with Windows animations off the lines jump once a second.
-const HISTORY_STEPS = 12;
+// sample-width to the right of its place, and the line moves back to it by a compositor transform
+// on every tick of the 12 Hz map clock (radar.js), so no layout and no new drawing. A continuous
+// glide at the display refresh rate cost +23 points of GPU 3D (seven card-wide layers composed 60
+// times a second); six steps read as jerky. On battery, under energy saver or with Windows
+// animations off the lines jump once a second.
+//
+// Samples do not arrive every 1000 ms: the host timer plus a 10-110 ms collection spread them
+// from 905 to 1105 ms (measured on the real collector). Timing the steps on the arrival of each
+// sample froze the line when one came late and skipped steps when one came early, a few times a
+// minute. Each line instead keeps the distance it still has to travel (`pending`, in steps) and
+// moves by about one step per tick: a new sample adds one sample-width to it without moving the
+// line, and the speed is trimmed at each sample (at most ±25 %) to keep HISTORY_RESERVE steps in
+// hand when the next one is due, so a late sample finds the line still moving.
+const HISTORY_STEPS = 12; // ticks of the 12 Hz clock per sample
+const HISTORY_RESERVE = 3; // a quarter of a second of travel kept in hand
+const HISTORY_GAIN = 0.25;
+const HISTORY_SPEED_LIMIT = 0.25;
 function historyStepsActive() {
     return HISTORY_STEPS > 0 && !motionEconomy && !reducedMotionQuery.matches && !runtimeSuspended;
 }
-function setHistoryShift(history, fraction) {
-    const shift = `translateX(${((1 - fraction) * 100 / HISTORY_LENGTH).toFixed(3)}%)`;
+function setHistoryShift(history, pending) {
+    const shift = `translateX(${(pending / HISTORY_STEPS * 100 / HISTORY_LENGTH).toFixed(3)}%)`;
     if (history.shift !== shift) { history.shift = shift; history.svg.style.transform = shift; }
 }
 // Called on each map tick; returns true while a line still has steps to make.
-function stepHistories(now) {
-    if (!historyStepsActive()) { cardHistories.forEach(history => setHistoryShift(history, 1)); return false; }
+function stepHistories() {
+    const active = historyStepsActive();
     let moving = false;
     for (const history of cardHistories) {
-        const progress = Math.min(1, (now - history.sampleTime) / 1000);
-        setHistoryShift(history, Math.floor(progress * HISTORY_STEPS) / HISTORY_STEPS);
-        if (progress < 1) moving = true;
+        history.pending = active ? Math.max(0, history.pending - history.speed) : 0;
+        setHistoryShift(history, history.pending);
+        if (history.pending > 0) moving = true;
     }
     return moving;
 }
@@ -1164,15 +1175,23 @@ function pushCardHistory(id, value) {
     const history = cardHistories.find(h => h.id === id);
     if (!history) return;
     history.values.push(NexusTelemetry.valid(value) ? value : null);
-    // One sample more than shown, drawn left of the card: while the line steps in, its oldest end
-    // slides out of the card instead of being cut off and growing back each second.
-    if (history.values.length > HISTORY_LENGTH + 1) history.values.shift();
+    // Two samples more than shown, drawn left of the card: while the line steps in (up to two
+    // sample-widths behind), its oldest end slides out of the card instead of being cut off.
+    if (history.values.length > HISTORY_LENGTH + 2) history.values.shift();
     const paths = historyPaths(history.values);
     history.stroke.setAttribute("d", paths.line);
-    history.sampleTime = performance.now();
-    setHistoryShift(history, historyStepsActive() ? 0 : 1);
-    if (historyStepsActive()) startMotionClock();
     history.area.setAttribute("d", paths.area);
+    if (historyStepsActive()) {
+        history.pending += HISTORY_STEPS;
+        // Far behind (the clock stalled or samples came in a burst): restart from the reserve.
+        if (history.pending > 2 * HISTORY_STEPS) history.pending = HISTORY_STEPS + HISTORY_RESERVE;
+        const trim = HISTORY_GAIN * (history.pending - HISTORY_STEPS - HISTORY_RESERVE) / HISTORY_STEPS;
+        history.speed = 1 + Math.max(-HISTORY_SPEED_LIMIT, Math.min(HISTORY_SPEED_LIMIT, trim));
+        startMotionClock();
+    } else {
+        history.pending = 0;
+    }
+    setHistoryShift(history, history.pending);
 }
 
 // Direct DOM update instead of requestAnimationFrame loop to save CPU and iGPU cycles
