@@ -2,6 +2,13 @@
 
 ## Non publié
 
+## 2026-11-06 — 1.0.66.0
+
+### Courbes de fond à vitesse constante à l'écran
+
+- Les courbes avançaient d'un pas fixe à chaque image de l'horloge commune, mais ces images n'arrivent pas toujours à 83 ms pile : de temps en temps une image s'affiche un rafraîchissement d'écran plus tard, et la courbe ralentissait d'autant pendant ce pas. Elles avancent maintenant de la distance qui correspond au temps réellement écoulé depuis l'image précédente (au plus deux images), donc à vitesse constante à l'écran. Même cadence, même coût.
+- Test de non-régression : une image sur cinq affichée un rafraîchissement plus tard, la vitesse de la courbe reste à ± 12 % ; l'ancien calcul échoue.
+
 ## 2026-11-06 — 1.0.65.0
 
 ### Courbes de fond : plus d'à-coups de temps en temps

@@ -244,12 +244,12 @@ sealed class RuntimePauseRegression : Form
             // moving about one step per tick, never stopping on a late sample nor skipping on an early one.
             await Check(@"(()=>{const h=cardHistories.find(x=>x.id==='cpu-card');h.pending=0;h.speed=1;
                 const gaps=[905,1105,1000,912,1097,950,1060,921,1083,1000,905,1105,1000,1040,960,905,1105];
-                let t=0,next=0,arrived=0,prev=null,bad=0,ticks=0;
+                let t=0,next=0,arrived=0,prev=null,prevFrame=0,bad=0,ticks=0;lastHistoryStamp=0;
                 for(let tick=0;tick<220;tick++){const now=tick*1000/12;
                     while(arrived<gaps.length&&next<=now){pushCardHistory('cpu-card',50);arrived++;next+=gaps[arrived-1];}
-                    if(arrived>=gaps.length)break;stepHistories();const shown=arrived*HISTORY_STEPS-h.pending;
-                    if(prev!==null&&tick>24){ticks++;const move=shown-prev;if(move<0.5||move>1.5)bad++;}prev=shown;}
-                return ticks>150&&bad===0&&h.pending<=2*HISTORY_STEPS;})()", "history lines keep a steady pace when samples arrive 905 to 1105 ms apart");
+                    if(arrived>=gaps.length)break;const frame=now+(tick%5===0?16.7:0);stepHistories(frame);const shown=arrived*HISTORY_STEPS-h.pending;
+                    if(prev!==null&&tick>24){ticks++;const speed=(shown-prev)/((frame-prevFrame)/(1000/12));if(speed<0.88||speed>1.12)bad++;}prev=shown;prevFrame=frame;}
+                return ticks>150&&bad===0&&h.pending<=2*HISTORY_STEPS;})()", "history lines keep a steady speed when samples arrive 905 to 1105 ms apart and ticks land a display frame late");
             await view.CoreWebView2.ExecuteScriptAsync("layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal',battery:{present:true,percent:60,ac:false,rateW:-9,minutesLeft:90}});");
             await Check("physicsFpsInterval === 1000 / MOTION_FPS_ECONOMY && MOTION_FPS_ECONOMY === 12", "the shared clock keeps 12 Hz on battery");
             await Check("HISTORY_STEPS === 12 && !historyStepsActive() && cardHistories.filter(h => !document.getElementById(h.id).classList.contains('card-hidden')).every(h => parseFloat(h.svg.style.transform.slice(11)) === 0)", "on battery the history lines jump once a second, without steps");

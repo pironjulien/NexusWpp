@@ -1159,15 +1159,25 @@ function setHistoryShift(history, pending) {
     const shift = `translateX(${(pending / HISTORY_STEPS * 100 / HISTORY_LENGTH).toFixed(3)}%)`;
     if (history.shift !== shift) { history.shift = shift; history.svg.style.transform = shift; }
 }
-// Called on each map tick; returns true while a line still has steps to make.
-function stepHistories() {
+// Called on each map tick with its frame time; returns true while a line still has steps to make.
+// The distance covered follows the real time since the previous tick (at most two ticks' worth),
+// not one step per tick: a tick shown one display frame late moves the line that much further,
+// so the line keeps a steady speed on screen whatever the timing of the ticks.
+const HISTORY_TICK_MS = 1000 / HISTORY_STEPS;
+let lastHistoryStamp = 0;
+function stepHistories(timestamp) {
     const active = historyStepsActive();
+    const elapsed = active && lastHistoryStamp && timestamp > lastHistoryStamp
+        ? Math.min(timestamp - lastHistoryStamp, 2 * HISTORY_TICK_MS) : HISTORY_TICK_MS;
+    lastHistoryStamp = active ? timestamp : 0;
     let moving = false;
     for (const history of cardHistories) {
-        history.pending = active ? Math.max(0, history.pending - history.speed) : 0;
+        history.pending = active ? Math.max(0, history.pending - history.speed * elapsed / HISTORY_TICK_MS) : 0;
         setHistoryShift(history, history.pending);
         if (history.pending > 0) moving = true;
     }
+    // The clock stops when nothing moves: the next start counts one tick, not the whole pause.
+    if (!moving) lastHistoryStamp = 0;
     return moving;
 }
 
