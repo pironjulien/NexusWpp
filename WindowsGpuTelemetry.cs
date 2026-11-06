@@ -297,5 +297,41 @@ namespace DesktopHtmlHost
         }
 
         internal static bool IsSuspended(string instanceId) { return State(instanceId) >= 2; }
+
+        [LibraryImport("cfgmgr32.dll")]
+        private static partial int CM_Get_DevNode_Status(out uint status, out uint problem, uint devInst, uint flags);
+        const uint DN_STARTED = 0x8;
+        static readonly Guid DeviceDriverProperties = new Guid("a8b865dd-2e3d-4094-ad97-e593a70c75d6");
+        static readonly Guid DeviceDates = new Guid("83da6326-97a6-4088-9453-a1923f573b29");
+
+        // Identity of the driver now running the device: driver version (DEVPKEY_Device_DriverVersion),
+        // install date and last start (DEVPKEY_Device_InstallDate, LastArrivalDate), so it changes when a
+        // driver is installed, updated or the device restarts. "" while the device is not started
+        // (driver being replaced, disabled, problem code); null when unknown (no device id, lookup failed).
+        internal static unsafe string? DriverInstance(string instanceId)
+        {
+            if (string.IsNullOrEmpty(instanceId)) return null;
+            try
+            {
+                uint devInst, status, problem;
+                if (CM_Locate_DevNodeW(out devInst, instanceId, 0) != 0) return "";
+                if (CM_Get_DevNode_Status(out status, out problem, devInst, 0) != 0) return null;
+                if ((status & DN_STARTED) == 0 || problem != 0) return "";
+                return Property(devInst, DeviceDriverProperties, 3) + "|" + Property(devInst, DeviceDates, 100) + "|" + Property(devInst, DeviceDates, 102);
+            }
+            catch (Exception) { return null; }
+        }
+
+        static unsafe string Property(uint devInst, Guid fmtid, uint pid)
+        {
+            var key = new DEVPROPKEY { fmtid = fmtid, pid = pid };
+            Span<byte> buffer = stackalloc byte[256];
+            uint size = (uint)buffer.Length, type;
+            fixed (byte* data = buffer)
+            {
+                if (CM_Get_DevNode_PropertyW(devInst, key, out type, data, ref size, 0) != 0) return "";
+            }
+            return Convert.ToHexString(buffer.Slice(0, (int)Math.Min(size, (uint)buffer.Length)));
+        }
     }
 }

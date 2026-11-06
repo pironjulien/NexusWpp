@@ -111,10 +111,12 @@ namespace DesktopHtmlHost
             return Math.Min(MaxIntervalMs, interval);
         }
 
-        internal NvidiaSample? Read(string adapterName, bool adapterSuspended, bool onBattery)
+        // driverInstance: DevicePower.DriverInstance of the adapter, read just before (null = unknown).
+        internal NvidiaSample? Read(string adapterName, bool adapterSuspended, bool onBattery, string? driverInstance = null)
         {
             if (!IsAvailable(adapterName)) { if (lastSuccess < 0) status = "unavailable"; return Current; }
             intervalMs = NextIntervalMs(0, onBattery);
+            if (!DriverReady(driverInstance, clock.ElapsedMilliseconds)) return Current;
             if (!adapterSuspended && clock.ElapsedMilliseconds - lastAttempt >= NextIntervalMs(failures, onBattery)) {
                 lastAttempt = clock.ElapsedMilliseconds;
                 Accept(Query(adapterName), clock.ElapsedMilliseconds);
@@ -122,6 +124,41 @@ namespace DesktopHtmlHost
             // A failed attempt invalidates the old values immediately; history keeps the gap.
             return Current;
         }
+        // A driver installed, updated or restarted under an open NVML session (Windows Update on
+        // 06/11/2026) leaves stale handles: the next NVML call is an access violation that no
+        // managed handler can catch, and the process dies. So the session is dropped as soon as the
+        // driver instance changes or the device stops, and NVML waits until the new driver has
+        // stayed up DriverSettleMs (an installation restarts the device more than once). The first
+        // instance seen at startup is trusted at once.
+        internal const int DriverSettleMs = 30000;
+        string? driverSeen;
+        bool driverKnown;
+        long driverSince;
+        internal bool DriverReady(string? driverInstance, long now)
+        {
+            if (driverInstance == null) return true;
+            if (!driverKnown || driverInstance != driverSeen) {
+                bool first = !driverKnown;
+                driverKnown = true;
+                driverSeen = driverInstance;
+                driverSince = first && driverInstance.Length > 0 ? now - DriverSettleMs : now;
+                if (!first) {
+                    Program.LogDebug("NVIDIA driver changed or stopped: NVML session dropped.");
+                    Release();
+                    sample = null;
+                    status = lastSuccess < 0 ? "unavailable" : "stale";
+                }
+            }
+            return driverInstance.Length > 0 && now - driverSince >= DriverSettleMs;
+        }
+        void Release()
+        {
+            device = IntPtr.Zero;
+            if (!initialized) return;
+            initialized = false;
+            try { _ = Nvml.Shutdown(); } catch (Exception ex) { Program.LogDebug("NVML shutdown failed: " + ex.Message); }
+        }
+
         internal void Accept(NvidiaSample? next, long now)
         {
             sample = next;

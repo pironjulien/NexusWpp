@@ -139,6 +139,20 @@ static class FeatureRegression
             var other=new NvidiaTelemetry();
             Check(!other.IsAvailable("AMD Radeon RX 7800 XT") && other.Read("AMD Radeon RX 7800 XT",false,false)==null && other.Status=="unavailable","NVML is never loaded for another vendor");
             Check(NvidiaTelemetry.Provider=="nvml","the page is told the real sensor provider");
+            // Driver swapped under an open NVML session (Windows Update, 06/11/2026): drop it, wait for the new one.
+            var swap=new NvidiaTelemetry();
+            Check(swap.DriverReady(null,0) && swap.DriverReady("v1",0),"NVML reads the driver found at startup at once, and when its identity is unknown");
+            swap.Accept(NvidiaSample.Create(10,40,300,405,5,8192,512),1000);
+            Check(!swap.DriverReady("v2",2000) && swap.Current==null && swap.Status=="stale","a driver change drops the NVML session and its last values");
+            Check(!swap.DriverReady("",3000) && !swap.DriverReady("v3",4000) && !swap.DriverReady("v3",4000+NvidiaTelemetry.DriverSettleMs-1),"a stopped or restarting driver is not read before it has stayed up 30 s");
+            Check(swap.DriverReady("v3",4000+NvidiaTelemetry.DriverSettleMs),"the new driver is read once it has stayed up 30 s");
+            using(var vc=new System.Management.ManagementObjectSearcher("SELECT Name,PNPDeviceID FROM Win32_VideoController"))
+                foreach(System.Management.ManagementObject o in vc.Get()) {
+                    string vcName=Convert.ToString(o["Name"],CultureInfo.InvariantCulture)??"";
+                    if(vcName.IndexOf("NVIDIA",StringComparison.OrdinalIgnoreCase)<0)continue;
+                    string? id=DevicePower.DriverInstance(Convert.ToString(o["PNPDeviceID"],CultureInfo.InvariantCulture)??"");
+                    Check(!string.IsNullOrEmpty(id) && id==DevicePower.DriverInstance(Convert.ToString(o["PNPDeviceID"],CultureInfo.InvariantCulture)??""),"the running driver of "+vcName+" has a stable identity");
+                }
             // Live NVML reading on this PC (an NVIDIA adapter with its driver), or nothing at all.
             using(var dx=Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\DirectX")) {
                 if(dx!=null) foreach(var key in dx.GetSubKeyNames()) using(var sub=dx.OpenSubKey(key)) {

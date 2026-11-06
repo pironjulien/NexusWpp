@@ -1255,7 +1255,10 @@ namespace DesktopHtmlHost
 
             // NVIDIA metrics come from NVML in process (no helper process every 5 s); the reads
             // are throttled and skipped while the GPU is suspended.
-            NvidiaSample? nv = nvidiaTelemetry.Read(GpuName, dgpuSuspended, saveEnergy);
+            // The driver identity is read right before the query: a driver swapped under an open NVML
+            // session crashes the process (see NvidiaTelemetry.DriverReady).
+            NvidiaSample? nv = nvidiaTelemetry.Read(GpuName, dgpuSuspended, saveEnergy,
+                nvidiaTelemetry.IsAvailable(GpuName) ? DevicePower.DriverInstance(dgpuInstanceId) : null);
             bool nvidiaStatsSuccess = nv != null;
             int gpuUtil = nv != null && nv.Utilization.HasValue ? (int)Math.Round(nv.Utilization.Value) : dgpuUtil;
             double gpuTemp = nv != null ? nv.Temperature ?? -1 : -1;

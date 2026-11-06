@@ -2,6 +2,14 @@
 
 ## Non publié
 
+## 2026-11-06 — 1.0.63.0
+
+### Plus de plantage quand le pilote NVIDIA est mis à jour
+
+- Quand Windows Update installe un pilote NVIDIA, NexusWpp plantait (violation d'accès dans `nvml.dll`, impossible à rattraper) : la session NVML ouverte avec l'ancien pilote restait utilisée. Constaté deux fois le 06/11/2026 pendant l'installation du pilote 32.0.15.6614.
+- NexusWpp relit avant chaque mesure l'identité du pilote du GPU (version, date d'installation, dernier démarrage du périphérique, état Plug and Play). Si elle change ou si le périphérique s'arrête, la session NVML est fermée et les dernières valeurs sont marquées périmées ; NVML n'est rouvert qu'une fois le nouveau pilote resté démarré 30 s, car une installation redémarre le périphérique plusieurs fois.
+- Tests de non-régression : changement de pilote, pilote arrêté, attente de 30 s, identité stable du pilote réel.
+
 ## 2026-11-06 — 1.0.62.0
 
 ### Deux fois moins de GPU pour la même animation
