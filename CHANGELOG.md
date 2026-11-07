@@ -16,6 +16,8 @@ ones, from before version numbers, carry their date only.
 - Commit messages and release notes are written in English.
 - The icons are rendered by a .NET tool (`tools/ExportIcons`, Svg.Skia) instead of `scripts/export_icons.py` (Python and
   cairosvg): the build chain no longer needs Python. Same sizes and files; the versioned icons are unchanged.
+- CodeQL runs from a workflow file (`.github/workflows/codeql.yml`: actions, C# and JavaScript/TypeScript, default
+  queries) instead of the repository's default setup, so that OpenSSF Scorecard credits the static analysis.
 
 ## [1.0.67.0] - 2026-11-06
 
