@@ -13,14 +13,14 @@
 .\compile.ps1
 .\scripts\build_installer.ps1
 .\scripts\build_msix.ps1
-python .\scripts\export_icons.py   # icon.ico et logos MSIX depuis branding\*.svg (cairosvg)
+dotnet run --project .\tools\ExportIcons   # icon.ico et logos MSIX depuis branding\*.svg (Svg.Skia)
 .\scripts\tag_release.ps1             # avant le push : la version est-elle prête à publier ?
 .\scripts\tag_release.ps1 -Download   # fichiers de la release v<VERSION> dans dist\release, attestation vérifiée
 ```
 
 ## Publication
 
-- Les releases sont construites par GitHub, jamais sur le PC : pousser sur `main` un `VERSION` sans release `v<VERSION>` (avec sa section `## <date> — <VERSION>` dans `CHANGELOG.md`) lance `.github/workflows/release.yml` : `test.ps1`, MSIX non signé (le Store le signe), installeur non signé, `SHA256SUMS.txt`, attestation de provenance, puis la release immuable avec tous les fichiers et le tag.
+- Les releases sont construites par GitHub, jamais sur le PC : pousser sur `main` un `VERSION` sans release `v<VERSION>` (avec sa section `## [<VERSION>] - <date>` dans `CHANGELOG.md`, au format Keep a Changelog, en anglais) lance `.github/workflows/release.yml` : `test.ps1`, MSIX non signé (le Store le signe), installeur non signé, `SHA256SUMS.txt`, attestation de provenance, puis la release immuable avec tous les fichiers et le tag.
 - Le Store reçoit le MSIX de la release (`tag_release.ps1 -Download`), jamais un MSIX construit en local.
 - L'installeur n'est pas signé Authenticode (pas de certificat public ; un certificat auto-signé ne prouve rien) : son origine se vérifie par `gh attestation verify <fichier> --repo pironjulien/NexusWpp`.
 
@@ -40,5 +40,5 @@ python .\scripts\export_icons.py   # icon.ico et logos MSIX depuis branding\*.sv
 - Travailler sur `main`.
 - Mettre a jour `CHANGELOG.md` pour chaque changement fonctionnel.
 - Pour le Store, garder l'identite MSIX `julienpiron.fr.NexusWpp` et le Publisher `CN=C3E3A6F0-11D2-4EE1-B3F2-34EED4CAE7FA`.
-- Garder les messages de commit courts et en francais.
+- Garder les messages de commit courts et en anglais (depot public), comme le CHANGELOG.
 - Ne pas ajouter de faux bouton, de fausse donnee ou de fonction non cablee.

@@ -45,7 +45,7 @@ jobs:
             echo "v$version is already released: nothing to publish."
             echo "new=false" >> "$GITHUB_OUTPUT"
           else
-            tr -d '\r' < CHANGELOG.md | grep -q -- "^## .* — ${version//./\\.}\$" || { echo "CHANGELOG.md has no '## <date> — $version' section."; exit 1; }
+            tr -d '\r' < CHANGELOG.md | grep -q -- "^## \[${version//./\\.}\] - " || { echo "CHANGELOG.md has no '## [$version] - <date>' section."; exit 1; }
             echo "new=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -135,8 +135,8 @@ jobs:
         run: |
           set -euo pipefail
           tr -d '\r' < CHANGELOG.md > changelog.md
-          start=$(grep -n -m1 -- "^## .* — ${VERSION//./\\.}\$" changelog.md | cut -d: -f1 || true)
-          [[ -n "$start" ]] || { echo "CHANGELOG.md has no '## <date> — $VERSION' section."; exit 1; }
+          start=$(grep -n -m1 -- "^## \[${VERSION//./\\.}\] - " changelog.md | cut -d: -f1 || true)
+          [[ -n "$start" ]] || { echo "CHANGELOG.md has no '## [$VERSION] - <date>' section."; exit 1; }
           tail -n "+$((start + 1))" changelog.md | awk '/^## / {exit} {print}' > notes.md
           [[ -s notes.md ]] || { echo "CHANGELOG.md has no section for $VERSION."; exit 1; }
           cp "$BUNDLE" "release/NexusWpp-$VERSION.intoto.jsonl"

@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- C# tests of NexusWpp (xUnit v3 on Microsoft Testing Platform, run by `dotnet test` from test.ps1 and the CI):
+       the host's telemetry and visibility sources compiled here, with the host's analysis (nullable, recommended
+       analyzers, code style, warnings as errors). Build output goes to work\, never next to the sources. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <CopyDocumentationFileToOutputDirectory>false</CopyDocumentationFileToOutputDirectory>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PlatformTarget>x64</PlatformTarget>
+    <RootNamespace>NexusWpp.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <BaseOutputPath>$(NexusWppRoot)work\tests\bin\</BaseOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="$(NexusWppRoot)NvidiaTelemetry.cs;$(NexusWppRoot)WindowsGpuTelemetry.cs;$(NexusWppRoot)PdhCounters.cs" Link="Host\%(Filename)%(Extension)" />
+    <Compile Include="$(NexusWppRoot)BatteryState.cs;$(NexusWppRoot)NetworkTelemetry.cs;$(NexusWppRoot)PowerSchemes.cs" Link="Host\%(Filename)%(Extension)" />
+    <Compile Include="$(NexusWppRoot)ProcessRanking.cs;$(NexusWppRoot)DesktopVisibility.cs" Link="Host\%(Filename)%(Extension)" />
+    <Using Include="Xunit" />
+    <AssemblyMetadata Include="NexusWpp.Repository" Value="$(NexusWppRoot)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" Version="4.0.2" />
+    <PackageReference Include="System.Management" Version="10.0.14" />
+  </ItemGroup>
+
+</Project>

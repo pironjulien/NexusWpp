@@ -77,9 +77,9 @@ foreach ($file in $payloadFiles) {
     Copy-Item -LiteralPath (Join-Path $projectRoot $file) -Destination (Join-Path $packageDir $file) -Force
 }
 
-# Logos rendered at their exact size by scripts/export_icons.py from branding/*.svg:
+# Logos rendered at their exact size by tools/ExportIcons from branding/*.svg:
 # the julienpiron.fr medallion on a transparent background above 32 px, the small icon at 32 px and less
-# (same threshold as MARK_MIN in export_icons.py).
+# (same threshold as MarkMin in tools/ExportIcons/Program.cs).
 function New-LogoPng {
     param(
         [string]$Path,
@@ -90,7 +90,7 @@ function New-LogoPng {
     if ($Width -ne $Height) { throw "Logo ${Width}x${Height} is not square." }
     $kind = if ($Width -gt 32) { "mark" } else { "round" }
     $source = Join-Path $projectRoot ("branding\png\nexuswpp-" + $kind + "-" + $Width + ".png")
-    if (!(Test-Path -LiteralPath $source)) { throw "Missing $source : add $Width to MSIX_SIZES in scripts\export_icons.py and run it." }
+    if (!(Test-Path -LiteralPath $source)) { throw "Missing $source : add $Width to msixSizes in tools\ExportIcons\Program.cs and run it (dotnet run --project tools\ExportIcons)." }
     Copy-Item -LiteralPath $source -Destination $Path -Force
 }
 

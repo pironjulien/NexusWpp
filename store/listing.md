@@ -2,7 +2,7 @@
 
 Textes à coller dans Partner Center (Descriptions dans le Store). Chaque fonction citée existe dans l'application.
 Captures : `.\scripts\store_screenshots.ps1` (rendu réel avec la télémétrie réelle du PC) → `dist\store-screenshots\`. Ordre conseillé : cockpit 4K, réglages, logo personnalisé, ultra-large, portrait.
-Logos Windows Store (affiche 9:16, zone 1:1, vignettes 300/150/71) : `python .\scripts\export_icons.py` → `dist\store-logos\`.
+Logos Windows Store (affiche 9:16, zone 1:1, vignettes 300/150/71) : `dotnet run --project .\tools\ExportIcons` → `dist\store-logos\`.
 
 ---
 

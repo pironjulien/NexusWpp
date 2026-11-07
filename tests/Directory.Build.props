@@ -1,0 +1,7 @@
+<Project>
+  <!-- Test builds go to work\tests (ignored by Git), never next to the sources. -->
+  <PropertyGroup>
+    <NexusWppRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</NexusWppRoot>
+    <BaseIntermediateOutputPath>$(NexusWppRoot)work\tests\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+</Project>

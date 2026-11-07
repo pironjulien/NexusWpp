@@ -30,8 +30,8 @@ if ($Download) {
 if ($LASTEXITCODE -eq 0) { throw "Release $tag already exists: raise VERSION first." }
 $dirty = & git -C $project status --porcelain --untracked-files=no
 if ($dirty) { throw "Uncommitted changes: commit them before releasing $tag." }
-$section = '^## .+ — ' + [regex]::Escape($version) + '$'
+$section = '^## \[' + [regex]::Escape($version) + '\] - \d{4}-\d{2}-\d{2}$'
 if (-not (Get-Content -LiteralPath (Join-Path $project 'CHANGELOG.md') -Encoding utf8 | Where-Object { $_ -match $section })) {
-    throw "CHANGELOG.md has no '## <date> — $version' section (its notes become the release notes)."
+    throw "CHANGELOG.md has no '## [$version] - <date>' section (Keep a Changelog; its notes become the release notes)."
 }
 Write-Host "$tag is ready: push main, the Release workflow publishes it." -ForegroundColor Green

@@ -1,0 +1,6 @@
+<Project>
+  <!-- Tool builds go to work\tools (ignored by Git), never next to the sources. -->
+  <PropertyGroup>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)..\work\tools\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+</Project>

@@ -136,7 +136,7 @@ then temporarily uses `Progman` if `WorkerW` takes too long.
 - `scripts/benchmark_nexuswpp.ps1`: multi-run CPU/RAM/startup benchmark.
 - `scripts/benchmark_fullscreen_suspend.ps1`: legacy benchmark for versions that used the "fullscreen foreground detected" log pattern; for the current policy, use `measure_desktop_suspension.ps1`.
 - `scripts/measure_desktop_suspension.ps1`: measures CPU/GPU with the desktop visible, side-by-side windows, full screen and transparent windows, then restores the previous windows.
-- `scripts/test_desktop_coverage.cs`: ten geometric scenarios independent of the real desktop (not yet run by a script or by CI).
+- `tests/NexusWpp.Tests/DesktopCoverageTests.cs`: the geometric coverage scenarios, independent of the real desktop (xUnit, run by `scripts/test_features.ps1` and CI).
 
 </details>
 

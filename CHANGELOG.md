@@ -1,31 +1,58 @@
 # Changelog
 
-## Non publié
+All notable changes to this project are documented in this file.
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions are the four-part Store
+versions of the `VERSION` file. Entries before 1.0.65.0 are kept as they were published (in French), and the oldest
+ones, from before version numbers, carry their date only.
 
-## 2026-11-06 — 1.0.67.0
+## [Unreleased]
 
-### Démarrage prioritaire : nouvel essai si Windows refuse le lancement
+### Changed
+- The C# feature tests (sensor, telemetry and alert rules, and the desktop coverage behind the pause) run on xUnit v3
+  with Microsoft Testing Platform (`tests/NexusWpp.Tests`, `dotnet test`), from `test.ps1` and the CI. The coverage
+  scenarios were not run by any script before.
+- This changelog follows Keep a Changelog, in English; the release workflow and `tag_release.ps1` read its
+  `## [VERSION] - date` sections.
+- Commit messages and release notes are written in English.
+- The icons are rendered by a .NET tool (`tools/ExportIcons`, Svg.Skia) instead of `scripts/export_icons.py` (Python and
+  cairosvg): the build chain no longer needs Python. Same sizes and files; the versioned icons are unchanged.
 
-- Au redémarrage du 6 novembre, la tâche de démarrage prioritaire s'est lancée à la seconde même de l'ouverture de session et Windows a refusé d'activer le paquet (erreur 0xD0004001) : NexusWpp ne démarrait pas du tout, et le démarrage du Store, coupé tant que cette tâche existe, ne prenait pas le relais. Le Planificateur de tâches relance maintenant NexusWpp toutes les minutes, trois fois au plus, si le lancement échoue. Un lancement en trop est sans effet : l'instance déjà ouverte le fait quitter aussitôt.
-- La tâche est réécrite à chaque lancement de NexusWpp, pour qu'une tâche créée par une version précédente reçoive ce réglage.
-- Test de non-régression : la tâche créée contient la relance (toutes les minutes, trois fois).
+## [1.0.67.0] - 2026-11-06
 
-## 2026-11-06 — 1.0.66.0
+### Fixed
+- Priority startup tries again when Windows refuses the launch. At the restart of November 6 the priority startup task
+  ran in the very second the session opened and Windows refused to activate the package (error 0xD0004001):
+  NexusWpp did not start at all, and the Store startup, turned off while this task exists, did not take over. Task
+  Scheduler now restarts NexusWpp every minute, three times at most, when the launch fails. An extra launch has no
+  effect: the instance already open makes it quit at once.
+- The task is rewritten at every NexusWpp launch, so that a task created by an earlier version gets this setting.
+- Regression test: the created task holds the restart (every minute, three times).
 
-### Courbes de fond à vitesse constante à l'écran
+## [1.0.66.0] - 2026-11-06
 
-- Les courbes avançaient d'un pas fixe à chaque image de l'horloge commune, mais ces images n'arrivent pas toujours à 83 ms pile : de temps en temps une image s'affiche un rafraîchissement d'écran plus tard, et la courbe ralentissait d'autant pendant ce pas. Elles avancent maintenant de la distance qui correspond au temps réellement écoulé depuis l'image précédente (au plus deux images), donc à vitesse constante à l'écran. Même cadence, même coût.
-- Test de non-régression : une image sur cinq affichée un rafraîchissement plus tard, la vitesse de la courbe reste à ± 12 % ; l'ancien calcul échoue.
+### Fixed
+- Background curves move at a constant speed on screen. They advanced by a fixed step at each frame of the shared
+  clock, but those frames do not always come exactly 83 ms apart: now and then a frame is shown one screen refresh
+  later, and the curve slowed down by as much during that step. They now advance by the distance matching the time
+  actually elapsed since the previous frame (two frames at most), so at a constant speed on screen. Same rate, same
+  cost.
+- Regression test: with one frame in five shown one refresh later, the curve speed stays within ± 12 %; the former
+  calculation fails.
 
-## 2026-11-06 — 1.0.65.0
+## [1.0.65.0] - 2026-11-06
 
-### Courbes de fond : plus d'à-coups de temps en temps
+### Fixed
+- Background curves no longer stall or jump now and then. Their scrolling assumed one measurement every 1000 ms
+  exactly, while real measurements arrive 905 to 1105 ms apart (host timer plus 10 to 112 ms of collection, measured on
+  the real collector for 2 minutes). A late measurement froze the curve, an early one made it skip steps. The bench
+  did not see it: it sent perfectly regular measurements.
+- Each curve now keeps the path it still has to cover and advances by about one step per frame of the shared clock: a
+  new measurement lengthens that path without moving the curve, and the speed is adjusted at each measurement (± 25 %
+  at most) to stay a quarter of a second ahead. Simulated on the measured gaps: 78 stalls and 76 double jumps in
+  2 minutes before, none after. Same rate (12 fps), same cost.
+- Regression test: with measurements arriving 905 to 1105 ms apart, each frame advances the curve by 0.5 to 1.5 steps.
 
-- Les courbes d'historique s'arrêtaient ou sautaient de temps en temps : leur défilement supposait une mesure toutes les 1000 ms pile, alors que les mesures réelles arrivent de 905 à 1105 ms d'écart (minuteur de l'hôte plus 10 à 112 ms de collecte, mesuré sur le vrai collecteur pendant 2 minutes). Une mesure en retard figeait la courbe, une mesure en avance lui faisait sauter des pas. Le banc ne le voyait pas : il envoyait des mesures parfaitement régulières.
-- Chaque courbe garde maintenant le chemin qui lui reste à parcourir et avance d'environ un pas par image de l'horloge commune : une nouvelle mesure allonge ce chemin sans déplacer la courbe, et la vitesse est ajustée à chaque mesure (± 25 % au plus) pour garder un quart de seconde d'avance. Simulé sur les écarts mesurés : 78 arrêts et 76 sauts doubles en 2 minutes avant, aucun après. Même cadence (12 i/s), même coût.
-- Test de non-régression : mesures arrivant de 905 à 1105 ms d'écart, chaque image avance la courbe de 0,5 à 1,5 pas.
-
-## 2026-11-06 — 1.0.64.0
+## [1.0.64.0] - 2026-11-06
 
 ### Cercles et barres harmonisés sur l'horloge commune
 
@@ -34,7 +61,7 @@
 - Mesuré hors écran à 5120 × 1440 (une mesure par seconde, médianes de six passages de 10 s) : GPU 3D 3,4 % → 2,6 %, CPU inchangé (20 % d'un cœur). Les courbes de fond avancent régulièrement (un pas toutes les 79 à 97 ms, aucun retard au moment des mises à jour, mise à jour des cartes en moins de 2 ms).
 - Tests : cercles et barres encore en mouvement un quart de seconde après une nouvelle valeur, arrivés en 4 à 8 pas, sans transition CSS.
 
-## 2026-11-06 — 1.0.63.0
+## [1.0.63.0] - 2026-11-06
 
 ### Plus de plantage quand le pilote NVIDIA est mis à jour
 
@@ -42,7 +69,7 @@
 - NexusWpp relit avant chaque mesure l'identité du pilote du GPU (version, date d'installation, dernier démarrage du périphérique, état Plug and Play). Si elle change ou si le périphérique s'arrête, la session NVML est fermée et les dernières valeurs sont marquées périmées ; NVML n'est rouvert qu'une fois le nouveau pilote resté démarré 30 s, car une installation redémarre le périphérique plusieurs fois.
 - Tests de non-régression : changement de pilote, pilote arrêté, attente de 30 s, identité stable du pilote réel.
 
-## 2026-11-06 — 1.0.62.0
+## [1.0.62.0] - 2026-11-06
 
 ### Deux fois moins de GPU pour la même animation
 
@@ -50,40 +77,40 @@
 - Mesuré hors écran à la taille d'un écran 5120 × 1440 (vraie page, médianes de quatre passages de 10 s, GPU 3D du groupe WebView2 / CPU en part d'un cœur) : 24 i/s avec courbes glissantes 6,8 % / 28 % ; 18 i/s 4,5 % / 27 % ; 12 i/s 4,0 % / 21 % ; 12 i/s avec courbes qui sautent 2,6 % / 21 % ; 8 i/s 2,0 % / 16 % ; sans animation 0 % / 10 %. Les halos des anneaux ne coûtent rien de mesurable. Le défilement continu des courbes coûtait à lui seul +3,1 points à 24 i/s (+0,7 mesuré sur 2560 × 1440).
 - En watts, l'écart reste dans le bruit : la carte graphique reste à sa fréquence minimale (environ 1,2 W pour l'animation, à toute cadence).
 
-## 2026-11-05 — 1.0.61.0
+## [1.0.61.0] - 2026-11-05
 
 ### Courbes d'historique : plus de saut au bord gauche
 
 - Le bout gauche de la courbe de fond ne se coupe plus en sautant d'un échantillon vers l'intérieur à chaque seconde. Le point le plus ancien, placé à x = -1 hors de la carte, était pris pour « aucun tracé en cours » (même valeur -1 que le marqueur interne) : il restait détaché du reste, si bien que la courbe et son aire commençaient un échantillon plus loin. Le marqueur est désormais `null`.
 - Test de non-régression : avec 61 échantillons, la courbe est un seul tracé qui part de x = -1.
 
-## 2026-11-05 — 1.0.60.0
+## [1.0.60.0] - 2026-11-05
 
 ### Réseau en pourcentage entier
 
 - Le nœud Réseau affiche l'utilisation du lien en pourcentage entier, comme les autres : un trafic inférieur à 1 % du lien s'affiche « 1 % » (au lieu de « 0,01 % »), seul un lien inactif affiche « 0 % ».
 
-## 2026-11-05 — 1.0.59.0
+## [1.0.59.0] - 2026-11-05
 
 ### Courbes d'historique fluides, sans bout coupé
 
 - Le bout gauche (le plus ancien) de la courbe de fond de chaque carte ne disparaît plus à chaque seconde pour revenir ensuite : un échantillon de plus est tracé hors de la carte et en sort en glissant.
 - Sur secteur, la courbe avance à chaque image de l'horloge à 24 Hz au lieu de six pas par seconde : défilement continu, pour +0,7 point d'iGPU mesuré (`profile_graphics.ps1`). Sur batterie, en économiseur d'énergie ou animations Windows coupées, elle saute toujours une fois par seconde.
 
-## 2026-11-05 — 1.0.58.0
+## [1.0.58.0] - 2026-11-05
 
 ### Fond d'écran rétabli après un plantage d'Explorer
 
 - Quand Explorer plante ou est tué net, Windows détruit la fenêtre du fond d'écran (enfant de WorkerW) par le seul `WM_NCDESTROY`, sans `WM_DESTROY` : WinForms ne signalait pas la perte, NexusWpp restait dans la zone de notification avec un bureau noir. La fenêtre perdue est désormais reconnue à `WM_NCDESTROY` et recréée comme après un redémarrage normal d'Explorer.
 - Test de non-régression : le parent du fond d'écran vit dans un autre processus, tué sans nettoyage ; le test échoue sans la correction.
 
-## 2026-11-04 — 1.0.57.0
+## [1.0.57.0] - 2026-11-04
 
 ### Petite icône : le médaillon du site sans son inscription
 
 - À 32 px et moins (barre des tâches, `icon.ico`, logos MSIX en petite taille), l'icône est le même médaillon que la grande, cerclage argent à circuits, losange et drapeau compris, avec seulement l'inscription « JULIENPIRON.FR » effacée. Le cerclage simplifié de la 1.0.56.0 disparaît.
 
-## 2026-11-04 — 1.0.56.0
+## [1.0.56.0] - 2026-11-04
 
 ### Valeurs sur une ligne, noms de processus lisibles
 
@@ -142,7 +169,7 @@
 - Titre : type (« SSD », ou « HDD » pour un disque à plateaux), modèle sans sa capacité (déjà dans la carte) ni sa référence de pièce (« Micron_2400_MTFDKBA512QFM » → « Micron 2400 ») et température que le disque donne lui-même (« SSD Samsung 990 PRO · 48 °C »), lue sans droits administrateur (`IOCTL_STORAGE_QUERY_PROPERTY`, `StorageDeviceTemperatureProperty`, la source du Gestionnaire des tâches) toutes les 10 s sur secteur, 60 s sur batterie. Vérifié sur ce PC : 48 °C au repos, 54 °C après 50 s d'écriture continue, 53 °C 30 s plus tard.
 - Test de disposition : 63 cas de plus, deux, trois et quatre disques simulés sur sept tailles d'écran.
 
-## 2026-11-04 — 1.0.55.0
+## [1.0.55.0] - 2026-11-04
 
 ### Fréquence du GPU en direct
 
@@ -174,7 +201,7 @@
 - Libellés revus, avec les termes du Gestionnaire des tâches quand il en a : « TOP PROCESSUS » → « PROCESSUS EN TÊTE » (« BUSIEST PROCESS »), « CADENCE » → « VITESSE » (« SPEED »), « PROC / THREADS » → « PROCESSUS / THREADS », « VRAM » → « MÉMOIRE GPU » (« GPU MEMORY »), « PUISSANCE GPU » → « CONSOMMATION » (« POWER DRAW »), « RECEVOIR (DÉBIT) » / « ENVOYER (DÉBIT) » → « RÉCEPTION » / « ENVOI » (« RECEIVE » / « SEND »), « PING RÉSEAU » → « LATENCE » (« LATENCY »), « COMMITTED MEMORY » → « COMMITTED », « Capteurs périmés » → « Capteurs sans réponse » (« Sensors not responding »), « Data expired » → « Data out of date ». Les noms des modes d'alimentation viennent de Windows et ne sont pas traduits par NexusWpp.
 - Test `scripts/tests/i18n.test.js` (lancé par `test_features.ps1`) : il échoue si un texte manque dans une des deux langues, si la page utilise une clé non traduite ou si une clé traduite n'est plus utilisée.
 
-## 2026-11-04 — 1.0.54.0
+## [1.0.54.0] - 2026-11-04
 
 ### Animation plus fluide pour presque rien
 
@@ -246,7 +273,7 @@ Audit sur un i7-14700K, UHD 770 et RTX 4080 SUPER : chaque champ de la télémé
 - La fenêtre de l'installeur se met à l'échelle de l'écran où elle s'ouvre, et se redimensionne si elle change d'écran.
 - Test : `test_mouse_hook.ps1` vérifie que l'hôte compilé démarre bien en per-monitor v2.
 
-## 2026-11-04 — 1.0.53.0
+## [1.0.53.0] - 2026-11-04
 
 ### Releases construites par GitHub
 
@@ -276,7 +303,7 @@ Audit sur un i7-14700K, UHD 770 et RTX 4080 SUPER : chaque champ de la télémé
 - Badge de version du README lu sur la dernière release au lieu d'être figé à 1.0.49.
 - SDK WebView2 1.0.4314.35 ; Dependabot suit aussi le projet de l'installeur.
 
-## 2026-11-04 — 1.0.52.0
+## [1.0.52.0] - 2026-11-04
 
 ### Passage à .NET 10
 
@@ -286,7 +313,7 @@ Audit sur un i7-14700K, UHD 770 et RTX 4080 SUPER : chaque champ de la télémé
 - Les bancs de tests (`scripts/csc.ps1`) compilent sur .NET 10 et le sérialiseur JSON de .NET.
 - `scripts/publish_host.ps1` publie l'hôte autonome pour le MSIX, l'installeur et le déploiement local ; la CI installe le SDK .NET 10. CodeQL et Scorecard restent actifs.
 
-## 2026-11-01 — 1.0.51.0
+## [1.0.51.0] - 2026-11-01
 
 ### Démarrage prioritaire : NexusWpp ne démarrait plus
 
@@ -296,7 +323,7 @@ Audit sur un i7-14700K, UHD 770 et RTX 4080 SUPER : chaque champ de la télémé
 
 - OpenSSF Scorecard et l'analyse CodeQL de GitHub ont été retirés, puis rétablis le soir même : ils restent actifs sur tous les produits Nexus. Seul le badge Scorecard du README n'est pas revenu.
 
-## 2026-10-28 — 1.0.50.0
+## [1.0.50.0] - 2026-10-28
 
 ### Démarrage prioritaire
 
@@ -309,21 +336,21 @@ Audit sur un i7-14700K, UHD 770 et RTX 4080 SUPER : chaque champ de la télémé
 
 - `SECURITY.md` : signalement privé par GitHub, délais de réponse et de correction, publication en avis de sécurité.
 
-## 2026-10-27 — 1.0.49.0
+## [1.0.49.0] - 2026-10-27
 
 ### Médaillon net en grand
 
 - Le médaillon des icônes passe de 240 à 600 px : `scripts/make_medallion.py` le refait à partir de `julienpiron.png` avec le même disque intérieur estompé que le kit d'icônes Nexus. Les grands logos du menu Démarrer et du paquet, l'icône 256 px de l'exe et les logos de la fiche Store ne sont plus flous.
 - `splash.jpg`, livré dans chaque installation sans être utilisé nulle part, est retiré.
 
-## 2026-10-27 — 1.0.48.0
+## [1.0.48.0] - 2026-10-27
 
 ### Petites icônes en médaillon rond
 
 - Sous 44 px, l'icône est désormais le médaillon de julienpiron.fr découpé en rond (coins transparents) au lieu du pictogramme seul, selon la nouvelle règle du kit d'icônes Nexus : barre des tâches, zone de notification, barre de titre des réglages, petites tailles du menu Démarrer et de l'exe. À partir de 44 px, rien ne change.
 - `branding/nexuswpp-round.svg` remplace `branding/nexuswpp-icon.svg` ; `scripts/export_icons.py` régénère `icon.ico` et les logos MSIX.
 
-## 2026-10-26 — 1.0.47.0
+## [1.0.47.0] - 2026-10-26
 
 ### Nouvelle icône NexusWpp
 
@@ -332,7 +359,7 @@ Audit sur un i7-14700K, UHD 770 et RTX 4080 SUPER : chaque champ de la télémé
 - Source unique dans `branding/` (SVG du kit d'icônes Nexus) : `scripts/export_icons.py` en tire `icon.ico` et chaque logo MSIX à sa taille exacte, au lieu de réduire `julienpiron.png` au moment du paquet.
 - Le logo par défaut du radar du cockpit (`julienpiron.png`, remplaçable dans les réglages) ne change pas.
 
-## 2026-10-20 — 1.0.46.0
+## [1.0.46.0] - 2026-10-20
 
 ### Modes d'alimentation toujours à jour
 
@@ -347,14 +374,14 @@ Audit sur un i7-14700K, UHD 770 et RTX 4080 SUPER : chaque champ de la télémé
 - Dependabot ajouté avec un délai de 7 jours (cooldown) et un regroupement des mises à jour : GitHub Actions et NuGet (WebView2).
 - Workflow OpenSSF Scorecard et badge dans le README.
 
-## 2026-10-15 — 1.0.45.0
+## [1.0.45.0] - 2026-10-15
 
 ### Retrait du battement de pause de la 1.0.44.0
 
 - La cause attribuée en 1.0.44.0 était fausse. L'écran noir (AOC 5120x1440 non certifié G-SYNC, VRR forcé par le pilote NVIDIA) venait de G-SYNC : il persistait sans aucune pause de NexusWpp et même avec l'EDID d'usine, et disparaît dès que G-SYNC est désactivé pour cet écran. Les essais A/B précédents étaient trompés par un problème intermittent.
 - Le pixel invisible rafraîchi une fois par seconde pendant la pause est retiré : la pause redevient totale, comme en 1.0.43.0.
 
-## 2026-10-15 — 1.0.44.0
+## [1.0.44.0] - 2026-10-15
 
 ### Fin de l'écran noir au retour de pause
 
@@ -362,7 +389,7 @@ Audit sur un i7-14700K, UHD 770 et RTX 4080 SUPER : chaque champ de la télémé
 - Pendant la pause, la page change un pixel invisible une fois par seconde : la surface reste vivante, la pause reste quasi gratuite (une image par seconde au lieu de 12). Vérifié sur le poste : plus d'écran noir.
 - Tests de pause : battement présent pendant la pause, arrêté à la reprise.
 
-## 2026-10-14 — 1.0.43.0
+## [1.0.43.0] - 2026-10-14
 
 ### Processus principal harmonisé
 
@@ -386,26 +413,26 @@ Audit sur un i7-14700K, UHD 770 et RTX 4080 SUPER : chaque champ de la télémé
 - Mises à jour Dependabot automatiques retirées (`.github/dependabot.yml`) ; les alertes de faille
   GitHub restent actives. Dépôt public : ses workflows ne consomment pas de minutes et restent inchangés.
 
-## 2026-10-13 — 1.0.42.0
+## [1.0.42.0] - 2026-10-13
 
 - Carte GPU : la fréquence mémoire passe dans le titre (« … @ 15001 MHz »), comme la vitesse de la RAM ; sa case montre « Utilisé par », le programme qui sollicite le plus la carte graphique (3D, calcul, vidéo). « AUCUN » quand la carte est au repos.
 - Carte iGPU : « VRAM 1,2 / 16 Go » en une seule case, comme sur la carte GPU ; « Encodage vidéo » (moteur VideoEncode de Windows) et « Utilisé par » remplacent « VRAM libre » et « VRAM totale », qui répétaient la même mesure.
 - Tests : programme utilisé par l'iGPU et le GPU, fréquence mémoire dans le titre, VRAM utilisée / totale et encodage vidéo.
 
-## 2026-10-13 — 1.0.41.0
+## [1.0.41.0] - 2026-10-13
 
 - Carte NPU : « Utilisé par » montre le programme qui utilise le NPU (lu dans les compteurs GPU de Windows, par processus) ; remplace « Mémoire partagée », qui répétait « Mémoire utilisée ». « AUCUN » quand rien ne l'utilise. Le nom est raccourci juste assez pour tenir dans la carte.
 - Batterie (portables) : sur batterie, la ligne du centre ajoute la consommation en watts et le temps restant estimé par Windows ; en charge, la puissance de charge. Lu par l'API d'alimentation de Windows, sans WMI. Rien d'inventé quand Windows ne fournit pas la valeur.
 - Tests : 45 cas de disposition « portable sur batterie », tests du programme NPU et de la batterie.
 
-## 2026-10-13 — 1.0.40.0
+## [1.0.40.0] - 2026-10-13
 
 - Courbes d'historique sur toute la hauteur des cartes, en filigrane derrière les valeurs.
 - Fin des coupures noires : un changement d'affichage (bascule de carte graphique, réveil, résolution) redimensionne le fond d'écran sur place au lieu de le détacher puis le rattacher au bureau ; le journal en comptait 534 en pleine session. Le double rattachement au démarrage disparaît aussi.
 - WebView2 ne calcule plus lui-même le masquage de la fenêtre (CalculateNativeWinOcclusion) : quand deux fenêtres couvrent tout l'écran, l'image n'est plus jetée ; NexusWpp gère seul sa pause.
 - Journal : vraie version de Windows (RtlGetVersion) au lieu de 6.2.9200.
 
-## 2026-10-13 — 1.0.39.0
+## [1.0.39.0] - 2026-10-13
 
 Audit complet sur 8 axes (86 constats vérifiés) et corrections :
 
@@ -431,14 +458,14 @@ Audit complet sur 8 axes (86 constats vérifiés) et corrections :
 - Fenêtre de réglages : le texte d'aide n'est plus coupé avec une mise à l'échelle Windows de 125 % ou plus. La mise à l'échelle automatique n'était pas appliquée (construction sans `SuspendLayout`/`ResumeLayout`) et les textes avaient des tailles fixes ; la fenêtre utilise maintenant une mise en page automatique qui s'adapte au texte, à la langue et au DPI.
 - Test : la fenêtre de réglages est vérifiée de 100 % à 200 %, avec et sans mise à l'échelle de la mise en page (aucun texte coupé, hors de la fenêtre ou superposé). Ce test échoue sur la version 1.0.37.
 
-## 2026-10-13 — 1.0.38.0
+## [1.0.38.0] - 2026-10-13
 
 - Historique des 60 dernières secondes dans chaque carte (CPU, iGPU, NPU, GPU, RAM, activité disque, réseau) : une courbe discrète dans la couleur de la carte, en bas et derrière le contenu, sans changer la disposition. Une mesure manquante coupe la courbe au lieu d'afficher un faux zéro.
 - Fenêtre de réglages plus aérée.
 - Code réorganisé sans changement de comportement : l'hôte est découpé en classes partielles par responsabilité (`Program.cs`, `DesktopForm*.cs`, `NativeMethods.cs`) et l'interface en scripts chargés dans l'ordre (`cockpit-state.js`, `radar.js`, `dashboard.js`, `app.js`). Les scripts de test lisent la liste des sources dans `scripts\host_sources.ps1`.
 - Captures Store : cockpit, écran ultra-large, portrait, logo personnalisé et fenêtre de réglages, en français et en anglais, générées par `scripts\store_screenshots.ps1` avec les vraies mesures du PC.
 
-## 2026-10-13 — 1.0.37.0
+## [1.0.37.0] - 2026-10-13
 
 - Réglages : icône NexusWpp dans la zone de notification (clic : réglages ; menu : réglages, quitter). Relancer NexusWpp depuis le menu Démarrer ouvre aussi les réglages. Il est enfin possible de quitter l'application sans le Gestionnaire des tâches ; le fond d'écran Windows est alors redessiné.
 - Logo central personnalisable : n'importe quelle image (PNG, JPEG, BMP, GIF, TIFF) est recadrée en carré au centre, normalisée en 512 px et appliquée en direct ; retour au logo d'origine en un clic. Une image illisible revient au logo d'origine.
@@ -447,20 +474,20 @@ Audit complet sur 8 axes (86 constats vérifiés) et corrections :
 - Package Store : l'anglais est déclaré en plus du français (langues prises en charge affichées par le Store).
 - Tests : import du logo (recadrage, formats, rejets), fenêtre de réglages, logo côté page et compteurs PDH.
 
-## 2026-10-13 — 1.0.35.0
+## [1.0.35.0] - 2026-10-13
 
 - Interface en anglais : la langue suit celle de Windows (français sur un Windows en français, anglais partout ailleurs), y compris la date, les unités (Go/GB, Mo/s/MB/s) et les messages d'accessibilité.
 - Icône « économie » reconnue aussi pour les modes d'alimentation Windows en anglais (« Power saver »).
 - Test de disposition exécuté dans les deux langues (1230 cas chacune) ; captures Store générées en français et en anglais.
 
-## 2026-10-13 — 1.0.34.0
+## [1.0.34.0] - 2026-10-13
 
 - Économiseur d'énergie Windows : quand il est activé, les deux anneaux du logo s'immobilisent (c'est l'animation qui coûte le plus) ; valeurs, horloge et paquets de données continuent de se mettre à jour. Aucun changement visuel le reste du temps.
 - Compilation modernisée : projet `NexusWpp.csproj` compilé par le SDK .NET (C# récent) au lieu du `csc.exe` C# 5 de Windows. L'application cible toujours .NET Framework 4.8, intégré à Windows : même taille, aucun runtime à installer.
 - WebView2 SDK mis à jour de 1.0.2592.51 à 1.0.4258.31, récupéré par NuGet.
 - Tests et installeur compilés avec le même compilateur moderne (`scripts\csc.ps1`).
 
-## 2026-10-12 — 1.0.33.0
+## [1.0.33.0] - 2026-10-12
 
 Revue complète du code, corrections vérifiées :
 
@@ -473,45 +500,45 @@ Revue complète du code, corrections vérifiées :
 - Installation EXE : le dossier `C:\nexuswpp` n'est plus modifiable par les comptes standard ; l'installation n'arrête plus les processus WebView2 d'autres applications ; exécutable compilé en x64 explicite.
 - Test de reprise visuelle : option `-DevBuild` pour mesurer la version de développement.
 
-## 2026-10-12 — 1.0.32.0
+## [1.0.32.0] - 2026-10-12
 
 - Consommation du fond d'écran visible presque divisée par deux : les deux anneaux rotatifs du logo ne forcent plus 60 compositions par seconde ; ils tournent à 12 images/s, comme le reste du rendu, avec le même mouvement. Mesure A/B sur 20 s (processus hôte + WebView2) : environ 71 % d'un cœur avant, environ 39 % après (GPU WebView2 ≈ 45 % → ≈ 19 %, rendu ≈ 17 % → ≈ 9 %).
 
-## 2026-10-12 — 1.0.31.0
+## [1.0.31.0] - 2026-10-12
 
 - Ping réseau plus universel : si 1.1.1.1 ne répond pas (réseau d'entreprise, ICMP public filtré), la mesure bascule sur 8.8.8.8 puis sur la passerelle locale, et mémorise la cible qui répond. L'indicateur n'est indisponible que si les trois échouent.
 
-## 2026-10-12 — 1.0.30.0
+## [1.0.30.0] - 2026-10-12
 
 - Disque système détecté dynamiquement (variable `SystemDrive`) au lieu de `C:` figé : charge, espace libre, nom du disque et libellé du radar suivent le vrai lecteur Windows, y compris sur les PC installés sur une autre lettre.
 
-## 2026-10-12 — 1.0.29.0
+## [1.0.29.0] - 2026-10-12
 
 - Reprise déclenchée par les événements Windows (premier plan, déplacement, minimisation, fermeture de fenêtre) : tant que le bureau est couvert, un changement de fenêtre relance la vérification en 40 ms au lieu d'attendre le prochain sondage. Aucun coût lorsque le fond d'écran est visible.
 
-## 2026-10-12 — 1.0.28.0
+## [1.0.28.0] - 2026-10-12
 
 - Correction de l'affichage « Données périmées » et des tirets qui apparaissaient à la reprise après une pause : la durée de la pause n'est plus comptée comme une panne de télémétrie, les dernières valeurs restent affichées jusqu'à la première mesure fraîche.
 - Test de régression ajouté (reprise après une longue pause).
 
-## 2026-10-12 — 1.0.27.0
+## [1.0.27.0] - 2026-10-12
 
 - Reprise plus rapide du fond d'écran : détection du bureau visible toutes les 250 ms (au lieu de 500 ms) et première image dessinée immédiatement à la reprise.
 - Fin des saccades : la pause n'est confirmée qu'après 1,5 s de bureau réellement couvert, ce qui évite les cycles pause/reprise lors des changements de fenêtre.
 - Les jauges affichent directement les valeurs fraîches à la reprise, sans animation de rattrapage depuis d'anciennes valeurs.
 - Le journal indique désormais les fenêtres qui couvrent le bureau (processus, classe, taille, position) pour diagnostiquer les écrans larges ; noms de processus mis en cache pour réduire le coût de la détection.
 
-## 2026-09-28 — 1.0.26.0
+## [1.0.26.0] - 2026-09-28
 
 - Réseau reste exactement au-dessus du logo central, quel que soit le nombre de composants affichés ; les autres ronds du radar se répartissent symétriquement à rayon et espacement angulaire constants.
 - Vérification de l'axe, de la symétrie et de l'espacement dans la matrice WebView2, avec ajout de la configuration à six ronds.
 
-## 2026-09-28 — 1.0.25.0
+## [1.0.25.0] - 2026-09-28
 
 - Détection des moteurs NPU « Neural », notamment Intel AI Boost, en complément de « Compute » : la charge et la mémoire partagée sont désormais lues sur le bon adaptateur.
 - Affichage d'un vrai 0 % au repos lorsque les compteurs répondent ; conservation de l'état indisponible en l'absence de mesure. Les moteurs distincts ne sont pas additionnés.
 
-## 2026-09-25 — 1.0.24.0
+## [1.0.24.0] - 2026-09-25
 
 - Alertes « Charge élevée » et « Mémoire très utilisée » intégrées au titre sans chevauchement ; confirmation à 90 % pendant 5 secondes et retour à 80 % pendant 5 secondes, sans clignotement ni tremblement.
 - Capteurs NVIDIA traités individuellement, anciennes valeurs invalidées après échec, indication des données périmées et conservation de la précision des watts. Les puissances affichées concernent la carte entière.
@@ -521,15 +548,15 @@ Revue complète du code, corrections vérifiées :
 - Matrice de disposition étendue aux charges élevées et aux capteurs périmés ; vérification de la récupération après une interruption des mesures.
 - Protection de l’initialisation WebView2 contre les récupérations concurrentes ; notifications d’écran traitées sur le thread de l’interface.
 
-## 2026-09-25 — 1.0.20.0
+## [1.0.20.0] - 2026-09-25
 
 - Ajustement fin du placement : cockpit remonté de 10 pixels sur un écran à 125 %, avec une rangée d'icônes préservée sur les petits formats et des cartes de taille identique.
 
-## 2026-09-25 — 1.0.19.0
+## [1.0.19.0] - 2026-09-25
 
 - Léger décalage du cockpit vers le bas en rééquilibrant les marges existantes : davantage d'espace pour les libellés des icônes en haut, moins de vide au-dessus de la barre des tâches, sans changer la taille des cartes.
 
-## 2026-09-25 — 1.0.18.0
+## [1.0.18.0] - 2026-09-25
 
 - Correction du bas du cockpit coupé sur les écrans fortement mis à l'échelle, notamment en 4K à 225 % : pistes de grille bornées et cartes adaptées à la place réellement disponible.
 - Jauges proportionnelles, disposition compacte préservant toutes les mesures et grille spécifique aux écrans portrait, sans défilement des panneaux de télémétrie.
@@ -538,7 +565,7 @@ Revue complète du code, corrections vérifiées :
 - Suppression des anciennes règles responsive contradictoires et du tronquage des noms des modes d'alimentation.
 - Vérification automatique dans WebView2 des résolutions 720p à 8K, des échelles 100 à 400 %, des formats ultralarges/portrait et des variantes de matériel et de profils d'alimentation. Captures et mesures conservées hors Git.
 
-## 2026-09-25 — 1.0.16.0
+## [1.0.16.0] - 2026-09-25
 
 - Conservation de la scène réelle du bureau pendant la pause : WebView2 reste visible, sans suspension Chromium ni reconstruction à la reprise.
 - Arrêt des animations Canvas/CSS, des transitions, de l'horloge et des nouvelles collectes sous couverture ; conservation des particules et des valeurs déjà affichées.
