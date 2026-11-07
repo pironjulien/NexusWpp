@@ -161,6 +161,11 @@ public sealed class FeatureRegressionTests
         var other=new NvidiaTelemetry();
         Assert.True(!other.IsAvailable("AMD Radeon RX 7800 XT") && other.Read("AMD Radeon RX 7800 XT",false,false)==null && other.Status=="unavailable","NVML is never loaded for another vendor");
         Assert.True(NvidiaTelemetry.Provider=="nvml","the page is told the real sensor provider");
+        // GPU gauge as a share of capacity: 70 % busy at 210 MHz out of 2640 MHz is about 6 % (07/11/2026).
+        Assert.True(Math.Round(NvidiaSample.CapacityUtilization(70,210,2640)!.Value)==6,"an idle GPU at its lowest clock reads a few percent, not 70 %");
+        Assert.True(NvidiaSample.CapacityUtilization(100,2640,2640)==100 && NvidiaSample.CapacityUtilization(100,2800,2640)==100,"a GPU at or above its maximum clock reads its busy time, capped at 100 %");
+        Assert.True(NvidiaSample.CapacityUtilization(70,null,2640)==null && NvidiaSample.CapacityUtilization(70,210,null)==null && NvidiaSample.CapacityUtilization(70,210,0)==null,"a missing clock falls back to the raw busy time");
+        Assert.True(NvidiaSample.Create(70,40,210,405,7,16376,1500,0,2640)!.MaxCoreClock==2640,"the maximum graphics clock is kept with the sample");
         // Driver swapped under an open NVML session (Windows Update, 06/11/2026): drop it, wait for the new one.
         var swap=new NvidiaTelemetry();
         Assert.True(swap.DriverReady(null,0) && swap.DriverReady("v1",0),"NVML reads the driver found at startup at once, and when its identity is unknown");

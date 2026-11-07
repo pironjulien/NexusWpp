@@ -1260,7 +1260,9 @@ namespace DesktopHtmlHost
             NvidiaSample? nv = nvidiaTelemetry.Read(GpuName, dgpuSuspended, saveEnergy,
                 nvidiaTelemetry.IsAvailable(GpuName) ? DevicePower.DriverInstance(dgpuInstanceId) : null);
             bool nvidiaStatsSuccess = nv != null;
-            int gpuUtil = nv != null && nv.Utilization.HasValue ? (int)Math.Round(nv.Utilization.Value) : dgpuUtil;
+            // Share of the card's capacity (busy time scaled by current / maximum clock); raw busy time when a clock is missing.
+            double? nvLoad = nv == null ? null : NvidiaSample.CapacityUtilization(nv.Utilization, nv.CoreClock, nv.MaxCoreClock) ?? nv.Utilization;
+            int gpuUtil = nvLoad.HasValue ? (int)Math.Round(nvLoad.Value) : dgpuUtil;
             double gpuTemp = nv != null ? nv.Temperature ?? -1 : -1;
             double gpuCoreClock = nv != null ? nv.CoreClock ?? -1 : -1;
             double gpuMemClock = nv != null ? nv.MemoryClock ?? -1 : -1;

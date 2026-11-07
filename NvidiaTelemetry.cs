@@ -9,7 +9,15 @@ namespace DesktopHtmlHost
     // Each field is optional: one unsupported sensor must not discard the others.
     internal sealed class NvidiaSample
     {
-        internal double? Utilization, Temperature, CoreClock, MemoryClock, PowerWatts, TotalMiB, UsedMiB, FanPercent;
+        internal double? Utilization, Temperature, CoreClock, MemoryClock, PowerWatts, TotalMiB, UsedMiB, FanPercent, MaxCoreClock;
+        // NVML utilization is the share of time the GPU is busy at its current clock: an idle card at 210 MHz reads
+        // 70 % while it uses a few percent of what it can do. Scaled by current / maximum graphics clock, it reads
+        // as a share of the card's capacity, like the CPU gauge (null when a clock is missing).
+        internal static double? CapacityUtilization(double? utilization, double? coreClock, double? maxCoreClock)
+        {
+            if (!utilization.HasValue || !coreClock.HasValue || !maxCoreClock.HasValue || maxCoreClock.Value <= 0) return null;
+            return Math.Max(0, Math.Min(100, utilization.Value * Math.Min(1, coreClock.Value / maxCoreClock.Value)));
+        }
         internal static double? Number(double? value, double maximum)
         {
             return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value)
@@ -17,13 +25,13 @@ namespace DesktopHtmlHost
         }
         // Validated sample from raw driver readings (null = not supported or failed).
         internal static NvidiaSample? Create(double? utilization, double? temperature, double? coreClock, double? memoryClock,
-            double? powerWatts, double? totalMiB, double? usedMiB, double? fanPercent = null)
+            double? powerWatts, double? totalMiB, double? usedMiB, double? fanPercent = null, double? maxCoreClock = null)
         {
             var sample = new NvidiaSample {
                 Utilization = Number(utilization, 100), Temperature = Number(temperature, 200),
                 CoreClock = Number(coreClock, 100000), MemoryClock = Number(memoryClock, 100000),
                 PowerWatts = Number(powerWatts, 10000), TotalMiB = Number(totalMiB, 1048576), UsedMiB = Number(usedMiB, 1048576),
-                FanPercent = Number(fanPercent, 100)
+                FanPercent = Number(fanPercent, 100), MaxCoreClock = Number(maxCoreClock, 100000)
             };
             if (sample.TotalMiB.HasValue && sample.UsedMiB > sample.TotalMiB) sample.UsedMiB = null;
             return sample.Utilization.HasValue || sample.Temperature.HasValue || sample.PowerWatts.HasValue
@@ -61,6 +69,9 @@ namespace DesktopHtmlHost
         internal static partial int DeviceGetTemperature(IntPtr device, int sensor, out uint celsius);
         [LibraryImport(Library, EntryPoint = "nvmlDeviceGetClockInfo"), DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         internal static partial int DeviceGetClockInfo(IntPtr device, int clock, out uint mhz);
+        // Highest clock the GPU can reach (boost included), fixed for a given card and driver.
+        [LibraryImport(Library, EntryPoint = "nvmlDeviceGetMaxClockInfo"), DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        internal static partial int DeviceGetMaxClockInfo(IntPtr device, int clock, out uint mhz);
         // Speed the driver asks of the first fan, in % of its maximum (0 when the fans are stopped).
         [LibraryImport(Library, EntryPoint = "nvmlDeviceGetFanSpeed"), DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         internal static partial int DeviceGetFanSpeed(IntPtr device, out uint percent);
@@ -87,7 +98,8 @@ namespace DesktopHtmlHost
         string status;
         bool? available;
         bool initialized, memoryV2Unsupported;
-        IntPtr device;
+        IntPtr device, maxClockDevice;
+        double? maxCoreClock;
         internal string Status { get { return status == "fresh" && AgeMs > 2 * intervalMs ? "stale" : status; } }
         internal long AgeMs { get { return lastSuccess < 0 ? -1 : Math.Max(0, clock.ElapsedMilliseconds - lastSuccess); } }
         internal NvidiaTelemetry() { status = "unavailable"; }
@@ -216,6 +228,10 @@ namespace DesktopHtmlHost
             double? utilization = Nvml.DeviceGetUtilizationRates(handle, out rates) == Nvml.Success ? rates.Gpu : (double?)null;
             double? celsius = Nvml.DeviceGetTemperature(handle, Nvml.TemperatureGpu, out temperature) == Nvml.Success ? temperature : (double?)null;
             double? coreClock = Nvml.DeviceGetClockInfo(handle, Nvml.ClockGraphics, out core) == Nvml.Success ? core : (double?)null;
+            if (handle != maxClockDevice) {
+                maxClockDevice = handle;
+                maxCoreClock = Nvml.DeviceGetMaxClockInfo(handle, Nvml.ClockGraphics, out uint max) == Nvml.Success && max > 0 ? (double)max : null;
+            }
             double? memoryClock = Nvml.DeviceGetClockInfo(handle, Nvml.ClockMemory, out memory) == Nvml.Success ? memory : (double?)null;
             double? watts = Nvml.DeviceGetPowerUsage(handle, out milliwatts) == Nvml.Success ? milliwatts / 1000.0 : (double?)null;
             // Passive or fanless cards answer "not supported": the slot then stays unavailable.
@@ -233,7 +249,7 @@ namespace DesktopHtmlHost
                 Nvml.Memory info;
                 if (Nvml.DeviceGetMemoryInfo(handle, out info) == Nvml.Success) { totalMiB = info.Total / 1048576.0; usedMiB = Math.Floor(info.Used / 1048576.0); }
             }
-            return NvidiaSample.Create(utilization, celsius, coreClock, memoryClock, watts, totalMiB, usedMiB, fan);
+            return NvidiaSample.Create(utilization, celsius, coreClock, memoryClock, watts, totalMiB, usedMiB, fan, maxCoreClock);
         }
     }
 }

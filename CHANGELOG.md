@@ -7,6 +7,13 @@ ones, from before version numbers, carry their date only.
 
 ## [Unreleased]
 
+## [1.0.69.0] - 2026-11-07
+
+### Changed
+- The NVIDIA GPU gauge shows the share of the card's capacity in use: busy time scaled by the current graphics clock
+  over the card's maximum clock. An idle RTX 4080 SUPER at 210 MHz read 70 % while it used about 5 % of its power;
+  it now reads about 5 %. When a clock is not reported, the gauge keeps the raw busy time.
+
 ### Fixed
 - Store screenshots are declared by their exact output size, with a whole-pixel viewport: the 2560x1440 images came
   out 2561x1440 (a 1707-pixel viewport at scale 1.5). Each capture now checks the size of the PNG it saved.
