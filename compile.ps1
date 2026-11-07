@@ -8,16 +8,7 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     throw "The .NET 10 SDK is required: https://dotnet.microsoft.com/download"
 }
 
-# Version stamped from the VERSION file.
-$version = & (Join-Path $PSScriptRoot 'scripts\read_version.ps1')
-$versionDir = Join-Path $PSScriptRoot 'work\obj'
-if (!(Test-Path $versionDir)) { New-Item -ItemType Directory -Path $versionDir -Force | Out-Null }
-@"
-using System.Reflection;
-[assembly: AssemblyVersion("$version")]
-[assembly: AssemblyFileVersion("$version")]
-namespace NexusWpp { internal static class ReleaseVersion { internal const string Value = "$version"; } }
-"@ | Set-Content -LiteralPath (Join-Path $versionDir 'ReleaseVersion.cs') -Encoding UTF8
+# The version stamp comes from the VERSION file (Directory.Build.targets, checked like scripts\read_version.ps1).
 
 Write-Host "Building NexusWpp.csproj into bin\nexuswpp.exe..." -ForegroundColor Cyan
 & dotnet build $project -c Release -o $binDir --nologo -v quiet -clp:ErrorsOnly

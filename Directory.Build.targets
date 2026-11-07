@@ -1,0 +1,28 @@
+<Project>
+  <!-- The version stamp of every project that sets ReleaseVersionSource (host, installer, tests): written from the
+       VERSION file before compiling, so a plain `dotnet build` works from the IDE or the command line. -->
+  <PropertyGroup>
+    <NexusWppVersionFile>$(MSBuildThisFileDirectory)VERSION</NexusWppVersionFile>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(ReleaseVersionSource)' != ''">
+    <!-- The stamp is regenerated when VERSION changes. -->
+    <UpToDateCheckInput Include="$(NexusWppVersionFile)" />
+  </ItemGroup>
+
+  <Target Name="WriteReleaseVersion" BeforeTargets="CoreCompile" Condition="'$(ReleaseVersionSource)' != ''"
+          Inputs="$(NexusWppVersionFile)" Outputs="$(ReleaseVersionSource)">
+    <PropertyGroup>
+      <NexusWppVersion>$([System.IO.File]::ReadAllText('$(NexusWppVersionFile)').Trim())</NexusWppVersion>
+    </PropertyGroup>
+    <!-- Same rules as scripts\read_version.ps1: a four-part Store version ending in .0, within the MSIX limits. -->
+    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(NexusWppVersion)', '^([1-9]\d{0,4})\.(\d{1,5})\.(\d{1,5})\.0$'))"
+           Text="VERSION must contain a four-part Store version ending in .0 ($(NexusWppVersion))." />
+    <Error Condition="$([System.Version]::Parse('$(NexusWppVersion)').Major) &gt; 65535 Or $([System.Version]::Parse('$(NexusWppVersion)').Minor) &gt; 65535 Or $([System.Version]::Parse('$(NexusWppVersion)').Build) &gt; 65535"
+           Text="VERSION is outside MSIX version limits ($(NexusWppVersion))." />
+    <WriteLinesToFile File="$(ReleaseVersionSource)" Overwrite="true" WriteOnlyWhenDifferent="true" Lines="using System.Reflection%3B;[assembly: AssemblyVersion(&quot;$(NexusWppVersion)&quot;)];[assembly: AssemblyFileVersion(&quot;$(NexusWppVersion)&quot;)];namespace NexusWpp { internal static class ReleaseVersion { internal const string Value = &quot;$(NexusWppVersion)&quot;%3B } }" />
+    <ItemGroup>
+      <FileWrites Include="$(ReleaseVersionSource)" />
+    </ItemGroup>
+  </Target>
+</Project>

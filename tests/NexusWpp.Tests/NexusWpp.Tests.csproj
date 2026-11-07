@@ -34,6 +34,7 @@
     <GenerateAssemblyInformationalVersionAttribute>false</GenerateAssemblyInformationalVersionAttribute>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <BaseOutputPath>$(NexusWppRoot)work\tests\bin\</BaseOutputPath>
+    <!-- The host's version stamp, written from VERSION by Directory.Build.targets. -->
     <ReleaseVersionSource>$(BaseIntermediateOutputPath)ReleaseVersion.cs</ReleaseVersionSource>
   </PropertyGroup>
 
@@ -42,8 +43,6 @@
     <Compile Include="$(ReleaseVersionSource)" Link="Host\ReleaseVersion.cs" />
     <Using Include="Xunit" />
     <AssemblyMetadata Include="NexusWpp.Repository" Value="$(NexusWppRoot)" />
-    <!-- The version stamp is regenerated when VERSION changes. -->
-    <UpToDateCheckInput Include="$(NexusWppRoot)VERSION" />
   </ItemGroup>
 
   <ItemGroup>
@@ -51,17 +50,6 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
     <PackageReference Include="System.Management" Version="10.0.14" />
   </ItemGroup>
-
-  <!-- The host's version stamp (compile.ps1 writes the same file into work\obj for the app), from the VERSION file. -->
-  <Target Name="WriteReleaseVersion" BeforeTargets="CoreCompile" Inputs="$(NexusWppRoot)VERSION" Outputs="$(ReleaseVersionSource)">
-    <PropertyGroup>
-      <NexusWppVersion>$([System.IO.File]::ReadAllText('$(NexusWppRoot)VERSION').Trim())</NexusWppVersion>
-    </PropertyGroup>
-    <WriteLinesToFile File="$(ReleaseVersionSource)" Overwrite="true" WriteOnlyWhenDifferent="true" Lines="using System.Reflection%3B;[assembly: AssemblyVersion(&quot;$(NexusWppVersion)&quot;)];[assembly: AssemblyFileVersion(&quot;$(NexusWppVersion)&quot;)];namespace NexusWpp { internal static class ReleaseVersion { internal const string Value = &quot;$(NexusWppVersion)&quot;%3B } }" />
-    <ItemGroup>
-      <FileWrites Include="$(ReleaseVersionSource)" />
-    </ItemGroup>
-  </Target>
 
   <!-- As in the host: the WinForms control only, not the WPF one. -->
   <Target Name="TrimWebView2Output" AfterTargets="ResolveLockFileReferences;ResolvePackageAssets;ResolveAssemblyReferences">

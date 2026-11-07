@@ -41,11 +41,13 @@
     <Deterministic>true</Deterministic>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <PayloadZip Condition="'$(PayloadZip)' == ''">..\dist\NexusWppPayload.zip</PayloadZip>
+    <!-- The host's version stamp, written from VERSION by Directory.Build.targets. -->
+    <ReleaseVersionSource>$(BaseIntermediateOutputPath)ReleaseVersion.cs</ReleaseVersionSource>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Include="NexusWppInstaller.cs" />
-    <Compile Include="..\work\obj\ReleaseVersion.cs" />
+    <Compile Include="$(ReleaseVersionSource)" />
     <EmbeddedResource Include="$(PayloadZip)" LogicalName="NexusWpp.Payload.zip" />
   </ItemGroup>
 

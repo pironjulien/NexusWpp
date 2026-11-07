@@ -27,7 +27,7 @@
     <RootNamespace>NexusWpp</RootNamespace>
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
-    <!-- Version attributes come from the VERSION stamp (compile.ps1); the SDK still declares the target platform. -->
+    <!-- Version attributes come from the VERSION stamp (Directory.Build.targets); the SDK still declares the target platform. -->
     <GenerateAssemblyVersionAttribute>false</GenerateAssemblyVersionAttribute>
     <GenerateAssemblyFileVersionAttribute>false</GenerateAssemblyFileVersionAttribute>
     <GenerateAssemblyInformationalVersionAttribute>false</GenerateAssemblyInformationalVersionAttribute>
@@ -46,7 +46,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <!-- Precompiled host code: a faster first start at sign-in (the runtime itself is already precompiled). -->
     <PublishReadyToRun>true</PublishReadyToRun>
-    <ReleaseVersionSource>work\obj\ReleaseVersion.cs</ReleaseVersionSource>
+    <ReleaseVersionSource>$(BaseIntermediateOutputPath)ReleaseVersion.cs</ReleaseVersionSource>
   </PropertyGroup>
 
   <ItemGroup>
