@@ -12,6 +12,7 @@ A live hardware dashboard as your Windows wallpaper: CPU, GPU, NPU, RAM, SSD and
 [![Release](https://img.shields.io/github/v/release/pironjulien/NexusWpp?style=flat-square&label=release&color=53fff4)](CHANGELOG.md)
 [![CI](https://img.shields.io/github/actions/workflow/status/pironjulien/NexusWpp/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/pironjulien/NexusWpp/actions/workflows/ci.yml)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/pironjulien/NexusWpp/badge)](https://scorecard.dev/viewer/?uri=github.com/pironjulien/NexusWpp)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16440/badge)](https://www.bestpractices.dev/projects/16440)
 [![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?style=flat-square&logo=dotnet&logoColor=white)](NexusWpp.csproj)
 [![Windows 10 | 11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=flat-square)](#-quick-start)
 [![License](https://img.shields.io/github/license/pironjulien/NexusWpp?style=flat-square)](LICENSE)
