@@ -7,6 +7,12 @@ ones, from before version numbers, carry their date only.
 
 ## [Unreleased]
 
+### Fixed
+- Store screenshots are declared by their exact output size, with a whole-pixel viewport: the 2560x1440 images came
+  out 2561x1440 (a 1707-pixel viewport at scale 1.5). Each capture now checks the size of the PNG it saved.
+- Store screenshots show fixed demonstration power plans in the screenshot's language instead of this PC's own plan
+  names, which appeared in French on the English images.
+
 ## [1.0.68.0] - 2026-11-07
 
 ### Fixed
