@@ -1,6 +1,7 @@
 # Dependabot: weekly updates of the pinned GitHub Actions (SHA + version comment) and of the project's dependencies.
 # A 7-day cooldown lets a compromised release be caught before it is proposed (zizmor dependabot-cooldown).
-# Keep the ecosystem matching the manifests: "nuget" for NexusWpp.csproj (WebView2) and the installer project.
+# Keep the ecosystem matching the manifests: "nuget" for every project that declares its own packages (host, installer,
+# tests, tools), so none drifts from the host's versions without a proposal.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -13,7 +14,7 @@ updates:
       actions:
         patterns: ["*"]
   - package-ecosystem: nuget
-    directories: ["/", "/installer"]
+    directories: ["/", "/installer", "/tests/NexusWpp.Tests", "/tools/ExportIcons", "/tools/GraphicsProfile"]
     schedule:
       interval: weekly
     cooldown:

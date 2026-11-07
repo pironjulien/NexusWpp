@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.IO;
 using DesktopHtmlHost;
 
 namespace NexusWpp.Tests;
@@ -266,5 +267,19 @@ public sealed class FeatureRegressionTests
         string? overlay=PowerSchemes.EffectiveOverlay();
         Console.WriteLine("INFO effective power mode overlay: "+(overlay??"unavailable"));
         Assert.True(overlay==null || Guid.TryParse(overlay,out _),"effective overlay is a GUID or unavailable");
+    }
+
+    [Fact]
+    public void DefaultPageIsTheOneShippedNextToTheExe()
+    {
+        string dir=Path.Combine(Path.GetTempPath(),"nexuswpp-html-"+Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            Assert.Throws<FileNotFoundException>(()=>Program.GetDefaultHtmlPath(dir));
+            File.WriteAllText(Path.Combine(dir,"index.html"),"<!doctype html>");
+            Assert.Equal(Path.Combine(dir,"index.html"),Program.GetDefaultHtmlPath(dir));
+        }
+        finally { Directory.Delete(dir,true); }
     }
 }

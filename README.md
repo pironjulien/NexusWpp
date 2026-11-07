@@ -131,10 +131,7 @@ then temporarily uses `Progman` if `WorkerW` takes too long.
 - `DesktopVisibility.cs`: detection of a covered desktop, of full screen, and multi-monitor coverage calculation.
 - `index.html`, `style.css` and the scripts loaded in order: `i18n.js` (translations), `cockpit-state.js` (shared state, clock), `radar.js` (Canvas radar, pause), `dashboard.js` (cards, alerts, history), `app.js` (host messages, startup).
 - `compile.ps1`: compiles the host and the visibility detection into `bin\nexuswpp.exe`.
-- `deploy_local.ps1`: copies the app to `C:\nexuswpp` and configures Windows startup via `HKLM\...\Run`.
-- `run.bat`: local menu to start, compile, deploy or stop the app.
 - `scripts/benchmark_nexuswpp.ps1`: multi-run CPU/RAM/startup benchmark.
-- `scripts/benchmark_fullscreen_suspend.ps1`: legacy benchmark for versions that used the "fullscreen foreground detected" log pattern; for the current policy, use `measure_desktop_suspension.ps1`.
 - `scripts/measure_desktop_suspension.ps1`: measures CPU/GPU with the desktop visible, side-by-side windows, full screen and transparent windows, then restores the previous windows.
 - `tests/NexusWpp.Tests`: the C# tests on xUnit v3, run by `scripts/test_features.ps1` (so `test.ps1`) and CI: feature rules, the geometric coverage scenarios, and the host's WinForms and WebView2 harnesses (`Harnesses/`: host, settings window, mouse hook, runtime pause, responsive layout), off screen and never activated. Tests that need the real desktop (Store screenshots, visual resume) or take minutes (every resolution) are explicit: `dotnet test` runs them only when asked.
 
@@ -152,7 +149,7 @@ title, without flickering or jitter. An interruption in readings resets the conf
 > not a CPU core measurement.
 
 The gauge transition goes from 0.55 to 0.18 seconds after A/B profiling in WebView2. Halos, radar and the logo's
-rotating rings run at 12 frames/s. The `scripts/profile_graphics.ps1` benchmark measures GPU engine utilization for the
+rotating rings run at 12 frames/s. The `scripts/profile_graphics.ps1` benchmark (built from `tools/GraphicsProfile`) measures GPU engine utilization for the
 process group, without attributing watts or the Windows compositor's cost. Sensor and alert rules are verified with
 `scripts/test_features.ps1`.
 
@@ -240,8 +237,11 @@ executable that embeds the application.
 
 ```powershell
 .\compile.ps1
-.\deploy_local.ps1
+.\bin\nexuswpp.exe "$PWD\index.html"   # runs the development build on its working copy (absolute path)
 ```
+
+The installer is the only installation path, for a local build too: `scripts\build_installer.ps1` then
+`dist\NexusWppSetup.exe`.
 
 The `VERSION` file is the single source of the version number for the EXE, the installer and the MSIX. To produce a
 standalone `.exe` installer:

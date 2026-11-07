@@ -7,6 +7,22 @@ ones, from before version numbers, carry their date only.
 
 ## [Unreleased]
 
+## [1.0.70.0] - 2026-11-07
+
+### Fixed
+- A missing `index.html` next to `nexuswpp.exe` is reported as an incomplete installation (`crash.txt`) instead of
+  silently loading the page from `C:\nexuswpp`, a folder only the standalone installer uses.
+
+### Removed
+- `deploy_local.ps1` and `run.bat`, a second installation path that duplicated `NexusWppSetup.exe` (and announced a
+  scheduled task while it wrote the Run key): the installer is the only one, for a local build too.
+- `scripts/csc.ps1`, `scripts/host_sources.ps1` and the legacy `scripts/benchmark_fullscreen_suspend.ps1`. The graphics
+  profile is now a real project, `tools/GraphicsProfile`, built by `scripts/profile_graphics.ps1`.
+
+### Changed
+- Dependabot also watches the NuGet packages of the tests and of both tools, and the changelog carries its comparison
+  links.
+
 ## [1.0.69.0] - 2026-11-07
 
 ### Changed
@@ -712,3 +728,33 @@ Revue complète du code, corrections vérifiées :
 - Affichage immediat de l'interface reelle avec des valeurs neutres avant l'arrivee de la telemetrie.
 - Retrait de l'image de chargement generee et du script de generation associe.
 - Ajout des consignes projet dans `AGENTS.md`.
+
+[Unreleased]: https://github.com/pironjulien/NexusWpp/compare/v1.0.70.0...HEAD
+[1.0.70.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.69.0...v1.0.70.0
+[1.0.69.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.68.0...v1.0.69.0
+[1.0.68.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.67.0...v1.0.68.0
+[1.0.67.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.66.0...v1.0.67.0
+[1.0.66.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.65.0...v1.0.66.0
+[1.0.65.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.64.0...v1.0.65.0
+[1.0.64.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.63.0...v1.0.64.0
+[1.0.63.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.62.0...v1.0.63.0
+[1.0.62.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.61.0...v1.0.62.0
+[1.0.61.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.60.0...v1.0.61.0
+[1.0.60.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.59.0...v1.0.60.0
+[1.0.59.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.58.0...v1.0.59.0
+[1.0.58.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.57.0...v1.0.58.0
+[1.0.57.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.56.0...v1.0.57.0
+[1.0.56.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.55.0...v1.0.56.0
+[1.0.55.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.54.0...v1.0.55.0
+[1.0.54.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.53.0...v1.0.54.0
+[1.0.53.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.52.0...v1.0.53.0
+[1.0.52.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.50.0...v1.0.52.0
+[1.0.50.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.49.0...v1.0.50.0
+[1.0.49.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.48.0...v1.0.49.0
+[1.0.48.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.47.0...v1.0.48.0
+[1.0.47.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.46.0...v1.0.47.0
+[1.0.46.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.45.0...v1.0.46.0
+[1.0.45.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.43.0...v1.0.45.0
+[1.0.43.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.42.0...v1.0.43.0
+[1.0.42.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.39.0...v1.0.42.0
+[1.0.39.0]: https://github.com/pironjulien/NexusWpp/releases/tag/v1.0.39.0

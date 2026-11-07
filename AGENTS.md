@@ -5,7 +5,7 @@
 - Application Windows native de fond d'ecran dynamique.
 - L'hote principal est la classe partielle `DesktopForm` (`DesktopForm*.cs`, un fichier par responsabilite) lancee par `Program.cs`.
 - L'interface est dans `index.html`, `style.css` et des scripts classiques charges dans l'ordre (`cockpit-state.js`, `radar.js`, `dashboard.js`, `app.js`) qui partagent la portee globale ; les textes visibles sont traduits dans `i18n.js` (francais et anglais).
-- Le mode EXE autonome utilise `C:\nexuswpp`. Le mode Store/MSIX utilise WindowsApps et conserve ses données dans le profil utilisateur packagé ; ne pas lui ajouter deploy_local.ps1.
+- Le mode EXE autonome utilise `C:\nexuswpp`. Le mode Store/MSIX utilise WindowsApps et conserve ses données dans le profil utilisateur packagé ; le seul chemin d'installation EXE est l'installeur (`scripts\build_installer.ps1` puis `dist\NexusWppSetup.exe`).
 
 ## Commandes utiles
 

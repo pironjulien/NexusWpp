@@ -80,8 +80,7 @@ namespace DesktopHtmlHost
                     if (error != null) WriteCrashLog(error);
                 };
 
-                string defaultHtml = GetDefaultHtmlPath();
-                string htmlPath = args.Length > 0 ? args[0] : defaultHtml;
+                string htmlPath = args.Length > 0 ? args[0] : GetDefaultHtmlPath(AppDomain.CurrentDomain.BaseDirectory);
 
                 using (var context = new DesktopHostContext(() => new DesktopForm(htmlPath)))
                 {
@@ -287,15 +286,17 @@ namespace DesktopHtmlHost
             catch { return System.Drawing.SystemIcons.Application; }
         }
 
-        private static string GetDefaultHtmlPath()
+        // The Store package and the installer both ship index.html next to the exe. A missing file is an
+        // incomplete installation: it is reported (crash.txt) instead of loading the page from another folder.
+        internal static string GetDefaultHtmlPath(string baseDirectory)
         {
-            string packagedHtml = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "index.html");
-            if (File.Exists(packagedHtml))
+            string html = Path.Combine(baseDirectory, "index.html");
+            if (!File.Exists(html))
             {
-                return packagedHtml;
+                throw new FileNotFoundException("index.html is missing next to nexuswpp.exe: the installation is incomplete.", html);
             }
 
-            return @"C:\nexuswpp\index.html";
+            return html;
         }
 
         private static void WriteCrashLog(Exception ex)
