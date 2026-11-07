@@ -27,12 +27,11 @@ dotnet run --project .\tools\ExportIcons   # icon.ico et logos MSIX depuis brand
 ## Verification
 
 - Verifier que `.\compile.ps1` compile `bin\nexuswpp.exe`.
-- Verifier le transfert des clics et le cycle de vie du hook avec `.\scripts\test_mouse_hook.ps1` apres une modification de la gestion souris.
+- Lancer `.\test.ps1` avant chaque commit : compilation, tests JavaScript, puis `dotnet test` sur `tests\NexusWpp.Tests` (xUnit v3 : regles de mesure, couverture du bureau, et les harnais hote, reglages et logo, hook souris, pause, disposition rapide ; fenetres hors ecran, jamais activees).
 - Verifier que `.\scripts\build_installer.ps1` cree `dist\NexusWppSetup.exe`.
 - Verifier que `.\scripts\build_msix.ps1` cree le package Store `dist\msix\julienpiron.fr.NexusWpp_<VERSION>_x64.msix`, avec le numero du fichier `VERSION`.
-- Verifier les reglages et le logo personnalise avec `.\scripts\test_settings.ps1`.
-- Verifier les changements de disposition avec `.\scripts\test_responsive_layout.ps1` (WebView2, resolutions, DPI, portrait et variantes materielles).
-- Verifier la pause et la conservation de scene avec `.\scripts\test_runtime_pause.ps1`, puis mesurer le retour physique avec `.\scripts\test_desktop_visual_resume.ps1`.
+- Tests explicites, hors `test.ps1` et CI : toutes les resolutions avec `dotnet test --project tests\NexusWpp.Tests --filter-method *ResponsiveLayoutFull --explicit only` ; captures Store avec `.\scripts\store_screenshots.ps1` (fenetre de reglages a l'ecran, jamais activee).
+- Mesurer le retour physique du bureau avec `.\scripts\test_desktop_visual_resume.ps1` (vrai bureau : reduit puis restaure les fenetres, seulement en l'absence de l'utilisateur).
 - Ne pas versionner `bin/`, `dist/`, les logs, les fichiers temporaires ou les resultats de benchmark.
 
 ## Habitudes projet

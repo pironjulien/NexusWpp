@@ -14,14 +14,12 @@ static class StoreSettingsShot
     [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out RECT rect, int size);
     [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
 
-    [STAThread]
-    static void Main(string[] args)
+    // Run by HarnessTests on an STA thread, after the host's startup configuration (TestEntryPoint).
+    internal static void Run(params string[] args)
     {
         string defaultLogo = args[0], background = args[1], output = args[2];
         // The window follows the Windows display language; pin it to the screenshot's language.
         Thread.CurrentThread.CurrentUICulture = new CultureInfo(args.Length > 3 && args[3] == "en" ? "en-US" : "fr-FR");
-        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2); // same DPI mode as the host
-        Application.EnableVisualStyles();
         // Shown on top for the capture, but never activated: the keyboard stays with the user.
         using (var form = new SettingsForm(defaultLogo, () => { }, () => { }) { ShowInactive = true })
         {

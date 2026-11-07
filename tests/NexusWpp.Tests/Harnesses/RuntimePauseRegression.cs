@@ -16,10 +16,9 @@ sealed class RuntimePauseRegression : Form
     bool pageReady;
     int exitCode = 1;
 
-    [STAThread]
-    static int Main(string[] args)
+    // Run by HarnessTests on an STA thread, after the host's startup configuration (TestEntryPoint).
+    internal static int Run(params string[] args)
     {
-        Application.EnableVisualStyles();
         using (var form = new RuntimePauseRegression(args[0]))
         {
             Application.Run(form);

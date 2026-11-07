@@ -18,27 +18,6 @@ jobs:
   # Required check (branch protection): keep the job id "compile".
   compile:
     runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
-        with:
-          dotnet-version: 10.0.x
-
-      - name: Compile NexusWpp
-        shell: pwsh
-        run: .\compile.ps1
-
-      - name: Sensor and alert rules (native + telemetry_state.test.js)
-        shell: pwsh
-        run: .\scripts\test_features.ps1
-
-  # Off-screen WinForms and WebView2 suites: no desktop attachment, no user data touched.
-  ui-tests:
-    runs-on: windows-latest
-    needs: compile
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -53,23 +32,17 @@ jobs:
         shell: pwsh
         run: .\compile.ps1
 
-      - name: Settings window and custom logo
+      # JavaScript rules, then xUnit: feature rules and the off-screen WinForms and WebView2 harnesses (host, settings,
+      # mouse hook, runtime pause, responsive layout); no desktop attachment, no user data touched.
+      - name: Tests (JavaScript and xUnit)
         shell: pwsh
-        run: .\scripts\test_settings.ps1
-
-      - name: Runtime pause and Content-Security-Policy
-        shell: pwsh
-        run: .\scripts\test_runtime_pause.ps1
-
-      - name: Responsive layout (quick, FR and EN)
-        shell: pwsh
-        run: .\scripts\test_responsive_layout.ps1 -Quick -Label ci
+        run: .\scripts\test_features.ps1
 
       - name: Keep test output on failure
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
-          name: ui-test-output
+          name: test-output
           path: work/
           if-no-files-found: ignore
 

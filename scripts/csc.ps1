@@ -1,5 +1,6 @@
 # Builds csc-style arguments (/out:, /target:, /main:, /reference:, sources...) as a .NET 10 Windows
-# project, so the test and tool harnesses compile against the same runtime and analysis as the host.
+# project, so the two measurement tools still built this way (profile_graphics.ps1, the legacy benchmark_fullscreen_suspend.ps1)
+# compile against the same runtime and analysis as the host. Tests live in tests\NexusWpp.Tests (xUnit, dotnet test).
 # Unsafe blocks are on, as in the host (LibraryImport stubs).
 # The output folder receives <name>.exe with its runtime files; it runs on the installed .NET 10
 # desktop runtime (the shipped app itself is self-contained, see NexusWpp.csproj).

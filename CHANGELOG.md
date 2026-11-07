@@ -16,6 +16,15 @@ ones, from before version numbers, carry their date only.
 - Commit messages and release notes are written in English.
 - The icons are rendered by a .NET tool (`tools/ExportIcons`, Svg.Skia) instead of `scripts/export_icons.py` (Python and
   cairosvg): the build chain no longer needs Python. Same sizes and files; the versioned icons are unchanged.
+- Every C# test runs on xUnit v3 (`tests/NexusWpp.Tests`): the host, settings window, mouse hook, runtime pause,
+  responsive layout, Store screenshot and visual resume harnesses moved from standalone programs built by
+  `scripts/csc.ps1` into the test project, which compiles every host source. The off-screen ones run with each
+  `test.ps1` and in CI (the mouse hook test was run by neither); the ones that need the real desktop (Store screenshots,
+  visual resume) and the exhaustive layout run are explicit tests, started by their scripts or
+  `dotnet test --explicit only`. `test_settings.ps1`, `test_runtime_pause.ps1`, `test_responsive_layout.ps1` and
+  `test_mouse_hook.ps1` are gone; the CI runs all of it in its `compile` job.
+- The visual resume harness never activates a window: its covers are shown without activation and the user's windows
+  are minimized without activating another one.
 - CodeQL runs from a workflow file (`.github/workflows/codeql.yml`: actions, C# and JavaScript/TypeScript, default
   queries) instead of the repository's default setup, so that OpenSSF Scorecard credits the static analysis.
 

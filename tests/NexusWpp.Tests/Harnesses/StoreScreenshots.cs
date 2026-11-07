@@ -31,10 +31,9 @@ sealed class StoreScreenshots : Form
         new object[] { "nexuswpp-portrait-1080x1920", 1080, 1920, 1.0 },
     };
 
-    [STAThread]
-    static int Main(string[] args)
+    // Run by HarnessTests on an STA thread, after the host's startup configuration (TestEntryPoint).
+    internal static int Run(params string[] args)
     {
-        Application.EnableVisualStyles();
         using (var form = new StoreScreenshots(args)) { Application.Run(form); return form.result; }
     }
 

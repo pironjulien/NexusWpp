@@ -223,10 +223,11 @@ static class HostRegression
         context.Dispose();
     }
 
-    const string ParentHelperArgument = "--parent-helper";
+    internal const string ParentHelperArgument = "--parent-helper";
 
-    // Child process standing in for Explorer: one hidden popup, killed without any cleanup.
-    static int RunParentHelper()
+    // Child process standing in for Explorer (this test executable, see TestEntryPoint): one hidden popup, killed
+    // without any cleanup.
+    internal static int RunParentHelper()
     {
         var parent = new Popup(new Rectangle(-32000, -32000, 100, 100));
         Console.WriteLine(parent.Handle.ToInt64());
@@ -340,16 +341,12 @@ static class HostRegression
         Check(disk >= -1 && disk <= 100, "disk activity is a percentage or unavailable");
     }
 
-    [STAThread]
-    static int Main(string[] args)
+    // Run by HarnessTests on an STA thread, after the host's startup configuration (TestEntryPoint).
+    internal static int Run(params string[] args)
     {
-        if (args.Length > 0 && args[0] == ParentHelperArgument) return RunParentHelper();
         string output = args.Length > 0 ? args[0] : Path.GetTempPath();
         Directory.CreateDirectory(output);
         Program.LogPathOverride = Path.Combine(output, "host-regression.log");
-        // Same DPI mode as the host (NexusWpp.csproj, ApplicationConfiguration.Initialize).
-        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-        Application.EnableVisualStyles();
         try
         {
             Placement();

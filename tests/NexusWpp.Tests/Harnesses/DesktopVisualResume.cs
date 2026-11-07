@@ -65,9 +65,20 @@ internal static class DesktopVisualResume
     static string Number(double number) { return number.ToString("F3", CultureInfo.InvariantCulture); }
 
     sealed class SavedWindow { internal IntPtr Handle; internal uint Pid; internal Placement Placement; internal bool Topmost; }
+    // Covers the desktop on top of it, but never activated: the keyboard and the foreground stay with the user.
     sealed class CoverForm : Form
     {
         internal void MaximizeOn(Rectangle area) { MaximizedBounds = area; WindowState = FormWindowState.Maximized; }
+        protected override bool ShowWithoutActivation { get { return true; } }
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams cp = base.CreateParams;
+                cp.ExStyle |= 0x08000000; // WS_EX_NOACTIVATE
+                return cp;
+            }
+        }
     }
     public sealed class Area
     {
@@ -146,8 +157,8 @@ internal static class DesktopVisualResume
         }
     }
 
-    [STAThread]
-    static int Main(string[] args)
+    // Run by HarnessTests on an STA thread, after the host's startup configuration (TestEntryPoint).
+    internal static int Run(params string[] args)
     {
         try
         {
@@ -159,7 +170,6 @@ internal static class DesktopVisualResume
                 if (!string.Equals(process.ProcessName, "nexuswpp", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("The application process changed.");
             try { if (!SetProcessDpiAwarenessContext(new IntPtr(-4))) SetProcessDPIAware(); }
             catch (EntryPointNotFoundException) { SetProcessDPIAware(); }
-            Application.EnableVisualStyles();
             screens = Screen.AllScreens;
             startedAt = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture);
             Clock.Start();
@@ -213,7 +223,8 @@ internal static class DesktopVisualResume
             Windows.Add(new SavedWindow { Handle = window, Pid = pid, Placement = placement, Topmost = (GetWindowLongPtr(window, -20).ToInt64() & 8) != 0 });
             return true;
         }, IntPtr.Zero);
-        foreach (SavedWindow saved in Windows) ShowWindowAsync(saved.Handle, 6);
+        // SW_SHOWMINNOACTIVE: minimized without activating another window.
+        foreach (SavedWindow saved in Windows) ShowWindowAsync(saved.Handle, 7);
     }
 
     static void RestoreWindows()

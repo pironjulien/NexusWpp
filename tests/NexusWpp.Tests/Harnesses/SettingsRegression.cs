@@ -31,8 +31,8 @@ static class SettingsRegression
         try { action(); return false; } catch { return true; }
     }
 
-    [STAThread]
-    static int Main(string[] args)
+    // Run by HarnessTests on an STA thread, after the host's startup configuration (TestEntryPoint).
+    internal static int Run(params string[] args)
     {
         string output = args[0];
         string project = args[1];
@@ -129,7 +129,6 @@ static class SettingsRegression
         Check(UserSettings.BuildSettingsMessage(null) == "{\"control\":\"SETTINGS\",\"logo\":null}", "default logo is sent as null");
 
         // Settings window renders off screen; the image is kept for a visual check.
-        Application.EnableVisualStyles();
         using (var form = new SettingsForm(Path.Combine(project, "julienpiron.png"), () => { }, () => { }) { ShowInactive = true })
         {
             form.StartPosition = FormStartPosition.Manual;

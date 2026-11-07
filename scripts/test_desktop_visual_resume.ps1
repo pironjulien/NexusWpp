@@ -15,14 +15,12 @@ param(
 $ErrorActionPreference = 'Stop'
 $project = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $dataRoot = Join-Path $project 'work\resume-20260925'
-$binaryDirectory = Join-Path $dataRoot 'bin'
-New-Item -ItemType Directory -Path $binaryDirectory -Force | Out-Null
-$binary = Join-Path $binaryDirectory 'DesktopVisualResume.exe'
-$source = Join-Path $PSScriptRoot 'tests\DesktopVisualResume.cs'
-& (Join-Path $PSScriptRoot 'csc.ps1') /nologo /target:winexe /platform:x64 /unsafe /optimize+ ("/out:" + $binary) /reference:System.Windows.Forms.dll /reference:System.Drawing.dll $source
+# The harness is an explicit xUnit test (HarnessTests.DesktopVisualResumeMeasure), run only from here.
+$testProject = Join-Path $project 'tests\NexusWpp.Tests\NexusWpp.Tests.csproj'
+& dotnet build $testProject --nologo -v quiet -clp:ErrorsOnly
 if ($LASTEXITCODE -ne 0) { throw 'Visual measurement harness compilation failed.' }
 if ($BuildOnly) {
-    Write-Output "Compiled without opening a window or capturing the desktop: $binary"
+    Write-Output "Compiled without opening a window or capturing the desktop: $testProject"
     return
 }
 
@@ -73,15 +71,17 @@ $arguments = @(
     '--resume-ms', $ResumeMilliseconds.ToString(), '--sample-ms', $SampleMilliseconds.ToString(),
     '--rapid-cycles', $RapidCycles.ToString(), '--app-pid', $appProcess.ProcessId.ToString()
 )
-if ($arguments | Where-Object { $_.Contains('"') }) { throw 'Quotation marks are not supported in measurement arguments.' }
-$argumentLine = ($arguments | ForEach-Object { '"' + $_ + '"' }) -join ' '
 Write-Output "Measuring real desktop pixels for $($package.PackageFullName); windows restore automatically."
-$probe = Start-Process -FilePath $binary -ArgumentList $argumentLine -WindowStyle Hidden -Wait -PassThru
+$env:NEXUSWPP_VISUAL_RESUME_ARGS = ConvertTo-Json -InputObject ([string[]]$arguments) -Compress
+try {
+    & dotnet test --project $testProject --no-build --filter-method 'NexusWpp.Tests.HarnessTests.DesktopVisualResumeMeasure' --explicit only
+    $exitCode = $LASTEXITCODE
+} finally { Remove-Item Env:NEXUSWPP_VISUAL_RESUME_ARGS -ErrorAction SilentlyContinue }
 $resultPath = Join-Path $OutputDirectory 'result.json'
 Write-Output "Visual evidence: $resultPath"
-if ($probe.ExitCode -ne 0) {
+if ($exitCode -ne 0) {
     if (Test-Path -LiteralPath $resultPath) { Get-Content -LiteralPath $resultPath -Raw | Write-Output }
-    throw "Visual measurement harness exited with code $($probe.ExitCode)."
+    throw "Visual measurement harness failed (code $exitCode)."
 }
 $stillRunning = Get-CimInstance Win32_Process -Filter ("ProcessId=" + $appProcess.ProcessId)
 if (-not $stillRunning -or $stillRunning.ExecutablePath -ne $appProcess.ExecutablePath) {

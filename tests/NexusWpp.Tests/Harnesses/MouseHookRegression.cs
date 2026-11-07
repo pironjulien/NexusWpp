@@ -88,19 +88,16 @@ internal static class MouseHookRegression
         return condition();
     }
 
-    [STAThread]
-    static int Main(string[] args)
+    // Run by HarnessTests on an STA thread, after the host's startup configuration (TestEntryPoint).
+    internal static int Run()
     {
         try
         {
-            Assembly hostAssembly = Assembly.LoadFrom(args[0]);
-            host = hostAssembly.GetType("DesktopHtmlHost.DesktopForm", true);
-            // The host's own startup configuration, before any window: hook points, window rectangles
-            // and Chromium client coordinates are then all physical pixels, as in the running wallpaper.
-            Type? configuration = Array.Find(hostAssembly.GetTypes(), t => t.Name == "ApplicationConfiguration");
-            Check(configuration != null, "host has a startup configuration");
-            (configuration.GetMethod("Initialize", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
-                ?? throw new MissingMethodException(configuration.FullName, "Initialize")).Invoke(null, null);
+            // The host sources are compiled into this test assembly.
+            host = typeof(MouseHookRegression).Assembly.GetType("DesktopHtmlHost.DesktopForm", true);
+            // The host's own startup configuration ran before any window (TestEntryPoint, same DPI mode as
+            // NexusWpp.csproj, see HostSourceTests): hook points, window rectangles and Chromium client
+            // coordinates are then all physical pixels, as in the running wallpaper.
             Check(AreDpiAwarenessContextsEqual(GetThreadDpiAwarenessContext(), new IntPtr(-4)), "host starts per-monitor v2 DPI aware");
             // These paths must not dereference a pointer or access a UI control.
             Check(Invoke<IntPtr>("HookCallback", -1, (IntPtr)0x201, IntPtr.Zero) == IntPtr.Zero, "negative hook code passes through");

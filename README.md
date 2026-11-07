@@ -136,7 +136,7 @@ then temporarily uses `Progman` if `WorkerW` takes too long.
 - `scripts/benchmark_nexuswpp.ps1`: multi-run CPU/RAM/startup benchmark.
 - `scripts/benchmark_fullscreen_suspend.ps1`: legacy benchmark for versions that used the "fullscreen foreground detected" log pattern; for the current policy, use `measure_desktop_suspension.ps1`.
 - `scripts/measure_desktop_suspension.ps1`: measures CPU/GPU with the desktop visible, side-by-side windows, full screen and transparent windows, then restores the previous windows.
-- `tests/NexusWpp.Tests/DesktopCoverageTests.cs`: the geometric coverage scenarios, independent of the real desktop (xUnit, run by `scripts/test_features.ps1` and CI).
+- `tests/NexusWpp.Tests`: the C# tests on xUnit v3, run by `scripts/test_features.ps1` (so `test.ps1`) and CI: feature rules, the geometric coverage scenarios, and the host's WinForms and WebView2 harnesses (`Harnesses/`: host, settings window, mouse hook, runtime pause, responsive layout), off screen and never activated. Tests that need the real desktop (Store screenshots, visual resume) or take minutes (every resolution) are explicit: `dotnet test` runs them only when asked.
 
 </details>
 
@@ -179,7 +179,7 @@ Local version `1.0.15.0` hid and suspended WebView2. Its power consumption measu
 return; this behavior is replaced in `1.0.16.0`.
 
 ```powershell
-.\scripts\test_runtime_pause.ps1
+dotnet test --project tests\NexusWpp.Tests --filter-method *RuntimePause
 .\scripts\test_desktop_visual_resume.ps1 -Label installed
 ```
 
@@ -207,7 +207,7 @@ in `1.0.18.0`, moved up by 10 pixels at 125% compared with `1.0.19.0`, without r
 of 96 CSS pixels keeps the icon row on small formats.
 
 ```powershell
-.\scripts\test_responsive_layout.ps1 -Label current
+dotnet test --project tests\NexusWpp.Tests --filter-method *ResponsiveLayoutFull --explicit only
 ```
 
 The harness loads the shipped files in the real WebView2 Evergreen Runtime, with Chromium emulation of the viewport and
@@ -217,7 +217,7 @@ includes the old CSS thresholds, variants without iGPU/NPU/dedicated GPU, and on
 
 The checks cover off-screen cards, clipped text and controls, overlaps, gauge size and circularity, radar nodes, mouse
 coordinates and keeping the pause during resizes. Test data stays in the harness and is never embedded in the product.
-The JSON files and PNG screenshots are in `work\responsive\<Label>`; this emulation test validates neither the overscan
+The quick subset runs with every `test.ps1`. The JSON files and PNG screenshots are in `work\responsive\quick` or `work\responsive\full`; this emulation test validates neither the overscan
 of a physical TV nor a multi-monitor topology with different DPIs.
 
 </details>

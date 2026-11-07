@@ -17,18 +17,14 @@ sealed class ResponsiveLayout : Form
     bool ready;
     int result = 1;
 
-    [STAThread]
-    static int Main(string[] args)
+    // Run by HarnessTests on an STA thread, after the host's startup configuration (TestEntryPoint).
+    internal static int Run(params string[] args)
     {
-        Application.EnableVisualStyles();
-        int exitCode = 1;
         using (var form = new ResponsiveLayout(args))
         {
             Application.Run(form);
-            exitCode = form.result;
+            return form.result;
         }
-        Environment.Exit(exitCode);
-        return exitCode;
     }
 
     ResponsiveLayout(string[] args)
