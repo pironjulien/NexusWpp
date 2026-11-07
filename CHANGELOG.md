@@ -7,6 +7,13 @@ ones, from before version numbers, carry their date only.
 
 ## [Unreleased]
 
+## [1.0.68.0] - 2026-11-07
+
+### Fixed
+- The settings window speaks the language of the thread that builds it, read each time instead of once per process.
+  The English Store screenshot of the settings window showed the French window, because the French one was built
+  first in the same process. Regression test in the settings harness.
+
 ### Changed
 - The C# feature tests (sensor, telemetry and alert rules, and the desktop coverage behind the pause) run on xUnit v3
   with Microsoft Testing Platform (`tests/NexusWpp.Tests`, `dotnet test`), from `test.ps1` and the CI. The coverage
@@ -24,7 +31,8 @@ ones, from before version numbers, carry their date only.
   `dotnet test --explicit only`. `test_settings.ps1`, `test_runtime_pause.ps1`, `test_responsive_layout.ps1` and
   `test_mouse_hook.ps1` are gone; the CI runs all of it in its `compile` job.
 - The visual resume harness never activates a window: its covers are shown without activation and the user's windows
-  are minimized without activating another one.
+  are minimized without activating another one. It now fails if a cover, maximized or full screen included, takes the
+  foreground, or if a window of the user is not back in its place and state, or the foreground not given back.
 - CodeQL runs from a workflow file (`.github/workflows/codeql.yml`: actions, C# and JavaScript/TypeScript, default
   queries) instead of the repository's default setup, so that OpenSSF Scorecard credits the static analysis.
 

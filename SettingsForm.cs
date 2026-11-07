@@ -19,7 +19,8 @@ namespace DesktopHtmlHost
         static readonly Color Accent = Color.FromArgb(0, 199, 190);
         static readonly Color Danger = Color.FromArgb(255, 69, 96);
 
-        static readonly bool French = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "fr";
+        // Read when the window is built, not once per process: the thread's language decides, as for the tray menu.
+        static bool French => CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "fr";
         static string L(string fr, string en) { return French ? fr : en; }
 
         readonly string defaultLogoPath;

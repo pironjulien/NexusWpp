@@ -163,6 +163,22 @@ static class SettingsRegression
             form.Close();
         }
 
+        // The window speaks the thread's language each time it is built: the Store screenshots build it in French, then
+        // in English, in one process (the English capture of 1.0.67.0 showed the French window).
+        var savedCulture = System.Threading.Thread.CurrentThread.CurrentUICulture;
+        try
+        {
+            string Title(string culture)
+            {
+                System.Threading.Thread.CurrentThread.CurrentUICulture = new System.Globalization.CultureInfo(culture);
+                using var form = new SettingsForm(Path.Combine(project, "julienpiron.png"), () => { }, () => { }) { ShowInactive = true };
+                return form.Text;
+            }
+            Check(Title("fr-FR") == "NexusWpp — Réglages" && Title("en-US") == "NexusWpp — Settings" && Title("fr-FR") == "NexusWpp — Réglages",
+                "settings window follows the language of the thread that builds it");
+        }
+        finally { System.Threading.Thread.CurrentThread.CurrentUICulture = savedCulture; }
+
         // Windows display scaling: fonts grow in pixels and layout is scaled. No text may be clipped or covered,
         // even if the layout is not scaled at all (fonts only), which is what clipped the text in 1.0.37.
         foreach (bool welcome in new[] { false, true })

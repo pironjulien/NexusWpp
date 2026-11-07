@@ -195,6 +195,11 @@ internal static class DesktopVisualResume
                 }
                 finally { foreach (ScreenProbe probe in probes) probe.Dispose(); CloseCovers(); }
             }
+            RestoreWindows();
+            Pump(1000);
+            List<string> failures = RestorationFailures();
+            Restoration.AddRange(failures.Select(failure => "FAILED " + failure));
+            if (failures.Count > 0) { error = "Windows not restored: " + string.Join("; ", failures); return 1; }
             return 0;
         }
         catch (Exception exception) { error = exception.ToString(); return 1; }
@@ -387,6 +392,35 @@ internal static class DesktopVisualResume
             }
         }
         Application.DoEvents();
+        EnsureFocusKept(name);
+    }
+
+    // A cover, even a maximized or full-screen one, never takes the keyboard or the foreground from the user.
+    static void EnsureFocusKept(string name)
+    {
+        IntPtr current = GetForegroundWindow(); uint pid;
+        _ = GetWindowThreadProcessId(current, out pid);
+        if (pid == (uint)Environment.ProcessId || Covers.Any(form => form.Handle == current))
+            throw new InvalidOperationException("The " + name + " cover took the foreground.");
+    }
+
+    // Every window of the user is back where it was, in the same state, and the foreground is the user's again.
+    static List<string> RestorationFailures()
+    {
+        List<string> failures = new List<string>();
+        foreach (SavedWindow saved in Windows)
+        {
+            uint pid; _ = GetWindowThreadProcessId(saved.Handle, out pid);
+            if (!IsWindow(saved.Handle) || pid != saved.Pid) continue; // closed by its user during the run
+            Placement now = new Placement { Length = Marshal.SizeOf<Placement>() };
+            if (!GetWindowPlacement(saved.Handle, ref now)) { failures.Add("Window " + saved.Handle + ": placement unreadable"); continue; }
+            Placement was = saved.Placement;
+            if (IsIconic(saved.Handle) || now.Normal.Left != was.Normal.Left || now.Normal.Top != was.Normal.Top || now.Normal.Right != was.Normal.Right || now.Normal.Bottom != was.Normal.Bottom
+                || (now.ShowCmd == 3) != (was.ShowCmd == 3))
+                failures.Add("Window " + saved.Handle + ": showCmd " + was.ShowCmd + " -> " + now.ShowCmd + ", normal (" + was.Normal.Left + "," + was.Normal.Top + "," + was.Normal.Right + "," + was.Normal.Bottom + ") -> (" + now.Normal.Left + "," + now.Normal.Top + "," + now.Normal.Right + "," + now.Normal.Bottom + ")");
+        }
+        if (foreground != IntPtr.Zero && IsWindow(foreground) && GetForegroundWindow() != foreground) failures.Add("Foreground not given back to " + foreground);
+        return failures;
     }
 
     static void CloseCovers()
