@@ -96,14 +96,16 @@ public sealed class FeatureRegressionTests
             Assert.True(perf.Value(@"\NexusWpp Missing\Nothing")==null,"missing counter has no value");
             Assert.True(perf.Add(@"\Processor(*)\% Processor Time"),"wildcard counter resolves");
             perf.Collect();System.Threading.Thread.Sleep(250);
-            var watch=System.Diagnostics.Stopwatch.StartNew();
+            // Cost measured in this thread's CPU time, not wall-clock time: under a loaded CPU (other tests, builds)
+            // the wait for a core is not PDH's cost, and the wall-clock threshold failed while the sample was cheap.
+            long before=ThreadCpu.Microseconds();
             Assert.True(perf.Collect(),"PDH sample succeeds");
-            watch.Stop();
+            long cpuMs=(ThreadCpu.Microseconds()-before)/1000;
             Assert.True(perf.Value(@"\System\Processes")>10 && perf.Value(@"\Memory\Cache Bytes")>0,"live system values are real");
             Assert.True(perf.Value(@"\Memory\Page Faults/sec")>=0,"rate counter is valid after two samples");
             var cpus=perf.Instances(@"\Processor(*)\% Processor Time");
             Assert.True(cpus!=null && cpus.Count>=2 && cpus.Exists(c=>c.Key=="_Total"),"wildcard returns every instance with names");
-            Assert.True(watch.ElapsedMilliseconds<200,"PDH sample stays fast ("+watch.ElapsedMilliseconds+" ms)");
+            Assert.True(cpuMs<200,"PDH sample stays cheap ("+cpuMs+" ms of CPU)");
         }
     }
 

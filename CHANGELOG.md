@@ -22,6 +22,8 @@ ones, from before version numbers, carry their date only.
 ### Changed
 - Dependabot also watches the NuGet packages of the tests and of both tools, and the changelog carries its comparison
   links.
+- The performance counter test measures the sample's CPU time instead of wall-clock time, which failed under a loaded
+  CPU while the sample itself stayed cheap.
 
 ## [1.0.69.0] - 2026-11-07
 
