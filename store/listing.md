@@ -50,9 +50,13 @@ Confidentialité : tout est mesuré localement. Pas de compte, pas de publicité
 
 fond d'écran animé, moniteur système, cockpit, CPU GPU, température, NPU, widget bureau
 
-### Nouveautés de cette version (1.0.50.0)
+### Nouveautés de cette version (1.0.70.0)
 
-Démarrage prioritaire, dans les réglages : NexusWpp se lance avec le bureau, avant les autres applications de démarrage, au lieu d'apparaître près d'une minute après la connexion.
+- Animation plus fluide et plus légère : jauges et courbes glissent sans à-coups, pour moins de travail du GPU.
+- GPU : fréquence du cœur et vitesse des ventilateurs dans le titre, jauge NVIDIA fidèle à la charge réelle.
+- Une carte par disque fixe, ajoutée automatiquement ; la RAM montre l'application la plus gourmande sur 10 minutes.
+- iGPU : état du rendu hybride ; réseau en pourcentage entier du lien.
+- Plus robuste : reprise après un plantage de l'Explorateur ou un changement de pilote graphique, démarrage prioritaire qui réessaie si Windows le refuse.
 
 ---
 
@@ -100,6 +104,10 @@ Privacy: everything is measured locally. No account, no ads, no data collected o
 
 live wallpaper, system monitor, hardware monitor, CPU GPU, temperature, NPU, desktop dashboard
 
-### What's new in this version (1.0.50.0)
+### What's new in this version (1.0.70.0)
 
-Priority startup, in the settings: NexusWpp launches with the desktop, before other startup apps, instead of showing up about a minute after sign-in.
+- Smoother, lighter animation: gauges and curves glide without stutter, with less GPU work.
+- GPU: core clock and fan speed in the title, and an NVIDIA gauge that matches the real load.
+- One card per fixed drive, added automatically; RAM shows the app using the most memory over 10 minutes.
+- iGPU: hybrid rendering state; network shown as a whole percentage of the link.
+- More robust: recovers after an Explorer crash or a graphics driver change, and priority startup retries when Windows refuses it.
