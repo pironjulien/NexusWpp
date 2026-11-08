@@ -48,3 +48,15 @@ dotnet run --project .\tools\ExportIcons   # icon.ico et logos MSIX depuis brand
 - Coût GPU : les compteurs `GPU Engine` ne donnent qu'un LUID ; relier d'abord le LUID à l'adaptateur (`\GPU Adapter Memory(*)\Dedicated Usage`, et le LUID de dwm) avant d'attribuer la charge à l'iGPU ou au GPU dédié. Pour le coût réel, mesurer les watts (`nvidia-smi`) rendu actif contre rendu gelé, pas le pourcentage d'utilisation, gonflé à la fréquence plancher.
 - Nœud RAM : il affiche la mémoire occupée, pas le débit. Aucune mesure de débit fiable sans droits admin n'existe sur Alder/Raptor Lake : compteurs LLCMisses par ETW (exacts mais admin + SeSystemProfilePrivilege), sonde de latence (erreur ~21 points), puissance « uncore » RAPL (erreur ~8 points, faux trafic en calcul pur), Intel PMT (pas de descripteur DDR pour ces processeurs, le pilote n'expose aucun IOCTL). Ne pas retester ces pistes.
 - `radar.js` (nodeLoad : activity sinon value) fait tourner un nœud selon sa valeur : un nœud à valeur stable (RAM) s'anime donc en continu au repos.
+- Échec intermittent inexpliqué (code -1, DLL verrouillée, fichier changé) : vérifier d'abord qu'un autre agent ne lance pas `test.ps1` sur le même dépôt en même temps (`scripts\test_lock.ps1` verrouille chaque test) avant de soupçonner le code.
+
+## Décisions
+
+- Cadence : 12 i/s avec courbes d'historique glissantes, choisie par Julien après banc (06/11/2026) ; ne pas reproposer 24 i/s ni d'autre optimisation de cadence sans demande. Ce qui compte : l'occupation laissée aux autres applis, pas les watts.
+- Le visuel ne se dégrade pas en usage normal : une optimisation visible reste conditionnelle (par exemple seulement avec l'économiseur d'énergie de Windows) et le dire.
+- Tout gratuit : aucun certificat ni service payant.
+- Pas de service élevé pour le nœud RAM (autorisation Store incertaine, 04/11/2026).
+
+## À faire
+
+- Nœud RAM calme au repos (demande de Julien du 04/11/2026) : paquets et rotation seulement quand la mémoire bouge, le chiffre restant l'occupation.
