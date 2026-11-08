@@ -149,7 +149,7 @@ title, without flickering or jitter. An interruption in readings resets the conf
 > stale data is flagged. Watts represent the entire GPU card, not NexusWpp's consumption; the Windows thermal zone is
 > not a CPU core measurement.
 
-The gauge transition goes from 0.55 to 0.18 seconds after A/B profiling in WebView2. Halos, radar and the logo's
+Gauges and bars ease to a new value over 0.5 seconds, stepped by the shared animation clock. Halos, radar and the logo's
 rotating rings run at 12 frames/s. The `scripts/profile_graphics.ps1` benchmark (built from `tools/GraphicsProfile`) measures GPU engine utilization for the
 process group, without attributing watts or the Windows compositor's cost. Sensor and alert rules are verified with
 `scripts/test_features.ps1`.

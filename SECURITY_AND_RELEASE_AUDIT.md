@@ -23,7 +23,7 @@
 ## Known Limits
 
 - Installer packaging is available through `scripts\build_installer.ps1`.
-- Publicly trusted EXE signing is not configured by default. Without a certificate provided through environment variables, the installer is signed with a local self-signed certificate, which Windows reports as an untrusted root outside this machine.
-- External build dependency: `compile.ps1` downloads the pinned WebView2 NuGet package over HTTPS if DLLs are absent.
+- Publicly trusted EXE signing is not configured by default. Without a certificate provided through environment variables, the installer is left unsigned; its origin is proven by the release's build-provenance attestation.
+- External build dependency: `compile.ps1` (`dotnet build`) restores the pinned WebView2 NuGet package over HTTPS, locked by `packages.lock.json`.
 - Desktop composition capture cannot resolve physical panel scanout or sub-frame latency. The visual regression harness records its actual sampling intervals; it does not convert logs or GPU reductions into evidence of scene retention.
 - Real multi-monitor transition tests require multiple connected displays. Geometric coverage tests cover multiple monitors and negative coordinates independently of available hardware.
