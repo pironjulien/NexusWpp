@@ -41,3 +41,10 @@ dotnet run --project .\tools\ExportIcons   # icon.ico et logos MSIX depuis brand
 - Pour le Store, garder l'identite MSIX `julienpiron.fr.NexusWpp` et le Publisher `CN=C3E3A6F0-11D2-4EE1-B3F2-34EED4CAE7FA`.
 - Garder les messages de commit courts et en anglais (depot public), comme le CHANGELOG.
 - Ne pas ajouter de faux bouton, de fausse donnee ou de fonction non cablee.
+
+## Pièges
+
+- Cadence d'animation : la page remet la cadence toutes les 500 ms ; pour un banc, surcharger `setMotionEconomy`, rendre hors écran à la taille réelle de l'écran (ex. 5120×1440), comparer au fond réel gelé et alterner les variantes, sinon les mesures se contaminent.
+- Coût GPU : les compteurs `GPU Engine` ne donnent qu'un LUID ; relier d'abord le LUID à l'adaptateur (`\GPU Adapter Memory(*)\Dedicated Usage`, et le LUID de dwm) avant d'attribuer la charge à l'iGPU ou au GPU dédié. Pour le coût réel, mesurer les watts (`nvidia-smi`) rendu actif contre rendu gelé, pas le pourcentage d'utilisation, gonflé à la fréquence plancher.
+- Nœud RAM : il affiche la mémoire occupée, pas le débit. Aucune mesure de débit fiable sans droits admin n'existe sur Alder/Raptor Lake : compteurs LLCMisses par ETW (exacts mais admin + SeSystemProfilePrivilege), sonde de latence (erreur ~21 points), puissance « uncore » RAPL (erreur ~8 points, faux trafic en calcul pur), Intel PMT (pas de descripteur DDR pour ces processeurs, le pilote n'expose aucun IOCTL). Ne pas retester ces pistes.
+- `radar.js` (nodeLoad : activity sinon value) fait tourner un nœud selon sa valeur : un nœud à valeur stable (RAM) s'anime donc en continu au repos.
