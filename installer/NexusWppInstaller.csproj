@@ -43,6 +43,12 @@
     <PayloadZip Condition="'$(PayloadZip)' == ''">..\dist\NexusWppPayload.zip</PayloadZip>
     <!-- The host's version stamp, written from VERSION by Directory.Build.targets. -->
     <ReleaseVersionSource>$(BaseIntermediateOutputPath)ReleaseVersion.cs</ReleaseVersionSource>
+    <!-- NuGet restore pinned by packages.lock.json (direct and transitive packages, content hashes); CI and release
+         restore in locked mode, so a dependency never changes without a committed lock file. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
+    <!-- Microsoft.NET.ILLink.Tasks is pinned on purpose (see there): its "delete explicit reference" notice is answered. -->
+    <SuppressILLinkExplicitPackageReferenceWarning>true</SuppressILLinkExplicitPackageReferenceWarning>
   </PropertyGroup>
 
   <ItemGroup>
@@ -53,6 +59,10 @@
 
   <ItemGroup>
     <PackageReference Include="System.Management" Version="10.0.14" />
+    <!-- The trimmer's tasks, which the self-contained single-file build adds: pinned like any package
+         (packages.lock.json, Dependabot); left implicit, their version would follow the .NET SDK of the machine and
+         break the locked restore whenever the CI's SDK moves. -->
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" Version="10.0.14" />
   </ItemGroup>
 
 </Project>

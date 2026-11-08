@@ -4,4 +4,10 @@
     <NexusWppRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</NexusWppRoot>
     <BaseIntermediateOutputPath>$(NexusWppRoot)work\tests\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
   </PropertyGroup>
+  <!-- NuGet restore pinned by packages.lock.json (direct and transitive packages, content hashes); CI and release
+       restore in locked mode, so a dependency never changes without a committed lock file. -->
+  <PropertyGroup>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
+  </PropertyGroup>
 </Project>
