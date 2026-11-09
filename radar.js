@@ -26,6 +26,9 @@ const TELEMETRY_ORBIT_START_ANGLE = -90;
 // at 125-200 % the radar is drawn at the screen's density, capped to bound the cost.
 const CANVAS_MAX_DENSITY = 2;
 let canvasDensity = 1;
+// Horizontal offset (logical px) from the panel's middle to the screen's middle.
+const RADAR_SCREEN_CENTER_MAX_SHIFT = 0.1;
+let radarCenterShift = 0;
 
 function resizeCanvas() {
     const rect = canvas.parentElement.getBoundingClientRect();
@@ -38,7 +41,13 @@ function resizeCanvas() {
     const nextWidth = Math.round(rect.width / scale);
     const nextHeight = Math.round(rect.height / scale);
     const nextDensity = Math.max(1, Math.min(CANVAS_MAX_DENSITY, window.devicePixelRatio || 1) * scale);
-    if (width === nextWidth && height === nextHeight && canvasDensity === nextDensity) return false;
+    // The center column is wider than its neighbours are equal, so its middle sits a little
+    // off the screen's middle; pull the radar back onto the screen's vertical axis when that
+    // axis crosses the panel near its middle (the wide three-column layout).
+    const viewportShift = (window.innerWidth / 2 - (rect.left + rect.width / 2)) / scale;
+    const nextShift = Math.abs(viewportShift) <= nextWidth * RADAR_SCREEN_CENTER_MAX_SHIFT ? Math.round(viewportShift) : 0;
+    if (width === nextWidth && height === nextHeight && canvasDensity === nextDensity && radarCenterShift === nextShift) return false;
+    radarCenterShift = nextShift;
     width = nextWidth;
     height = nextHeight;
     canvas.width = Math.round(width * nextDensity);
@@ -329,12 +338,15 @@ function getTelemetryMinimumSize() {
 }
 
 function getTelemetryLayout() {
-    const cx = width / 2;
+    const half = width / 2;
     const cy = (height - 26) / 2; // Balance the captions below the orbit nodes.
-    const maxAvailableRadius = Math.max(1, Math.min(cx, width - cx, cy, height - cy) - 12);
-    const maxSafeNodeOrbit = Math.max(1, Math.min(cx - 70, width - cx - 70, cy - 40, height - cy - 66));
+    const maxSafeNodeOrbit = Math.max(1, Math.min(half - 70, cy - 40, height - cy - 66));
     const preferredOrbit = Math.min(Math.min(width, height) * TELEMETRY_ORBIT_SCALE, TELEMETRY_ORBIT_MAX);
     const orbitRadius = Math.min(preferredOrbit, maxSafeNodeOrbit);
+    // Shift toward the screen's middle only within the room left beside the orbit nodes.
+    const slack = Math.max(0, half - 70 - orbitRadius);
+    const cx = half + Math.max(-slack, Math.min(slack, radarCenterShift));
+    const maxAvailableRadius = Math.max(1, Math.min(cx, width - cx, cy, height - cy) - 12);
     const radarStep = orbitRadius / TELEMETRY_ORBIT_RING_INDEX;
     const maxRadarRadius = Math.max(orbitRadius, Math.min(maxAvailableRadius, radarStep * TELEMETRY_RADAR_RING_COUNT));
 

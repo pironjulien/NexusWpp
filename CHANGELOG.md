@@ -13,6 +13,10 @@ ones, from before version numbers, carry their date only. Versions without a Git
   The .NET SDK is pinned in `global.json` (10.0.402, latest feature band), as in NexusKeypad.
 - Changelog: versions without a Git tag are no longer shown as broken links.
 
+### Fixed
+- The radar's center logo sits on the screen's vertical middle in the wide three-column layout; it was centered in its
+  panel, which lies slightly left of the screen's middle (64 px on a 4096 px screen).
+
 ## [1.0.70.0] - 2026-11-07
 
 ### Fixed
