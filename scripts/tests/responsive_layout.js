@@ -79,6 +79,12 @@ window.inspectLayout = function () {
     if (!inside(dashboard, viewport)) issues.push('dashboard outside the primary monitor');
     const background = rect(document.querySelector('.cosmos-bg'));
     if (Math.abs(background.left) > 1 || Math.abs(background.top) > 1 || Math.abs(background.right - innerWidth) > 1 || Math.abs(background.bottom - innerHeight) > 1) issues.push('background does not cover every monitor');
+    // Wide three-column layout: the center panel (clock, radar, buttons) sits on the monitor's vertical middle.
+    const workspace = document.querySelector('.workspace');
+    if (getComputedStyle(workspace).gridTemplateColumns.split(' ').length === 3) {
+        const middle = rect(document.querySelector('.column-center'));
+        if (Math.abs(middle.left + middle.width / 2 - (viewport.left + viewport.right) / 2) > 1) issues.push('center panel off the screen middle');
+    }
     const cards = [...document.querySelectorAll('.gauge-card, .column-center')].filter(visible);
     // Extra disk cards need a frame of at least 500 x 460 CSS px (style.css).
     const frame = rect(document.querySelector('.layout-frame'));
