@@ -7,6 +7,8 @@ ones, from before version numbers, carry their date only. Versions without a Git
 
 ## [Unreleased]
 
+## [1.0.71.0] - 2026-11-09
+
 ### Changed
 - Build: the version stamp is written from `VERSION` by MSBuild (`Directory.Build.targets`) for the app, the installer
   and the tests, so a plain `dotnet build` works from the IDE or the command line; `compile.ps1` no longer writes it.
@@ -741,7 +743,8 @@ Revue complète du code, corrections vérifiées :
 - Retrait de l'image de chargement generee et du script de generation associe.
 - Ajout des consignes projet dans `AGENTS.md`.
 
-[Unreleased]: https://github.com/pironjulien/NexusWpp/compare/v1.0.70.0...HEAD
+[Unreleased]: https://github.com/pironjulien/NexusWpp/compare/v1.0.71.0...HEAD
+[1.0.71.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.70.0...v1.0.71.0
 [1.0.70.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.69.0...v1.0.70.0
 [1.0.69.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.68.0...v1.0.69.0
 [1.0.68.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.67.0...v1.0.68.0
