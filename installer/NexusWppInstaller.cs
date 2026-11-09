@@ -742,7 +742,12 @@ namespace NexusWppInstaller
 
         private static void ScheduleInstallDirectoryRemoval()
         {
-            string cmd = "/c timeout /t 2 /nobreak >nul & rmdir /s /q \"" + InstallDir + "\"";
+            // The setup executable inside the folder stays locked until this process has exited, and `timeout`
+            // fails at once without a console: retry the removal about once a second (ping as the delay) for
+            // up to a minute, until the folder is gone.
+            string dir = "\"" + InstallDir + "\"";
+            string cmd = "/d /c for /l %i in (1,1,60) do @if exist " + dir + " (rmdir /s /q " + dir
+                + " 2>nul & if exist " + dir + " ping -n 2 127.0.0.1 >nul)";
             ProcessStartInfo psi = new ProcessStartInfo();
             psi.FileName = Path.Combine(Environment.SystemDirectory, "cmd.exe");
             psi.Arguments = cmd;

@@ -7,6 +7,10 @@ ones, from before version numbers, carry their date only. Versions without a Git
 
 ## [Unreleased]
 
+### Fixed
+- Uninstalling with `NexusWppSetup.exe` always removes `C:\nexuswpp`: the delayed removal retried nothing and relied on
+  `timeout`, which fails at once without a console, so it could run while the setup executable was still locked.
+
 ## [1.0.71.0] - 2026-11-09
 
 ### Changed
