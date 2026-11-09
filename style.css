@@ -301,7 +301,8 @@ body {
 .workspace {
     flex: 1;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.22fr) minmax(0, 1.12fr);
+    /* Equal side columns keep the center panel (clock, radar, buttons) on the screen's middle. */
+    grid-template-columns: minmax(0, 1.06fr) minmax(0, 1.22fr) minmax(0, 1.06fr);
     grid-template-rows: minmax(0, 1fr);
     gap: clamp(8px, calc(1.2 * var(--lvw)), 32px);
     min-height: 0; /* Flexbox containment to prevent overflowing parent padding */
