@@ -22,7 +22,7 @@
   <ItemGroup>
     <!-- Same versions as NexusWpp.csproj. -->
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
-    <PackageReference Include="System.Management" Version="10.0.14" />
+    <PackageReference Include="System.Management" Version="11.0.0" />
   </ItemGroup>
 
   <!-- As in the host: the WinForms control only, not the WPF one. -->
