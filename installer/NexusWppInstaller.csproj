@@ -58,7 +58,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Management" Version="10.0.14" />
+    <PackageReference Include="System.Management" Version="11.0.0" />
     <!-- The trimmer's tasks, which the self-contained single-file build adds: pinned like any package
          (packages.lock.json, Dependabot); left implicit, their version would follow the .NET SDK of the machine and
          break the locked restore whenever the CI's SDK moves. -->
