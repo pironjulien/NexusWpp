@@ -7,6 +7,9 @@ ones, from before version numbers, carry their date only. Versions without a Git
 
 ## [Unreleased]
 
+### Changed
+- CI actions updated (CodeQL 4.39.5).
+
 ## [1.1.0.0] - 2026-11-27
 
 ### Changed
