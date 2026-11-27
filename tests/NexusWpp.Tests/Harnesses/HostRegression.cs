@@ -305,7 +305,8 @@ static class HostRegression
                 int cloak = line == "cloak" ? 1 : 0;
                 Console.WriteLine(DwmSetWindowAttribute(window, DWMWA_CLOAK, ref cloak, sizeof(int)) == 0 ? "done" : "failed");
             }
-            Application.Exit();
+            // The test closed the pipe: leave at once, whatever the message loop is doing.
+            Environment.Exit(0);
         }) { IsBackground = true };
         commands.Start();
         Application.Run();
@@ -345,9 +346,12 @@ static class HostRegression
         finally
         {
             helper.StandardInput.Close();
+            // Windows destroys the window with its process: wait for the process itself, killed or not.
             if (!helper.WaitForExit(5000)) helper.Kill();
+            helper.WaitForExit();
         }
-        Check(!Covered(), "the desktop is visible again once the application is gone");
+        bool stillCovered = Covered();
+        Check(!stillCovered, "the desktop is visible again once the application is gone" + (stillCovered ? " (" + reason + ")" : ""));
     }
 
     // Telemetry semantics matched to Task Manager, then one real collection of this machine.
