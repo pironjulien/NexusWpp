@@ -9,6 +9,8 @@ ones, from before version numbers, carry their date only. Versions without a Git
 
 ### Changed
 - CI actions updated (CodeQL 4.39.4).
+- CI: TruffleHog removed from the security workflow; Gitleaks (CI and local pre-push gate) and GitHub secret scanning
+  already cover secrets.
 
 ## [1.1.0.0] - 2026-11-27
 
