@@ -53,7 +53,6 @@ fond d'écran animé, moniteur système, cockpit, CPU GPU, température, NPU, wi
 ### Nouveautés de cette version (1.1.0.0)
 
 - Fonctionne désormais sur .NET 11, inclus dans l'application : rien à installer.
-- L'animation du fond d'écran ne se fige plus après le démarrage ou le retour du bureau : elle repart toujours.
 
 ---
 
@@ -104,4 +103,3 @@ live wallpaper, system monitor, hardware monitor, CPU GPU, temperature, NPU, des
 ### What's new in this version (1.1.0.0)
 
 - Now runs on .NET 11, included with the app: nothing to install.
-- The wallpaper animation no longer freezes after a start or when the desktop comes back: it always resumes.
