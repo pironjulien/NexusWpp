@@ -56,8 +56,19 @@ namespace DesktopHtmlHost
             {
                 IntPtr installedHook = Interlocked.Exchange(ref hookId, IntPtr.Zero);
                 if (installedHook != IntPtr.Zero) UnhookWindowsHookEx(installedHook);
+                ReleasePairedPress();
                 Volatile.Write(ref mouseHookThreadId, 0);
             }
+        }
+
+        // The hook goes away (pause, shutdown) while a forwarded press is still down: its real release
+        // will not pass through here. Chromium gets it now, outside the page, so that nothing is clicked
+        // and no button stays pressed.
+        private static void ReleasePairedPress()
+        {
+            IntPtr paired = pairedRenderWindow;
+            pairedRenderWindow = IntPtr.Zero;
+            if (paired != IntPtr.Zero && IsWindow(paired)) PostMessage(paired, WM_LBUTTONUP, IntPtr.Zero, (IntPtr)(-1)); // client (-1, -1)
         }
 
         private static void StopMouseHook()

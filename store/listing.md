@@ -50,9 +50,9 @@ Confidentialité : tout est mesuré localement. Pas de compte, pas de publicité
 
 fond d'écran animé, moniteur système, cockpit, CPU GPU, température, NPU, widget bureau
 
-### Nouveautés de cette version (1.1.0.0)
+### Nouveautés de cette version (1.1.1.0)
 
-- Fonctionne désormais sur .NET 11, inclus dans l'application : rien à installer.
+- Correction : un bouton de mode d'alimentation ne reste plus enfoncé quand une fenêtre recouvre le bureau, ou que la session se verrouille, pendant que vous cliquez dessus.
 
 ---
 
@@ -100,6 +100,6 @@ Privacy: everything is measured locally. No account, no ads, no data collected o
 
 live wallpaper, system monitor, hardware monitor, CPU GPU, temperature, NPU, desktop dashboard
 
-### What's new in this version (1.1.0.0)
+### What's new in this version (1.1.1.0)
 
-- Now runs on .NET 11, included with the app: nothing to install.
+- Fix: a power mode button no longer stays pressed when a window covers the desktop, or the session locks, while you are clicking it.

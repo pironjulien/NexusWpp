@@ -7,7 +7,19 @@ ones, from before version numbers, carry their date only. Versions without a Git
 
 ## [Unreleased]
 
+## [1.1.1.0] - 2026-11-28
+
+### Fixed
+- A power plan button no longer stays pressed when the wallpaper pauses while the mouse button is still down on it (a
+  window covering the desktop, the session locking or the display turning off in the middle of a click): the mouse
+  hook goes away with the pause, so the release never reached the page. A press still held when the hook stops is now
+  released outside the page, and nothing is clicked.
+
 ### Changed
+- Tests: clicks forwarded to the real WebView2 renderer (one click per press and release, a release outside the page
+  clicks nothing, foreground, keyboard focus and mouse capture stay with the user), a release that arrives after the
+  panel routing was withdrawn, and the pause following a virtual desktop switch (a cloaked window no longer covers the
+  desktop; the paused wallpaper still presents the cockpit).
 - CI actions updated (CodeQL 4.39.4).
 - CI: TruffleHog removed from the security workflow; Gitleaks (CI and local pre-push gate) and GitHub secret scanning
   already cover secrets.
@@ -769,7 +781,8 @@ Revue complète du code, corrections vérifiées :
 - Retrait de l'image de chargement generee et du script de generation associe.
 - Ajout des consignes projet dans `AGENTS.md`.
 
-[Unreleased]: https://github.com/pironjulien/NexusWpp/compare/v1.1.0.0...HEAD
+[Unreleased]: https://github.com/pironjulien/NexusWpp/compare/v1.1.1.0...HEAD
+[1.1.1.0]: https://github.com/pironjulien/NexusWpp/compare/v1.1.0.0...v1.1.1.0
 [1.1.0.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.72.0...v1.1.0.0
 [1.0.72.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.71.0...v1.0.72.0
 [1.0.71.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.70.0...v1.0.71.0

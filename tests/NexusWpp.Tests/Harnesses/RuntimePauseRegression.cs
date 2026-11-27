@@ -1,6 +1,8 @@
 using System;
 using System.Drawing;
 using System.IO;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
@@ -70,6 +72,57 @@ sealed class RuntimePauseRegression : Form
         view.CoreWebView2.PostWebMessageAsJson(paused ? "{\"control\":\"SUSPEND\"}" : "{\"control\":\"RESUME\"}");
     }
 
+    delegate bool WindowProc(IntPtr window, IntPtr data);
+    [StructLayout(LayoutKind.Sequential)]
+    struct GuiThreadInfo { public int Size, Flags; public IntPtr Active, Focus, Capture, MenuOwner, MoveSize, Caret; public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr parent, WindowProc callback, IntPtr data);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr window, char[] name, int size);
+    [DllImport("user32.dll")] static extern bool ClientToScreen(IntPtr window, ref Point point);
+    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] static extern bool IsChild(IntPtr parent, IntPtr window);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+    [DllImport("user32.dll")] static extern bool GetGUIThreadInfo(uint thread, ref GuiThreadInfo info);
+
+    // Chromium's input window inside the WebView2 control, the one the host's mouse hook posts to.
+    IntPtr RenderWindow()
+    {
+        IntPtr found = IntPtr.Zero;
+        EnumChildWindows(Handle, (window, _) =>
+        {
+            var name = new char[64];
+            if (new string(name, 0, GetClassName(window, name, name.Length)) != "Chrome_RenderWidgetHostHWND") return true;
+            found = window;
+            return false;
+        }, IntPtr.Zero);
+        return found;
+    }
+
+    // The host's own forwarding (DesktopForm.Mouse.cs), from a point of the page in client pixels.
+    static void Forward(IntPtr render, Point client, uint message)
+    {
+        Point screen = client;
+        if (!ClientToScreen(render, ref screen)) throw new InvalidOperationException("render window has no screen position");
+        var forward = typeof(DesktopHtmlHost.DesktopForm).GetMethod("ForwardMouseClick", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new MissingMethodException("DesktopForm.ForwardMouseClick");
+        if (!(bool)forward.Invoke(null, [render, screen.X, screen.Y, message])!) throw new InvalidOperationException("forwarding refused");
+    }
+
+    // Whoever is using the PC keeps the foreground, the keyboard focus and the mouse capture: none of them may
+    // sit on this harness or on its WebView2 (Chrome_WidgetWin_1) after a forwarded click.
+    void CheckInputStaysWithTheUser(string label)
+    {
+        var info = new GuiThreadInfo { Size = Marshal.SizeOf<GuiThreadInfo>() };
+        GetGUIThreadInfo(0, ref info);
+        foreach (IntPtr window in new[] { GetForegroundWindow(), info.Focus, info.Capture })
+        {
+            if (window == IntPtr.Zero) continue;
+            if (GetWindowThreadProcessId(window, out uint process) == 0) continue;
+            if (window == Handle || IsChild(Handle, window) || process == view.CoreWebView2.BrowserProcessId)
+                throw new InvalidOperationException(label + " (window 0x" + window.ToString("X", System.Globalization.CultureInfo.InvariantCulture) + ")");
+        }
+        Console.WriteLine("PASS " + label);
+    }
+
     async void Run(object? sender, EventArgs args)
     {
         try
@@ -128,6 +181,25 @@ sealed class RuntimePauseRegression : Form
             Console.WriteLine("ANIMATIONS " + await view.CoreWebView2.ExecuteScriptAsync("JSON.stringify(document.getAnimations().filter(a => a.playState === 'running').map(a => ({type:a.constructor.name,name:a.animationName,property:a.transitionProperty,target:a.effect.target.className})))"));
             await Check("document.getAnimations().every(a => a.playState !== 'running')", "all CSS animations and gauge transitions are paused");
             await Check("getComputedStyle(document.querySelector('.gauge-card')).borderColor === pauseTest.border", "pause retains in-flight CSS transition appearance");
+
+            // Switching virtual desktops (Lively #3334 shows the bare Windows wallpaper for a second) reveals the
+            // wallpaper while it is still paused, until the next coverage check resumes it: what the paused
+            // WebView2 presents must be the cockpit itself.
+            await Check("!document.hidden && document.visibilityState === 'visible'", "the paused page stays visible to Chromium");
+            using (var image = new MemoryStream())
+            {
+                await view.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, image);
+                using var shot = new Bitmap(image);
+                int lit = 0;
+                for (int y = 0; y < 40; y++)
+                    for (int x = 0; x < 64; x++)
+                    {
+                        Color sample = shot.GetPixel(x * (shot.Width - 1) / 63, y * (shot.Height - 1) / 39);
+                        if (Math.Max(sample.R, Math.Max(sample.G, sample.B)) > 60) lit++;
+                    }
+                if (lit < 40) throw new InvalidOperationException("the paused wallpaper presents an empty surface (" + lit + " lit samples of 2560)");
+                Console.WriteLine("PASS the paused wallpaper still presents the cockpit (" + lit + " lit samples of 2560)");
+            }
 
             await view.CoreWebView2.ExecuteScriptAsync("resizeCanvas();");
             await Check("canvas.toDataURL() === pauseTest.pixels", "same-size resize does not clear canvas");
@@ -360,6 +432,42 @@ sealed class RuntimePauseRegression : Form
             await Check("new Set([...document.querySelectorAll('.gauge-card .gauge-label')].filter(e=>e.getClientRects().length).map(e=>getComputedStyle(e).fontSize)).size===1", "every card title has the same size");
             await Check("formatCacheSize('24.0 Mo') === (NexusI18n.lang === 'fr' ? '24,0 Mo' : '24.0 MB') && formatCacheSize('2.5 Mo') === (NexusI18n.lang === 'fr' ? '2,5 Mo' : '2.5 MB')",
                 "CPU cache sizes follow the interface language");
+
+            // Clicks forwarded to the real renderer, as the mouse hook posts them (Lively #3322: a forwarded press
+            // left without its release, and the focus kept by Chrome_WidgetWin_1).
+            await view.CoreWebView2.ExecuteScriptAsync(@"layoutFixture({hardware:'full',plans:4,dpr:1,state:'normal'});
+                window.pressLog=[];window.planRequests=[];window.setPowerPlan=guid=>planRequests.push(guid);
+                for(const type of ['mousedown','mouseup','click'])document.addEventListener(type,e=>{const b=e.target.closest&&e.target.closest('.remote-btn');pressLog.push(type+':'+(b?b.dataset.guid:'-'));},true);
+                window.pressButton=[...powerPlansContainer.children].find(b=>!b.classList.contains('active'));");
+            string spot = await view.CoreWebView2.ExecuteScriptAsync("(()=>{const r=pressButton.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;return document.elementFromPoint(x,y).closest('.remote-btn')===pressButton?Math.round(x*devicePixelRatio)+','+Math.round(y*devicePixelRatio):'';})()");
+            string[] parts = spot.Trim('"').Split(',');
+            if (parts.Length != 2) throw new InvalidOperationException("no power plan button to press (" + spot + ")");
+            var button = new Point(int.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture), int.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture));
+            IntPtr render = RenderWindow();
+            if (render == IntPtr.Zero) throw new InvalidOperationException("Chrome_RenderWidgetHostHWND not found");
+            const string pressed = "pressButton.dataset.guid";
+            Forward(render, button, 0x201);
+            Forward(render, button, 0x202);
+            await Task.Delay(300);
+            await Check("pressLog.join()===['mousedown','mouseup','click'].map(t=>t+':'+" + pressed + ").join() && planRequests.join()===" + pressed, "a forwarded press and release on a power plan is one click on it");
+            CheckInputStaysWithTheUser("a forwarded click leaves foreground, focus and capture where they were");
+
+            // Another window takes the foreground while the button is down: the release comes from wherever the
+            // pointer is by then, here outside the page.
+            await view.CoreWebView2.ExecuteScriptAsync("pressLog.length=0;planRequests.length=0;");
+            Forward(render, button, 0x201);
+            await Task.Delay(150);
+            await Check("pressLog.join()==='mousedown:'+" + pressed + " && pressButton.matches(':active')", "a forwarded press holds the button down");
+            Forward(render, new Point(-1, -1), 0x202);
+            await Task.Delay(300);
+            Console.WriteLine("EVENTS " + await view.CoreWebView2.ExecuteScriptAsync("pressLog.join()"));
+            await Check("pressLog.filter(e=>e.startsWith('mouseup')).length===1 && !pressLog.some(e=>e.startsWith('click:')&&e!=='click:-') && planRequests.length===0", "a release outside the page ends the press without a click on the plan");
+            await Check("!document.querySelector('.remote-btn:active')", "no button stays pressed after the late release");
+            CheckInputStaysWithTheUser("a press released elsewhere leaves foreground, focus and capture where they were");
+            Forward(render, button, 0x201);
+            Forward(render, button, 0x202);
+            await Task.Delay(300);
+            await Check("planRequests.join()===" + pressed, "the next click on the panel works at once");
             exitCode = 0;
         }
         catch (Exception error) { Console.Error.WriteLine("FAIL " + error); }

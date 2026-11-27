@@ -168,6 +168,38 @@ internal static class MouseHookRegression
                 }
             }
 
+            // A forwarded press whose release comes after another window took the foreground (the unpaired
+            // forwarded press of Lively #3322): Chromium must still see the button come up.
+            using (Receiver target = new Receiver())
+            {
+                IntPtr elsewhere = HookEvent(-12345, -23456);
+                try
+                {
+                    // The window that came to the front hides the panel: nothing is routed any more.
+                    HostField("pairedRenderWindow").SetValue(null, target.Handle);
+                    HostField("mouseRouting").SetValue(null, null);
+                    Check(Invoke<IntPtr>("HookCallback", 0, (IntPtr)0x202, elsewhere) == (IntPtr)1, "release after the panel routing was withdrawn still follows its press");
+                    Check(WaitUntil(delegate { Application.DoEvents(); return target.Messages.Count == 1; }) && target.Messages[0].StartsWith("514:", StringComparison.Ordinal),
+                        "Chromium receives that release");
+
+                    // The window that came to the front covers the whole desktop: the pause removes the hook
+                    // while the button is still down, so the real release will never pass through it.
+                    Invoke("StartMouseHook");
+                    Check(WaitUntil(delegate { return Field<IntPtr>("hookId") != IntPtr.Zero; }), "hook installed before the held press");
+                    HostField("pairedRenderWindow").SetValue(null, target.Handle);
+                    Thread held = Field<Thread>("mouseHookThread");
+                    Invoke("UpdateMouseHookForRuntime", true);
+                    Check(held.Join(2000) && Field<IntPtr>("hookId") == IntPtr.Zero, "pause removes the hook during a held press");
+                    Check(WaitUntil(delegate { Application.DoEvents(); return target.Messages.Count == 2; }) && target.Messages[1] == "514:-1:-1",
+                        "a press still held when the hook goes away is released outside the page");
+                    Check(Field<IntPtr>("pairedRenderWindow") == IntPtr.Zero, "no pairing survives the hook");
+                    Check(Invoke<IntPtr>("HookCallback", 0, (IntPtr)0x202, elsewhere) == IntPtr.Zero, "the real release then stays with the window under the pointer");
+                    Application.DoEvents();
+                    Check(target.Messages.Count == 2, "Chromium receives one release per press");
+                }
+                finally { Marshal.FreeHGlobal(elsewhere); }
+            }
+
             System.Drawing.Rectangle client = new System.Drawing.Rectangle(0, 0, 1920, 1080);
             Check(Invoke<System.Drawing.Rectangle>("ClipPanelBounds", new System.Drawing.Rectangle(1800, 1000, 300, 200), client) == new System.Drawing.Rectangle(1800, 1000, 120, 80), "panel bounds are clipped to the client area");
             Check((Invoke<System.Drawing.Rectangle>("ClipPanelBounds", new System.Drawing.Rectangle(2000, 0, 50, 50), client)).IsEmpty, "panel outside the client area routes nothing");

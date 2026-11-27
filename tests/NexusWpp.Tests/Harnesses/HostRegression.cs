@@ -281,6 +281,75 @@ static class HostRegression
         if (!helper.HasExited) helper.Kill();
     }
 
+    internal const string CoverHelperArgument = "--cover-helper";
+    // A monitor work area far off screen: the coverage rule is exercised there, never on the user's screen.
+    static readonly Rectangle CoverArea = new Rectangle(-31000, -31000, 240, 160);
+    const int WS_EX_NOACTIVATE = 0x08000000, WS_EX_TOOLWINDOW = 0x80, SW_SHOWNOACTIVATE = 4, DWMWA_CLOAK = 13;
+    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr window, int command);
+    [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
+
+    // Child process standing in for an application of another virtual desktop (this test executable, see
+    // TestEntryPoint): one shown, never activated window over CoverArea, cloaked and uncloaked on request as Windows
+    // does to the windows of the desktop being left and entered.
+    internal static int RunCoverHelper()
+    {
+        var cover = new NativeWindow();
+        cover.CreateHandle(new CreateParams { X = CoverArea.X, Y = CoverArea.Y, Width = CoverArea.Width, Height = CoverArea.Height, Style = WS_POPUP, ExStyle = WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW });
+        IntPtr window = cover.Handle;
+        ShowWindow(window, SW_SHOWNOACTIVATE);
+        var commands = new System.Threading.Thread(() =>
+        {
+            Console.WriteLine("ready");
+            for (string? line; (line = Console.ReadLine()) != null;)
+            {
+                int cloak = line == "cloak" ? 1 : 0;
+                Console.WriteLine(DwmSetWindowAttribute(window, DWMWA_CLOAK, ref cloak, sizeof(int)) == 0 ? "done" : "failed");
+            }
+            Application.Exit();
+        }) { IsBackground = true };
+        commands.Start();
+        Application.Run();
+        return 0;
+    }
+
+    // Switching virtual desktops (Lively #3334 shows the bare Windows wallpaper for a second): the wallpaper window
+    // is on every desktop and nothing hides it, so only the pause follows the switch. Windows cloaks the windows of
+    // the desktop being left; a cloaked window must stop counting at once, and count again when it comes back.
+    static void VirtualDesktopSwitch()
+    {
+        var rule = typeof(DesktopVisibility).GetMethod("ShouldSuspend", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static,
+            [typeof(IntPtr), typeof(List<Rectangle>), typeof(string).MakeByRefType()]) ?? throw new MissingMethodException("DesktopVisibility.ShouldSuspend(host, monitors, reason)");
+        string reason;
+        bool Covered()
+        {
+            object?[] arguments = [IntPtr.Zero, new List<Rectangle> { CoverArea }, null];
+            bool covered = (bool)rule.Invoke(null, arguments)!;
+            reason = (string)arguments[2]!;
+            return covered;
+        }
+        Check(!Covered() && reason == "desktop visible", "a desktop without windows shows the wallpaper");
+        var info = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!, CoverHelperArgument)
+        {
+            UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardInput = true, CreateNoWindow = true
+        };
+        using var helper = System.Diagnostics.Process.Start(info)!;
+        try
+        {
+            Check(helper.StandardOutput.ReadLine() == "ready", "another process shows a window over the whole desktop");
+            Check(Covered() && reason.StartsWith("desktop covered on all monitors by ", StringComparison.Ordinal), "a desktop covered by an application pauses the wallpaper");
+            helper.StandardInput.WriteLine("cloak");
+            Check(helper.StandardOutput.ReadLine() == "done" && !Covered(), "leaving for another virtual desktop: the cloaked window no longer covers, the wallpaper resumes at the next check");
+            helper.StandardInput.WriteLine("uncloak");
+            Check(helper.StandardOutput.ReadLine() == "done" && Covered(), "back on the covered virtual desktop: the wallpaper pauses again");
+        }
+        finally
+        {
+            helper.StandardInput.Close();
+            if (!helper.WaitForExit(5000)) helper.Kill();
+        }
+        Check(!Covered(), "the desktop is visible again once the application is gone");
+    }
+
     // Telemetry semantics matched to Task Manager, then one real collection of this machine.
     static void Telemetry()
     {
@@ -354,6 +423,7 @@ static class HostRegression
             Recovery();
             ShellEvents();
             Visibility();
+            VirtualDesktopSwitch();
             ParentDestroyed();
             ParentProcessKilled();
             Telemetry();
