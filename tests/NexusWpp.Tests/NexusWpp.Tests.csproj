@@ -6,7 +6,7 @@
        the ones that need the real desktop are explicit tests (README "Tests"). Build output goes to work\. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net11.0-windows10.0.19041.0</TargetFramework>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <UseWindowsForms>true</UseWindowsForms>
     <!-- Same as NexusWpp.csproj (checked by HostSourceTests): ApplicationConfiguration.Initialize() in TestEntryPoint. -->
@@ -48,7 +48,7 @@
   <ItemGroup>
     <PackageReference Include="xunit.v3" Version="4.0.3" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
-    <PackageReference Include="System.Management" Version="10.0.14" />
+    <PackageReference Include="System.Management" Version="11.0.0" />
   </ItemGroup>
 
   <!-- As in the host: the WinForms control only, not the WPF one. -->

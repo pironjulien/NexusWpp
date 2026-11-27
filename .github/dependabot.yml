@@ -19,8 +19,8 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
-    # System.Management and the trimmer follow the runtime of the SDK global.json pins (.NET 10): a new major comes
-    # with the SDK change, never alone (11.0.0 proposed on 2026-11-20).
+    # System.Management and the trimmer follow the runtime of the SDK global.json pins (.NET 11): a new major comes
+    # with the SDK change, never alone.
     ignore:
       - dependency-name: System.Management
         update-types: ["version-update:semver-major"]

@@ -50,8 +50,9 @@ Confidentialité : tout est mesuré localement. Pas de compte, pas de publicité
 
 fond d'écran animé, moniteur système, cockpit, CPU GPU, température, NPU, widget bureau
 
-### Nouveautés de cette version (1.0.72.0)
+### Nouveautés de cette version (1.1.0.0)
 
+- Fonctionne désormais sur .NET 11, inclus dans l'application : rien à installer.
 - L'animation du fond d'écran ne se fige plus après le démarrage ou le retour du bureau : elle repart toujours.
 
 ---
@@ -100,6 +101,7 @@ Privacy: everything is measured locally. No account, no ads, no data collected o
 
 live wallpaper, system monitor, hardware monitor, CPU GPU, temperature, NPU, desktop dashboard
 
-### What's new in this version (1.0.72.0)
+### What's new in this version (1.1.0.0)
 
+- Now runs on .NET 11, included with the app: nothing to install.
 - The wallpaper animation no longer freezes after a start or when the desktop comes back: it always resumes.

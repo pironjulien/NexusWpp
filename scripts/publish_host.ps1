@@ -1,4 +1,4 @@
-# Self-contained host (nexuswpp.exe, its .NET 10 runtime and WebView2) published alone into a
+# Self-contained host (nexuswpp.exe, its .NET 11 runtime and WebView2) published alone into a
 # folder, for the MSIX, the installer payload and the standalone deployment.
 param([Parameter(Mandatory = $true)][string]$Destination)
 $ErrorActionPreference = 'Stop'

@@ -7,6 +7,12 @@ ones, from before version numbers, carry their date only. Versions without a Git
 
 ## [Unreleased]
 
+## [1.1.0.0] - 2026-11-27
+
+### Changed
+- Runs on .NET 11 (was .NET 10). The runtime is included in the Store package and the installer, so there is still
+  nothing to install. Build: the .NET SDK is pinned to 11.0.100 in `global.json`.
+
 ## [1.0.72.0] - 2026-11-27
 
 ### Fixed
@@ -758,7 +764,8 @@ Revue complète du code, corrections vérifiées :
 - Retrait de l'image de chargement generee et du script de generation associe.
 - Ajout des consignes projet dans `AGENTS.md`.
 
-[Unreleased]: https://github.com/pironjulien/NexusWpp/compare/v1.0.72.0...HEAD
+[Unreleased]: https://github.com/pironjulien/NexusWpp/compare/v1.1.0.0...HEAD
+[1.1.0.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.72.0...v1.1.0.0
 [1.0.72.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.71.0...v1.0.72.0
 [1.0.71.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.70.0...v1.0.71.0
 [1.0.70.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.69.0...v1.0.70.0

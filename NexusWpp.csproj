@@ -1,11 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- .NET 10 Windows desktop, self-contained: the Store and the installer ship the runtime with
+  <!-- .NET 11 Windows desktop, self-contained: the Store and the installer ship the runtime with
        the app, so users have nothing to install. The Windows 10 SDK projection brings the WinRT
        StartupTask API of the Store package (PriorityStartup.cs). -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net11.0-windows10.0.19041.0</TargetFramework>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <UseWindowsForms>true</UseWindowsForms>
     <!-- Per-monitor v2: real pixels on every monitor, no bitmap stretching on mixed-DPI setups.
@@ -61,7 +61,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
-    <PackageReference Include="System.Management" Version="10.0.14" />
+    <PackageReference Include="System.Management" Version="11.0.0" />
   </ItemGroup>
 
   <!-- Ship only what the WinForms host loads: no WPF control, no duplicate loader tree

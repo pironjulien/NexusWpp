@@ -68,7 +68,7 @@ if (Test-Path -LiteralPath $packageDir) {
 }
 New-Item -ItemType Directory -Path $assetsDir -Force | Out-Null
 
-# The self-contained host: nexuswpp.exe, its .NET 10 runtime and WebView2.
+# The self-contained host: nexuswpp.exe, its .NET 11 runtime and WebView2.
 & (Join-Path $PSScriptRoot 'publish_host.ps1') -Destination $packageDir
 
 $payloadFiles = & (Join-Path $PSScriptRoot 'application_files.ps1')

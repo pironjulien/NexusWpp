@@ -42,12 +42,12 @@ foreach ($file in $payloadFiles) {
     Copy-Item -LiteralPath (Join-Path $projectRoot $file) -Destination (Join-Path $payloadDir $file) -Force
 }
 
-# The self-contained host: nexuswpp.exe, its .NET 10 runtime and WebView2.
+# The self-contained host: nexuswpp.exe, its .NET 11 runtime and WebView2.
 & (Join-Path $PSScriptRoot 'publish_host.ps1') -Destination $payloadDir
 
 Compress-Archive -Path (Join-Path $payloadDir "*") -DestinationPath $payloadZip -Force
 
-# One self-contained, compressed .NET 10 exe that embeds the payload: it runs on a bare Windows.
+# One self-contained, compressed .NET 11 exe that embeds the payload: it runs on a bare Windows.
 & dotnet publish $installerProject -c Release -o $installerPublishDir "-p:PayloadZip=$payloadZip" --nologo -v quiet -clp:ErrorsOnly
 if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath (Join-Path $installerPublishDir "NexusWppSetup.exe"))) {
     throw "Installer publication failed with exit code $LASTEXITCODE."

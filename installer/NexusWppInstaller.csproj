@@ -1,11 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- One self-contained, compressed NexusWppSetup.exe on .NET 10: it runs on a bare Windows
+  <!-- One self-contained, compressed NexusWppSetup.exe on .NET 11: it runs on a bare Windows
        with nothing installed. The application payload (NexusWppPayload.zip, made by
        scripts/build_installer.ps1) is embedded as a resource. -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net11.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <LangVersion>latest</LangVersion>
@@ -58,11 +58,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Management" Version="10.0.14" />
+    <PackageReference Include="System.Management" Version="11.0.0" />
     <!-- The trimmer's tasks, which the self-contained single-file build adds: pinned like any package
          (packages.lock.json, Dependabot); left implicit, their version would follow the .NET SDK of the machine and
          break the locked restore whenever the CI's SDK moves. -->
-    <PackageReference Include="Microsoft.NET.ILLink.Tasks" Version="10.0.15" />
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" Version="11.0.0" />
   </ItemGroup>
 
 </Project>

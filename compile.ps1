@@ -5,7 +5,7 @@ $project = Join-Path $PSScriptRoot "NexusWpp.csproj"
 $outputExe = Join-Path $binDir "nexuswpp.exe"
 
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
-    throw "The .NET 10 SDK is required: https://dotnet.microsoft.com/download"
+    throw "The .NET 11 SDK is required: https://dotnet.microsoft.com/download"
 }
 
 # The version stamp comes from the VERSION file (Directory.Build.targets, checked like scripts\read_version.ps1).
