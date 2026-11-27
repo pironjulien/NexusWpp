@@ -9,6 +9,9 @@ let bgCanvas = null;
 let telemetryMapReady = false;
 let telemetryNodesInitialized = false;
 let canvasHasRendered = false;
+// Every classic page script has run (DOMContentLoaded): the animation clock may start (startCanvasLoop).
+let pageScriptsLoaded = document.readyState !== "loading";
+document.addEventListener("DOMContentLoaded", () => { pageScriptsLoaded = true; });
 const TELEMETRY_ORBIT_SCALE = 0.38;
 const TELEMETRY_ORBIT_MAX = 320;
 const TELEMETRY_ORBIT_RING_INDEX = 3;
@@ -546,14 +549,20 @@ function renderStaticBackground() {
     bgCtx.stroke();
 }
 
+// A tick steps functions of dashboard.js (ring easing), loaded after this script: the clock starts
+// only once every page script has run. An earlier wake (logo loaded, resize) only marks the scene
+// to draw; app.js redraws the canvas on DOMContentLoaded, which starts the clock (pageScriptsLoaded).
+function startCanvasLoop() {
+    if (runtimeSuspended || isCanvasLoopRunning || !pageScriptsLoaded) return;
+    isCanvasLoopRunning = true;
+    lastMotionStamp = 0;
+    scheduleCanvasFrame(0);
+}
+
 function wakeCanvas() {
     if (runtimeSuspended) return;
     needsRender = true;
-    if (!isCanvasLoopRunning) {
-        isCanvasLoopRunning = true;
-        lastMotionStamp = 0;
-        scheduleCanvasFrame(0);
-    }
+    startCanvasLoop();
 }
 
 // --- One shared clock for all continuous motion ---
@@ -575,10 +584,7 @@ function decorativeMotionHeld() {
 }
 
 function startMotionClock() {
-    if (runtimeSuspended || isCanvasLoopRunning) return;
-    isCanvasLoopRunning = true;
-    lastMotionStamp = 0;
-    scheduleCanvasFrame(0);
+    startCanvasLoop();
 }
 
 function applySpinner(spinner) {
@@ -734,6 +740,16 @@ function setMotionEconomy(economy) {
     physicsFpsInterval = 1000 / (economy ? MOTION_FPS_ECONOMY : MOTION_FPS);
 }
 function updatePhysics(timestamp, renderOnly = false) {
+    try {
+        tickPhysics(timestamp, renderOnly);
+    } finally {
+        // A tick ends with its next frame scheduled or the loop stopped. A tick that throws does
+        // neither: stop the loop so the next wake starts it again instead of finding it "running".
+        if (isCanvasLoopRunning && !canvasFrameTimer && !canvasAnimationFrame) isCanvasLoopRunning = false;
+    }
+}
+
+function tickPhysics(timestamp, renderOnly) {
     if (!renderOnly && (!isCanvasLoopRunning || runtimeSuspended)) return;
     
     if (!timestamp) timestamp = performance.now();

@@ -7,9 +7,20 @@ ones, from before version numbers, carry their date only. Versions without a Git
 
 ## [Unreleased]
 
+## [1.0.72.0] - 2026-11-27
+
 ### Fixed
+- The wallpaper animation no longer freezes after a start or a desktop reattachment: an animation frame could run
+  between `radar.js` and `dashboard.js` (logo loaded, resize) and fail on `stepRingTweens`, which left the clock marked
+  running with no next frame until the next pause. The clock now starts once every page script has run, and a frame
+  that fails stops it so the next wake starts it again.
 - Uninstalling with `NexusWppSetup.exe` always removes `C:\nexuswpp`: the delayed removal retried nothing and relied on
   `timeout`, which fails at once without a console, so it could run while the setup executable was still locked.
+
+### Changed
+- Tests on xUnit v3 4.0.3; CI actions updated (setup-dotnet 6.1.0, CodeQL 4.39.3, Scorecard 2.6.0, TruffleHog
+  3.100.0, zizmor 0.8.1). Dependabot no longer proposes a new major of `System.Management` or
+  `Microsoft.NET.ILLink.Tasks` alone: they follow the .NET runtime of the pinned SDK.
 
 ## [1.0.71.0] - 2026-11-09
 
@@ -747,7 +758,8 @@ Revue complète du code, corrections vérifiées :
 - Retrait de l'image de chargement generee et du script de generation associe.
 - Ajout des consignes projet dans `AGENTS.md`.
 
-[Unreleased]: https://github.com/pironjulien/NexusWpp/compare/v1.0.71.0...HEAD
+[Unreleased]: https://github.com/pironjulien/NexusWpp/compare/v1.0.72.0...HEAD
+[1.0.72.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.71.0...v1.0.72.0
 [1.0.71.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.70.0...v1.0.71.0
 [1.0.70.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.69.0...v1.0.70.0
 [1.0.69.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.68.0...v1.0.69.0
