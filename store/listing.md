@@ -50,8 +50,9 @@ Confidentialité : tout est mesuré localement. Pas de compte, pas de publicité
 
 fond d'écran animé, moniteur système, cockpit, CPU GPU, température, NPU, widget bureau
 
-### Nouveautés de cette version (1.1.1.0)
+### Nouveautés de cette version (1.1.2.0)
 
+- Plus léger en pause : quand une fenêtre couvre le bureau, NexusWpp rend à Windows environ 300 Mo de mémoire vive, et le fond revient toujours instantanément.
 - Correction : un bouton de mode d'alimentation ne reste plus enfoncé quand une fenêtre recouvre le bureau, ou que la session se verrouille, pendant que vous cliquez dessus.
 
 ---
@@ -100,6 +101,7 @@ Privacy: everything is measured locally. No account, no ads, no data collected o
 
 live wallpaper, system monitor, hardware monitor, CPU GPU, temperature, NPU, desktop dashboard
 
-### What's new in this version (1.1.1.0)
+### What's new in this version (1.1.2.0)
 
+- Lighter while paused: when a window covers the desktop, NexusWpp gives about 300 MB of memory back to Windows, and the wallpaper still returns instantly.
 - Fix: a power mode button no longer stays pressed when a window covers the desktop, or the session locks, while you are clicking it.

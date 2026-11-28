@@ -7,6 +7,17 @@ ones, from before version numbers, carry their date only. Versions without a Git
 
 ## [Unreleased]
 
+## [1.1.2.0] - 2026-11-28
+
+### Changed
+- While the wallpaper is paused (desktop covered, session locked, display off), WebView2 is asked to give memory back
+  (`MemoryUsageTargetLevel` `Low`, `Normal` again on resume); the page and the composed scene stay alive. Measured on
+  the real desktop (2560×1440 at 125 %, `scripts\test_desktop_visual_resume.ps1 -DevBuild`, same day, against the
+  previous build): after 3 minutes of pause the process group keeps 182 MB of physical memory instead of 497 MB, the
+  committed memory does not change (461 MB against 471 MB), and the desktop comes back as fast as before (first frame
+  35 ms after the covering window leaves, against 37 ms; 31 to 48 ms over the 13 scenarios with 30-second pauses,
+  against 30 to 40 ms, one capture every 42 ms).
+
 ## [1.1.1.0] - 2026-11-28
 
 ### Fixed
@@ -781,7 +792,8 @@ Revue complète du code, corrections vérifiées :
 - Retrait de l'image de chargement generee et du script de generation associe.
 - Ajout des consignes projet dans `AGENTS.md`.
 
-[Unreleased]: https://github.com/pironjulien/NexusWpp/compare/v1.1.1.0...HEAD
+[Unreleased]: https://github.com/pironjulien/NexusWpp/compare/v1.1.2.0...HEAD
+[1.1.2.0]: https://github.com/pironjulien/NexusWpp/compare/v1.1.1.0...v1.1.2.0
 [1.1.1.0]: https://github.com/pironjulien/NexusWpp/compare/v1.1.0.0...v1.1.1.0
 [1.1.0.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.72.0...v1.1.0.0
 [1.0.72.0]: https://github.com/pironjulien/NexusWpp/compare/v1.0.71.0...v1.0.72.0

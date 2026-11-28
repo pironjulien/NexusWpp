@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Windows.Forms;
+using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using System.Globalization;
 using System.Threading;
@@ -256,17 +257,39 @@ namespace DesktopHtmlHost
             else StartMouseHook();
         }
 
+        // While paused, WebView2 is asked to give memory back (MemoryUsageTargetLevel Low: the GPU process drops
+        // what it can rebuild and working sets are trimmed). Unlike a suspension, the page, its DOM and the
+        // composed scene stay.
+        private void ApplyMemoryTarget()
+        {
+            try
+            {
+                CoreWebView2? core = webView != null && !webView.IsDisposed ? webView.CoreWebView2 : null;
+                if (core == null) return;
+                CoreWebView2MemoryUsageTargetLevel level = runtimeSuspended
+                    ? CoreWebView2MemoryUsageTargetLevel.Low : CoreWebView2MemoryUsageTargetLevel.Normal;
+                if (core.MemoryUsageTargetLevel != level) core.MemoryUsageTargetLevel = level;
+            }
+            catch (Exception ex)
+            {
+                Program.LogDebug("WebView2 memory target error: " + ex.Message);
+            }
+        }
+
         private void ApplyWebViewRuntimeState()
         {
             // Keep the real DOM and compositor surface attached and visible.
             // Hiding/suspending WebView2 discards the desktop surface and makes
             // its return depend on a later visibility poll and renderer wake-up.
+            // Memory target: back to Normal before the page wakes, Low once it has been told to pause.
+            if (!runtimeSuspended) ApplyMemoryTarget();
             if (!PostWebMessageAsJsonSafe(runtimeSuspended
                     ? "{\"control\":\"SUSPEND\"}"
                     : "{\"control\":\"RESUME\"}", "WebView runtime state"))
             {
                 return;
             }
+            if (runtimeSuspended) ApplyMemoryTarget();
             if (!runtimeSuspended)
             {
                 try { TelemetryTimer_Tick(null, EventArgs.Empty); }
